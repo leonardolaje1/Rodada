@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 
 const NAV = [
   { to: '/', label: 'Panel', icon: '◆', end: true },
-  { to: '/entrenamientos', label: 'Entrenos', icon: '⟢' },
+  { to: '/entrenamientos', label: 'Entrenamientos', icon: '⟢' },
   { to: '/bicicletas', label: 'Bicis', icon: '⊙' },
   { to: '/nutricion', label: 'Nutrición', icon: '◈' },
   { to: '/mantenimiento', label: 'Mantenimiento', icon: '⚙' },
@@ -21,7 +21,7 @@ export default function Layout() {
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col w-56 border-r border-asphalt-700 p-5 gap-1 overflow-y-auto">
         <div className="mb-8">
-          <span className="font-display font-bold text-xl text-hiviz">BikeIQ</span>
+          <span className="font-display font-bold text-xl text-hiviz">bikeiq</span>
         </div>
         {NAV.map((item) => (
           <NavItem key={item.to} {...item} />
@@ -35,7 +35,7 @@ export default function Layout() {
       </aside>
 
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-asphalt-700">
-        <span className="font-display font-bold text-lg text-hiviz">BikeIQ</span>
+        <span className="font-display font-bold text-lg text-hiviz">bikeiq</span>
         <button onClick={() => supabase.auth.signOut()} className="text-ink-muted text-xs">
           Salir
         </button>
