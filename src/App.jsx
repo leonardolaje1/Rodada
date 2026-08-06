@@ -14,6 +14,7 @@ import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
 import FTP from './pages/FTP'
+import Calendario from './pages/Calendario'
 import Reportes from './pages/Reportes'
 import Equipo from './pages/Equipo'
 import VerAtleta from './pages/VerAtleta'
@@ -43,6 +44,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/calendario" element={<Calendario />} />
         <Route path="/entrenamientos" element={<Entrenamientos />} />
         <Route path="/bicicletas" element={<Bicicletas />} />
         <Route path="/bicicletas/:id" element={<BicicletaDetalle />} />
