@@ -17,6 +17,15 @@ function calcularBMR({ peso, altura, edad, sexo }) {
   return sexo === 'F' ? 10 * p + 6.25 * a - 5 * e - 161 : 10 * p + 6.25 * a - 5 * e + 5
 }
 
+function agruparPorFecha(items) {
+  const grupos = {}
+  for (const item of items) {
+    if (!grupos[item.fecha]) grupos[item.fecha] = []
+    grupos[item.fecha].push(item)
+  }
+  return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
+}
+
 export default function Nutricion() {
   const [sub, setSub] = useState('resumen')
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
@@ -24,12 +33,13 @@ export default function Nutricion() {
   const [hidratacion, setHidratacion] = useState([])
   const [suplementos, setSuplementos] = useState([])
   const [formComida, setFormComida] = useState(false)
+  const [comidaEditando, setComidaEditando] = useState(null)
   const [formSuplemento, setFormSuplemento] = useState(false)
 
   async function cargar() {
     const [{ data: p }, { data: cm }, { data: h }, { data: s }] = await Promise.all([
       supabase.from('perfil_nutricional').select('*').maybeSingle(),
-      supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(50),
+      supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(100),
       supabase.from('hidratacion').select('*').order('fecha', { ascending: false }).limit(30),
       supabase.from('suplementos').select('*').eq('activo', true)
     ])
@@ -47,6 +57,23 @@ export default function Nutricion() {
     await supabase.from('perfil_nutricional').upsert({ ...next, user_id: userData.user.id })
   }
 
+  async function crearComida(n) {
+    await supabase.from('comidas').insert(n)
+    setFormComida(false)
+    cargar()
+  }
+
+  async function actualizarComida(id, n) {
+    await supabase.from('comidas').update(n).eq('id', id)
+    setComidaEditando(null)
+    cargar()
+  }
+
+  async function eliminarComida(id) {
+    await supabase.from('comidas').delete().eq('id', id)
+    cargar()
+  }
+
   const hoy = new Date().toISOString().slice(0, 10)
   const comidasHoy = comidas.filter((c) => c.fecha === hoy)
   const kcalHoy = comidasHoy.reduce((a, c) => a + (Number(c.kcal) || 0), 0)
@@ -58,6 +85,8 @@ export default function Nutricion() {
   const bmr = calcularBMR(perfil)
   const nivel = NIVELES_ACTIVIDAD.find((n) => n.id === perfil.nivel_actividad) || NIVELES_ACTIVIDAD[2]
   const tdee = bmr ? Math.round(bmr * nivel.factor) : null
+
+  const comidasPorDia = agruparPorFecha(comidas)
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,33 +165,79 @@ export default function Nutricion() {
       {sub === 'comidas' && (
         <>
           <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormComida((v) => !v)}>+ Comida</button>
+            <button
+              className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg"
+              onClick={() => { setComidaEditando(null); setFormComida((v) => !v) }}
+            >
+              + Comida
+            </button>
           </div>
           {formComida && (
-            <FormComida onGuardar={async (n) => {
-              await supabase.from('comidas').insert(n)
-              setFormComida(false)
-              cargar()
-            }} onCancelar={() => setFormComida(false)} />
+            <FormComida onGuardar={crearComida} onCancelar={() => setFormComida(false)} />
           )}
-          {comidas.length === 0 ? (
+
+          {comidasPorDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin comidas registradas todavía.</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {comidas.map((c) => (
-                <div key={c.id} className="card flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">{c.tipo}{c.descripcion ? ` — ${c.descripcion}` : ''}</p>
-                    <p className="text-ink-muted text-xs">{c.fecha}{c.hora ? ` · ${c.hora}` : ''}</p>
+            <div className="flex flex-col gap-5">
+              {comidasPorDia.map(([fecha, items]) => {
+                const totalKcal = items.reduce((a, c) => a + (Number(c.kcal) || 0), 0)
+                const totalP = items.reduce((a, c) => a + (Number(c.proteinas) || 0), 0)
+                const totalC = items.reduce((a, c) => a + (Number(c.carbohidratos) || 0), 0)
+                const totalG = items.reduce((a, c) => a + (Number(c.grasas) || 0), 0)
+                return (
+                  <div key={fecha}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold">{fecha}</span>
+                      <span className="readout text-xs text-ink-muted">
+                        <span className="text-hiviz font-semibold">{totalKcal.toFixed(0)} kcal</span>
+                        {'  ·  '}P {totalP.toFixed(0)} · C {totalC.toFixed(0)} · G {totalG.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {items.map((c) =>
+                        comidaEditando === c.id ? (
+                          <FormComida
+                            key={c.id}
+                            valoresIniciales={c}
+                            onGuardar={(n) => actualizarComida(c.id, n)}
+                            onCancelar={() => setComidaEditando(null)}
+                          />
+                        ) : (
+                          <div key={c.id} className="card flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-sm">{c.tipo}{c.descripcion ? ` — ${c.descripcion}` : ''}</p>
+                              <p className="text-ink-muted text-xs">{c.hora || ''}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex gap-3 text-right">
+                                <MiniDato label="kcal" value={c.kcal} color="text-hiviz" />
+                                <MiniDato label="P" value={c.proteinas} />
+                                <MiniDato label="C" value={c.carbohidratos} />
+                                <MiniDato label="G" value={c.grasas} />
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => { setFormComida(false); setComidaEditando(c.id) }}
+                                  className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => { if (confirm('¿Borrar esta comida?')) eliminarComida(c.id) }}
+                                  className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                                >
+                                  Borrar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-3 text-right">
-                    <MiniDato label="kcal" value={c.kcal} color="text-hiviz" />
-                    <MiniDato label="P" value={c.proteinas} />
-                    <MiniDato label="C" value={c.carbohidratos} />
-                    <MiniDato label="G" value={c.grasas} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </>
@@ -276,12 +351,13 @@ function MiniDato({ label, value, color = 'text-ink' }) {
   )
 }
 
-function FormComida({ onGuardar, onCancelar }) {
+function FormComida({ onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10), hora: new Date().toTimeString().slice(0, 5),
-    tipo: 'Desayuno', descripcion: '', kcal: '', proteinas: '', carbohidratos: '', grasas: ''
+    tipo: 'Desayuno', descripcion: '', kcal: '', proteinas: '', carbohidratos: '', grasas: '',
+    ...valoresIniciales
   })
-  const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
 
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
