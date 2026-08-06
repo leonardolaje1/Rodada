@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 
 const NAV = [
   { to: '/', label: 'Panel', icon: '◆', end: true },
+  { to: '/calendario', label: 'Calendario', icon: '▦' },
   { to: '/entrenamientos', label: 'Entrenamientos', icon: '⟢' },
   { to: '/bicicletas', label: 'Bicis', icon: '⊙' },
   { to: '/ftp', label: 'FTP y zonas', icon: '⚡' },
