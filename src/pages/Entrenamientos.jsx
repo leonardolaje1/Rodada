@@ -5,11 +5,21 @@ import { parseActivityFile } from '../lib/parseActivity'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista']
 
+function agruparPorFecha(items) {
+  const grupos = {}
+  for (const item of items) {
+    if (!grupos[item.fecha]) grupos[item.fecha] = []
+    grupos[item.fecha].push(item)
+  }
+  return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
+}
+
 export default function Entrenamientos() {
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
   const [valoresImportados, setValoresImportados] = useState(null)
   const [errorImport, setErrorImport] = useState('')
   const inputArchivoRef = useRef(null)
@@ -17,7 +27,7 @@ export default function Entrenamientos() {
   async function cargar() {
     setCargando(true)
     const [{ data: ents }, { data: bicis }] = await Promise.all([
-      supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(100),
+      supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
       supabase.from('bicicletas').select('id, nombre')
     ])
     setLista(ents || [])
@@ -37,6 +47,18 @@ export default function Entrenamientos() {
     cargar()
   }
 
+  async function actualizar(id, datos) {
+    const tss = calcularTSS(datos)
+    await supabase.from('entrenamientos').update({ ...datos, tss }).eq('id', id)
+    setEditandoId(null)
+    cargar()
+  }
+
+  async function eliminar(id) {
+    await supabase.from('entrenamientos').delete().eq('id', id)
+    cargar()
+  }
+
   async function manejarArchivo(e) {
     const file = e.target.files[0]
     e.target.value = ''
@@ -45,11 +67,15 @@ export default function Entrenamientos() {
     try {
       const datos = await parseActivityFile(file)
       setValoresImportados({ tipo: 'Ruta', ruta: file.name.replace(/\.(gpx|tcx|fit)$/i, ''), bicicleta_id: '', ...datos, fuente: 'garmin' })
+      setEditandoId(null)
       setMostrarForm(true)
     } catch (err) {
       setErrorImport(err.message)
     }
   }
+
+  const nombreBici = (id) => bicicletas.find((b) => b.id === id)?.nombre || null
+  const porDia = agruparPorFecha(lista)
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,7 +93,7 @@ export default function Entrenamientos() {
           </button>
           <input ref={inputArchivoRef} type="file" accept=".gpx,.tcx,.fit" className="hidden" onChange={manejarArchivo} />
           <button
-            onClick={() => { setValoresImportados(null); setMostrarForm((v) => !v) }}
+            onClick={() => { setValoresImportados(null); setEditandoId(null); setMostrarForm((v) => !v) }}
             className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-95"
           >
             + Nuevo
@@ -90,23 +116,67 @@ export default function Entrenamientos() {
 
       {cargando ? (
         <p className="text-ink-muted text-sm">Cargando…</p>
-      ) : lista.length === 0 ? (
+      ) : porDia.length === 0 ? (
         <p className="text-ink-muted text-sm">Sin entrenamientos registrados.</p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {lista.map((e) => (
-            <div key={e.id} className="card flex items-center justify-between gap-4">
-              <div>
-                <p className="font-medium">{e.tipo} — {e.ruta || 'sin ruta'}</p>
-                <p className="text-ink-muted text-xs">{e.fecha}</p>
+        <div className="flex flex-col gap-5">
+          {porDia.map(([fecha, items]) => {
+            const kmDia = items.reduce((a, e) => a + (Number(e.km) || 0), 0)
+            const minDia = items.reduce((a, e) => a + (Number(e.duracion_min) || 0), 0)
+            const tssDia = items.reduce((a, e) => a + (Number(e.tss) || 0), 0)
+            return (
+              <div key={fecha}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold">{fecha}</span>
+                  <span className="readout text-xs text-ink-muted">
+                    {kmDia.toFixed(0)} km · {(minDia / 60).toFixed(1)} h ·{' '}
+                    <span className="text-hiviz font-semibold">{tssDia.toFixed(0)} TSS</span>
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {items.map((e) =>
+                    editandoId === e.id ? (
+                      <FormEntrenamiento
+                        key={e.id}
+                        bicicletas={bicicletas}
+                        valoresIniciales={e}
+                        onGuardar={(datos) => actualizar(e.id, datos)}
+                        onCancelar={() => setEditandoId(null)}
+                      />
+                    ) : (
+                      <div key={e.id} className="card flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-medium">{e.tipo} — {e.ruta || 'sin ruta'}</p>
+                          <p className="text-ink-muted text-xs">{nombreBici(e.bicicleta_id) || 'sin bici'}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-4 text-right">
+                            <MiniDato label="km" value={e.km} />
+                            <MiniDato label="min" value={e.duracion_min} />
+                            <MiniDato label="TSS" value={e.tss} accent="hiviz" />
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => { setMostrarForm(false); setEditandoId(e.id) }}
+                              className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => { if (confirm('¿Borrar este entrenamiento?')) eliminar(e.id) }}
+                              className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                            >
+                              Borrar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
-              <div className="flex gap-4 text-right">
-                <MiniDato label="km" value={e.km} />
-                <MiniDato label="min" value={e.duracion_min} />
-                <MiniDato label="TSS" value={e.tss} accent="hiviz" />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -164,7 +234,7 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
         })
       }}
     >
-      {valoresIniciales && (
+      {valoresIniciales?.fuente === 'garmin' && !valoresIniciales?.id && (
         <p className="sm:col-span-3 text-hiviz text-xs -mb-1">
           Datos completados desde el archivo importado — revisá y ajustá lo que haga falta antes de guardar.
         </p>
