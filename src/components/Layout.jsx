@@ -12,6 +12,7 @@ const NAV = [
   { to: '/competencias', label: 'Competencias', icon: '▲' },
   { to: '/gimnasio', label: 'Gimnasio', icon: '⬢' },
   { to: '/bike-fitting', label: 'Bike Fitting', icon: '⟁' },
+  { to: '/reportes', label: 'Reportes', icon: '▤' },
   { to: '/configuracion', label: 'Configuración', icon: '✦' }
 ]
 
