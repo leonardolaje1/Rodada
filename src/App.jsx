@@ -14,6 +14,8 @@ import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
 import Reportes from './pages/Reportes'
+import Equipo from './pages/Equipo'
+import VerAtleta from './pages/VerAtleta'
 import Configuracion from './pages/Configuracion'
 import { useAuth } from './lib/useAuth'
 
@@ -51,6 +53,8 @@ export default function App() {
         <Route path="/gimnasio" element={<Gimnasio />} />
         <Route path="/bike-fitting" element={<BikeFitting />} />
         <Route path="/reportes" element={<Reportes />} />
+        <Route path="/equipo" element={<Equipo />} />
+        <Route path="/equipo/:id" element={<VerAtleta />} />
         <Route path="/configuracion" element={<Configuracion />} />
       </Route>
     </Routes>
