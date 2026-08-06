@@ -51,7 +51,7 @@ export default function Reportes() {
 
       doc.setFontSize(20)
       doc.setTextColor(...negro)
-      doc.text('rodada', 14, y)
+      doc.text('bikeiq', 14, y)
       doc.setFontSize(10)
       doc.setTextColor(...grisTexto)
       doc.text('Reporte de actividad', 14, y + 6)
@@ -196,10 +196,10 @@ export default function Reportes() {
         doc.setPage(i)
         doc.setFontSize(8)
         doc.setTextColor(...grisTexto)
-        doc.text('Generado con Rodada', 14, 290)
+        doc.text('Generado con BikeIQ', 14, 290)
       }
 
-      doc.save(`rodada-reporte-${desde}-a-${hasta}.pdf`)
+      doc.save(`bikeiq-reporte-${desde}-a-${hasta}.pdf`)
     } catch (err) {
       console.error(err)
       setError('No se pudo generar el PDF. ' + (err.message || ''))
