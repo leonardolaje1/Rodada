@@ -5,6 +5,7 @@ const NAV = [
   { to: '/', label: 'Panel', icon: '◆', end: true },
   { to: '/entrenamientos', label: 'Entrenamientos', icon: '⟢' },
   { to: '/bicicletas', label: 'Bicis', icon: '⊙' },
+  { to: '/ftp', label: 'FTP y zonas', icon: '⚡' },
   { to: '/nutricion', label: 'Nutrición', icon: '◈' },
   { to: '/mantenimiento', label: 'Mantenimiento', icon: '⚙' },
   { to: '/objetivos', label: 'Objetivos', icon: '◎' },
