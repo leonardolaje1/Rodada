@@ -36,7 +36,7 @@ export default function ActualizarPassword({ onListo }) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="w-full max-w-sm text-center">
-          <span className="font-display font-bold text-2xl text-hiviz"BikeIQ</span>
+          <span className="font-display font-bold text-2xl text-hiviz">bikeiq</span>
           <p className="text-ink mt-6">Contraseña actualizada.</p>
           <button
             onClick={onListo}
@@ -53,7 +53,7 @@ export default function ActualizarPassword({ onListo }) {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <span className="font-display font-bold text-2xl text-hiviz">BikeIQ</span>
+          <span className="font-display font-bold text-2xl text-hiviz">bikeiq</span>
           <p className="text-ink-muted text-sm mt-2">Elegí tu nueva contraseña</p>
         </div>
 
