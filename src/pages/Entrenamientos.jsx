@@ -140,4 +140,103 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
     ...valoresIniciales
   })
 
-  function
+  function campo(k) {
+    return {
+      value: form[k] ?? '',
+      onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+    }
+  }
+
+  return (
+    <form
+      className="card grid grid-cols-1 sm:grid-cols-3 gap-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        onGuardar({
+          ...form,
+          bicicleta_id: form.bicicleta_id || null,
+          duracion_min: form.duracion_min ? Number(form.duracion_min) : null,
+          km: form.km ? Number(form.km) : null,
+          desnivel: form.desnivel ? Number(form.desnivel) : null,
+          potencia_avg: form.potencia_avg ? Number(form.potencia_avg) : null,
+          fc_avg: form.fc_avg ? Number(form.fc_avg) : null,
+          rpe: form.rpe ? Number(form.rpe) : null
+        })
+      }}
+    >
+      {valoresIniciales && (
+        <p className="sm:col-span-3 text-hiviz text-xs -mb-1">
+          Datos completados desde el archivo importado — revisá y ajustá lo que haga falta antes de guardar.
+        </p>
+      )}
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Fecha</span>
+        <input
+          type="date"
+          {...campo('fecha')}
+          required
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Tipo</span>
+        <select
+          {...campo('tipo')}
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+        >
+          {TIPOS.map((t) => <option key={t}>{t}</option>)}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Bicicleta</span>
+        <select
+          {...campo('bicicleta_id')}
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+        >
+          <option value="">—</option>
+          {bicicletas.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+        </select>
+      </label>
+
+      <Campo label="Ruta" {...campo('ruta')} />
+      <Campo label="Duración (min)" type="number" {...campo('duracion_min')} />
+      <Campo label="Km" type="number" step="0.1" {...campo('km')} />
+      <Campo label="Desnivel (m)" type="number" {...campo('desnivel')} />
+      <Campo label="Potencia media (W)" type="number" {...campo('potencia_avg')} />
+      <Campo label="FC media" type="number" {...campo('fc_avg')} />
+      <Campo label="RPE (1-10)" type="number" min="1" max="10" {...campo('rpe')} />
+
+      <label className="flex flex-col gap-1 text-sm sm:col-span-3">
+        <span className="text-ink-muted text-xs">Comentarios / sensaciones</span>
+        <textarea
+          {...campo('comentarios')}
+          rows={2}
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+        />
+      </label>
+
+      <div className="sm:col-span-3 flex gap-2 justify-end mt-2">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">
+          Cancelar
+        </button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">
+          Guardar
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function Campo({ label, ...props }) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-ink-muted text-xs">{label}</span>
+      <input
+        {...props}
+        className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+      />
+    </label>
+  )
+}
