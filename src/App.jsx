@@ -13,6 +13,7 @@ import Recuperacion from './pages/Recuperacion'
 import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
+import FTP from './pages/FTP'
 import Reportes from './pages/Reportes'
 import Equipo from './pages/Equipo'
 import VerAtleta from './pages/VerAtleta'
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/competencias" element={<Competencias />} />
         <Route path="/gimnasio" element={<Gimnasio />} />
         <Route path="/bike-fitting" element={<BikeFitting />} />
+        <Route path="/ftp" element={<FTP />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/equipo" element={<Equipo />} />
         <Route path="/equipo/:id" element={<VerAtleta />} />
