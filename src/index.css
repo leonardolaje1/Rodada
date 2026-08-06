@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-asphalt-900 text-ink;
+  }
+  body {
+    @apply font-body antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+  ::selection {
+    @apply bg-hiviz text-asphalt-950;
+  }
+  :focus-visible {
+    outline: 2px solid #C4F135;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .readout {
+    @apply font-data tabular-nums tracking-tight;
+  }
+  .card {
+    @apply bg-asphalt-800 border border-asphalt-700 rounded-xl p-4;
+  }
+  .label-eyebrow {
+    @apply text-[11px] uppercase tracking-[0.14em] text-ink-muted font-body font-medium;
+  }
+}
