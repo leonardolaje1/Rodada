@@ -13,6 +13,7 @@ import Recuperacion from './pages/Recuperacion'
 import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
+import Reportes from './pages/Reportes'
 import Configuracion from './pages/Configuracion'
 import { useAuth } from './lib/useAuth'
 
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/competencias" element={<Competencias />} />
         <Route path="/gimnasio" element={<Gimnasio />} />
         <Route path="/bike-fitting" element={<BikeFitting />} />
+        <Route path="/reportes" element={<Reportes />} />
         <Route path="/configuracion" element={<Configuracion />} />
       </Route>
     </Routes>
