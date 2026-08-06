@@ -149,4 +149,134 @@ function WearCard({ wearType, item, kmActualBici, onConfigurar, onMedir }) {
       <div className="card">
         <div className="flex items-center justify-between">
           <div>
-            
+            <p className="font-semibold text-sm">{wearType.label}</p>
+            <p className="text-ink-faint text-xs mt-0.5">Sin configurar</p>
+          </div>
+          <button
+            className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5"
+            onClick={() => setConfigurando((v) => !v)}
+          >
+            Configurar
+          </button>
+        </div>
+        {configurando && (
+          <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-asphalt-700">
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-ink-muted">Fecha instalación</span>
+              <input
+                type="date"
+                value={valorConfig.fecha_instalacion}
+                onChange={(e) => setValorConfig((v) => ({ ...v, fecha_instalacion: e.target.value }))}
+                className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-ink-muted">Km al instalar</span>
+              <input
+                type="number"
+                value={valorConfig.km_instalacion}
+                onChange={(e) => setValorConfig((v) => ({ ...v, km_instalacion: e.target.value }))}
+                className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs col-span-2">
+              <span className="text-ink-muted">Vida útil estimada (km)</span>
+              <input
+                type="number"
+                value={valorConfig.vida_util_km}
+                onChange={(e) => setValorConfig((v) => ({ ...v, vida_util_km: e.target.value }))}
+                className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm"
+              />
+            </label>
+            <div className="col-span-2 flex justify-end gap-2">
+              <button className="text-ink-muted text-xs px-3 py-1.5" onClick={() => setConfigurando(false)}>Cancelar</button>
+              <button
+                className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg"
+                onClick={() => { onConfigurar(valorConfig); setConfigurando(false) }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const { kmDesde, vidaUtil, pctKm, pct, ultimaMedicion, nivel } = estadoDesgaste(item, wearType, kmActualBici)
+  const { color, texto } = nivelDesgasteInfo(nivel)
+
+  return (
+    <div className="card" style={nivel !== 'ok' ? { borderColor: color } : undefined}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="font-semibold text-sm">{wearType.label}</p>
+          <p className="text-ink-muted text-xs mt-0.5">{kmDesde.toFixed(0)} km desde instalación · de {vidaUtil} km est.</p>
+        </div>
+        <span className="readout text-base font-bold" style={{ color }}>{pct}%</span>
+      </div>
+
+      <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-2.5 overflow-hidden relative">
+        <div className="absolute inset-y-0 left-1/2 w-px bg-asphalt-600" />
+        <div className="absolute inset-y-0 left-3/4 w-px bg-asphalt-600" />
+        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+
+      {nivel !== 'ok' && (
+        <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold" style={{ color }}>
+          <span>⚠</span><span>{texto}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-2.5">
+        <p className="text-ink-muted text-xs">
+          {ultimaMedicion
+            ? `Última medición: ${ultimaMedicion.valor} ${wearType.unidad} (${ultimaMedicion.fecha})`
+            : `Sin mediciones manuales — solo estimado por km (${pctKm}%)`}
+        </p>
+        <button
+          className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2.5 py-1"
+          onClick={() => setMidiendo((v) => !v)}
+        >
+          + Medición
+        </button>
+      </div>
+
+      {midiendo && (
+        <div className="flex gap-2 mt-2.5 pt-2.5 border-t border-asphalt-700 items-end">
+          <label className="flex-1 flex flex-col gap-1 text-xs">
+            <span className="text-ink-muted">Valor ({wearType.unidad})</span>
+            <input
+              type="number"
+              step="0.01"
+              value={valorMedicion}
+              onChange={(e) => setValorMedicion(e.target.value)}
+              placeholder={wearType.ayuda}
+              className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm"
+            />
+          </label>
+          <button
+            className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg"
+            onClick={() => {
+              if (valorMedicion === '') return
+              onMedir({ fecha: new Date().toISOString().slice(0, 10), valor: Number(valorMedicion), km_bici: kmActualBici })
+              setValorMedicion('')
+              setMidiendo(false)
+            }}
+          >
+            Guardar
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Dato({ label, value }) {
+  return (
+    <div className="card">
+      <span className="label-eyebrow">{label}</span>
+      <p className="readout text-lg font-semibold mt-1">{value}</p>
+    </div>
+  )
+}
