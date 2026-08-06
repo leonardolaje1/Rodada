@@ -42,7 +42,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <span className="font-display font-bold text-2xl text-hiviz">rodada</span>
+          <span className="font-display font-bold text-2xl text-hiviz">BikeIQ</span>
           <p className="text-ink-muted text-sm mt-2">Tu gestión integral de ciclismo</p>
         </div>
 
