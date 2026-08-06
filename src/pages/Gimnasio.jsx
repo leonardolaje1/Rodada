@@ -3,12 +3,39 @@ import { supabase } from '../lib/supabaseClient'
 
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
 
+function agruparPorFecha(items) {
+  const grupos = {}
+  for (const item of items) {
+    if (!grupos[item.fecha]) grupos[item.fecha] = []
+    grupos[item.fecha].push(item)
+  }
+  return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
+}
+
+function recalcularPRs(sesiones) {
+  const ordenadas = [...sesiones].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.id).localeCompare(String(b.id)))
+  const maxPorEjercicio = {}
+  const marcados = {}
+  for (const s of ordenadas) {
+    const p = Number(s.peso) || 0
+    const max = maxPorEjercicio[s.ejercicio] || 0
+    if (p > max) {
+      marcados[s.id] = true
+      maxPorEjercicio[s.ejercicio] = p
+    } else {
+      marcados[s.id] = false
+    }
+  }
+  return marcados
+}
+
 export default function Gimnasio() {
   const [sesiones, setSesiones] = useState([])
   const [formOpen, setFormOpen] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
 
   async function cargar() {
-    const { data } = await supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).limit(100)
+    const { data } = await supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).limit(300)
     setSesiones(data || [])
   }
 
@@ -21,18 +48,41 @@ export default function Gimnasio() {
     .filter((g) => g.fecha >= inicioSemanaStr)
     .reduce((a, g) => a + (Number(g.series) || 0) * (Number(g.reps) || 0) * (Number(g.peso) || 0), 0)
 
-  const prs = {}
-  for (const g of sesiones) {
-    const p = Number(g.peso) || 0
-    if (!prs[g.ejercicio] || p > prs[g.ejercicio]) prs[g.ejercicio] = p
+  const prsPorId = recalcularPRs(sesiones)
+
+  async function sincronizarPRs(listaActualizada) {
+    const marcados = recalcularPRs(listaActualizada)
+    await Promise.all(
+      listaActualizada
+        .filter((s) => Boolean(s.pr) !== Boolean(marcados[s.id]))
+        .map((s) => supabase.from('gimnasio').update({ pr: marcados[s.id] }).eq('id', s.id))
+    )
   }
 
   async function crear(form) {
-    const esPR = prs[form.ejercicio] ? Number(form.peso) > prs[form.ejercicio] : true
-    await supabase.from('gimnasio').insert({ ...form, pr: esPR })
+    const { data } = await supabase.from('gimnasio').insert(form).select()
     setFormOpen(false)
+    const nuevaLista = [...(data || []), ...sesiones]
+    await sincronizarPRs(nuevaLista)
     cargar()
   }
+
+  async function actualizar(id, form) {
+    await supabase.from('gimnasio').update(form).eq('id', id)
+    setEditandoId(null)
+    const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, ...form } : s))
+    await sincronizarPRs(nuevaLista)
+    cargar()
+  }
+
+  async function eliminar(id) {
+    await supabase.from('gimnasio').delete().eq('id', id)
+    const nuevaLista = sesiones.filter((s) => s.id !== id)
+    await sincronizarPRs(nuevaLista)
+    cargar()
+  }
+
+  const porDia = agruparPorFecha(sesiones)
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,7 +91,12 @@ export default function Gimnasio() {
           <h1 className="text-2xl font-bold">Gimnasio</h1>
           <p className="text-ink-muted text-sm mt-1">Fuerza y volumen</p>
         </div>
-        <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormOpen((v) => !v)}>+ Ejercicio</button>
+        <button
+          className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg"
+          onClick={() => { setEditandoId(null); setFormOpen((v) => !v) }}
+        >
+          + Ejercicio
+        </button>
       </div>
 
       <div className="card">
@@ -51,26 +106,67 @@ export default function Gimnasio() {
 
       {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
 
-      {sesiones.length === 0 ? (
+      {porDia.length === 0 ? (
         <p className="text-ink-muted text-sm">Sin sesiones registradas todavía.</p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {sesiones.map((g) => (
-            <div key={g.id} className="card flex items-center justify-between">
-              <div>
-                <p className="font-medium text-sm">
-                  {g.ejercicio}{' '}
-                  {g.pr && <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>}
-                </p>
-                <p className="text-ink-muted text-xs">{g.fecha}</p>
+        <div className="flex flex-col gap-5">
+          {porDia.map(([fecha, items]) => {
+            const volumenDia = items.reduce((a, g) => a + (Number(g.series) || 0) * (Number(g.reps) || 0) * (Number(g.peso) || 0), 0)
+            return (
+              <div key={fecha}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold">{fecha}</span>
+                  <span className="readout text-xs text-ink-muted">
+                    <span className="text-hiviz font-semibold">{volumenDia.toLocaleString('es-AR')} kg</span> volumen del día
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {items.map((g) =>
+                    editandoId === g.id ? (
+                      <FormGimnasio
+                        key={g.id}
+                        valoresIniciales={g}
+                        onGuardar={(datos) => actualizar(g.id, datos)}
+                        onCancelar={() => setEditandoId(null)}
+                      />
+                    ) : (
+                      <div key={g.id} className="card flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">
+                            {g.ejercicio}{' '}
+                            {prsPorId[g.id] && (
+                              <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-3 text-right">
+                            <MiniDato label="series" value={g.series} />
+                            <MiniDato label="reps" value={g.reps} />
+                            <MiniDato label="kg" value={g.peso} color="text-hiviz" />
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => { setFormOpen(false); setEditandoId(g.id) }}
+                              className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => { if (confirm('¿Borrar este ejercicio?')) eliminar(g.id) }}
+                              className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                            >
+                              Borrar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
-              <div className="flex gap-3 text-right">
-                <MiniDato label="series" value={g.series} />
-                <MiniDato label="reps" value={g.reps} />
-                <MiniDato label="kg" value={g.peso} color="text-hiviz" />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -86,11 +182,12 @@ function MiniDato({ label, value, color = 'text-ink' }) {
   )
 }
 
-function FormGimnasio({ onGuardar, onCancelar }) {
+function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({
-    fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: ''
+    fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '',
+    ...valoresIniciales
   })
-  const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
 
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
