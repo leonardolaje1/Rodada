@@ -115,10 +115,12 @@ export default function Entrenamientos() {
     setEditandoId(null); setMostrarForm(true)
   }
 
-  async function crearObjetivo(form) {
-    await supabase.from('objetivos').insert({ ...form, categoria: 'entrenamiento', estado: 'activo', valor_actual: 0 })
+    async function crearObjetivo(form) {
+    const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'entrenamiento', estado: 'activo', valor_actual: 0 })
+    if (error) { alert('No se pudo guardar el objetivo: ' + error.message); return }
     setFormObjetivoOpen(false); cargar()
   }
+
   async function actualizarValorObjetivo(id, valor) { await supabase.from('objetivos').update({ valor_actual: valor }).eq('id', id); cargar() }
   async function marcarCumplidoObjetivo(o) { await supabase.from('objetivos').update({ estado: o.estado === 'cumplido' ? 'activo' : 'cumplido' }).eq('id', o.id); cargar() }
   async function borrarObjetivo(id) { if (!confirm('¿Borrar este objetivo?')) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
