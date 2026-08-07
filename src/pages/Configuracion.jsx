@@ -54,6 +54,10 @@ export default function Configuracion() {
   const [restaurando, setRestaurando] = useState(false)
   const [resultadoRestaurar, setResultadoRestaurar] = useState(null)
 
+  const [confirmacionBorrado, setConfirmacionBorrado] = useState('')
+  const [borrandoCuenta, setBorrandoCuenta] = useState(false)
+  const [errorBorrado, setErrorBorrado] = useState('')
+
   async function exportarBackup() {
     setExportando(true)
     setError('')
@@ -163,6 +167,21 @@ export default function Configuracion() {
       setErrorRestaurar('Algo falló durante la restauración. ' + (err.message || ''))
     } finally {
       setRestaurando(false)
+    }
+  }
+
+  async function eliminarCuenta() {
+    if (confirmacionBorrado !== 'ELIMINAR') return
+    setBorrandoCuenta(true)
+    setErrorBorrado('')
+    try {
+      const { error } = await supabase.rpc('eliminar_mi_cuenta')
+      if (error) throw error
+      await supabase.auth.signOut()
+      window.location.reload()
+    } catch (err) {
+      setErrorBorrado('No se pudo eliminar la cuenta. ' + (err.message || ''))
+      setBorrandoCuenta(false)
     }
   }
 
@@ -296,6 +315,30 @@ export default function Configuracion() {
           <li>El archivo de backup solo sirve para restaurar en la misma cuenta desde la que se exportó, o en otra cuenta tuya — los datos siempre quedan asociados a la cuenta que hace la restauración.</li>
         </ul>
       </div>
+      <div className="card border-alert-red">
+        <span className="label-eyebrow text-alert-red">Zona de peligro</span>
+        <p className="text-ink-muted text-sm mt-2">
+          Eliminar tu cuenta borra permanentemente todos tus datos de BikeIQ: bicicletas, entrenamientos,
+          nutrición, recuperación, vínculos de Equipo y todo lo demás. Esta acción no se puede deshacer.
+        </p>
+        <label className="flex flex-col gap-1 text-sm mt-4">
+          <span className="text-ink-muted text-xs">Escribí ELIMINAR para confirmar</span>
+          <input
+            value={confirmacionBorrado}
+            onChange={(e) => setConfirmacionBorrado(e.target.value)}
+            className="bg-asphalt-900 border border-alert-red rounded-lg px-3 py-2 text-ink"
+          />
+        </label>
+        <button
+          onClick={eliminarCuenta}
+          disabled={confirmacionBorrado !== 'ELIMINAR' || borrandoCuenta}
+          className="bg-alert-red text-white font-semibold text-sm px-4 py-2.5 rounded-lg disabled:opacity-40 mt-3"
+        >
+          {borrandoCuenta ? 'Eliminando…' : 'Eliminar mi cuenta para siempre'}
+        </button>
+        {errorBorrado && <p className="text-alert-red text-xs mt-3">{errorBorrado}</p>}
+      </div>
+
     </div>
   )
 }
