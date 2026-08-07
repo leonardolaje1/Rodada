@@ -25,6 +25,13 @@ const ZONAS_POTENCIA = [
   { zona: 'Z6', nombre: 'Capacidad anaeróbica', desde: 1.21, hasta: 1.50, color: '#C34AF1' },
   { zona: 'Z7', nombre: 'Neuromuscular', desde: 1.51, hasta: null, color: '#7A4AF1' }
 ]
+const TIPOS_TEST_FTP = [
+  { id: 'ftp', label: 'Test de FTP (20/60 min)' },
+  { id: 'rampa', label: 'Test de rampa' },
+  { id: '20min', label: '20 minutos' },
+  { id: 'escalon', label: 'Test escalonado' },
+  { id: 'otro', label: 'Otro' }
+]
 const ZONAS_FC = [
   { zona: 'Z1', nombre: 'Recuperación activa', desde: 0, hasta: 0.68, color: '#8A8F9C' },
   { zona: 'Z2', nombre: 'Resistencia', desde: 0.69, hasta: 0.83, color: '#4A9EFF' },
@@ -401,6 +408,13 @@ export default function Entrenamientos() {
                   <p className="readout text-3xl font-bold text-route mt-1">{ftpActual.fc_umbral ? <>{ftpActual.fc_umbral} <span className="text-sm text-ink-muted">bpm</span></> : '—'}</p>
                 </div>
               </div>
+              {ftpActual.fc_maxima && (
+                <div className="card">
+                  <span className="label-eyebrow">FC máxima registrada</span>
+                  <p className="readout text-2xl font-bold mt-1">{ftpActual.fc_maxima} <span className="text-sm text-ink-muted">bpm</span></p>
+                  <p className="text-ink-faint text-xs mt-1">Dato informativo — las zonas de FC se calculan sobre tu FC umbral</p>
+                </div>
+              )}
               {ftpHistorial.length > 1 && (
                 <div className="card">
                   <span className="label-eyebrow">Evolución</span>
@@ -459,8 +473,8 @@ export default function Entrenamientos() {
                 ) : (
                   <div key={h.id} className="card flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">{h.ftp_watts} W {h.fc_umbral ? `· ${h.fc_umbral} bpm` : ''}</p>
-                      <p className="text-ink-muted text-xs">{h.fecha}</p>
+                      <p className="text-sm font-medium">{h.ftp_watts} W {h.fc_umbral ? `· ${h.fc_umbral} bpm umbral` : ''}{h.fc_maxima ? ` · ${h.fc_maxima} bpm máx` : ''}</p>
+                      <p className="text-ink-muted text-xs">{h.fecha}{h.tipo_test ? ` · ${TIPOS_TEST_FTP.find((t) => t.id === h.tipo_test)?.label || h.tipo_test}` : ''}</p>
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => { setFormFtpOpen(false); setFtpEditando(h.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
@@ -679,12 +693,16 @@ function FormObjetivo({ onGuardar, onCancelar }) {
 }
 
 function FormFTP({ onGuardar, onCancelar, valoresIniciales }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ftp_watts: '', fc_umbral: '', fuente: 'test', notas: '', ...valoresIniciales })
+  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ftp_watts: '', fc_umbral: '', fc_maxima: '', tipo_test: 'ftp', fuente: 'test', notas: '', ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, ftp_watts: Number(form.ftp_watts), fc_umbral: form.fc_umbral ? Number(form.fc_umbral) : null }) }}>
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, ftp_watts: Number(form.ftp_watts), fc_umbral: form.fc_umbral ? Number(form.fc_umbral) : null, fc_maxima: form.fc_maxima ? Number(form.fc_maxima) : null }) }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
         <input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Tipo de test</span>
+        <select {...campo('tipo_test')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {TIPOS_TEST_FTP.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fuente</span>
         <select {...campo('fuente')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
           <option value="test">Test</option><option value="estimado">Estimado</option>
@@ -693,6 +711,8 @@ function FormFTP({ onGuardar, onCancelar, valoresIniciales }) {
         <input type="number" {...campo('ftp_watts')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">FC umbral (bpm)</span>
         <input type="number" {...campo('fc_umbral')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">FC máxima (bpm) — informativo</span>
+        <input type="number" {...campo('fc_maxima')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
