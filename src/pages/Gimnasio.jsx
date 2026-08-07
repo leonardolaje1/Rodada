@@ -13,7 +13,8 @@ function agruparPorFecha(items) {
   return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
 function recalcularPRs(sesiones) {
-  const ordenadas = [...sesiones].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.id).localeCompare(String(b.id)))
+  const realizadas = sesiones.filter((s) => (s.estado || 'realizado') === 'realizado')
+  const ordenadas = [...realizadas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.id).localeCompare(String(b.id)))
   const maxPorEjercicio = {}; const marcados = {}
   for (const s of ordenadas) {
     const p = Number(s.peso) || 0
@@ -74,10 +75,15 @@ export default function Gimnasio() {
   async function borrarPlan(id) { await supabase.from('planes_gimnasio').update({ activo: false }).eq('id', id); cargar() }
   async function registrarDesdesPlan(plan) {
     const hoy = new Date().toISOString().slice(0, 10)
-    const nuevos = (plan.ejercicios || []).map((ej) => ({ fecha: hoy, ejercicio: ej.ejercicio, series: ej.series, reps: ej.reps, peso: '', plan_id: plan.id }))
+    const nuevos = (plan.ejercicios || []).map((ej) => ({ fecha: hoy, ejercicio: ej.ejercicio, series: ej.series, reps: ej.reps, peso: null, plan_id: plan.id, estado: 'pendiente' }))
     const { data } = await supabase.from('gimnasio').insert(nuevos).select()
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); setVista('registro'); cargar()
+  }
+  async function marcarRealizado(id) {
+    await supabase.from('gimnasio').update({ estado: 'realizado' }).eq('id', id)
+    const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, estado: 'realizado' } : s))
+    await sincronizarPRs(nuevaLista); cargar()
   }
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
@@ -94,11 +100,12 @@ export default function Gimnasio() {
   const inicioSemana = new Date(); inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
   const inicioSemanaStr = inicioSemana.toISOString().slice(0, 10)
   const volumen = (i) => (Number(i.series) || 0) * (Number(i.reps) || 0) * (Number(i.peso) || 0)
-  const volumenSemanal = sesiones.filter((g) => g.fecha >= inicioSemanaStr).reduce((a, g) => a + volumen(g), 0)
+  const volumenSemanal = sesiones.filter((g) => g.fecha >= inicioSemanaStr && g.estado === 'realizado').reduce((a, g) => a + volumen(g), 0)
   const nombrePlan = (id) => planes.find((p) => p.id === id)?.nombre || 'Sin plan asignado'
 
   const pesosMaximosPorEjercicio = {}
   for (const s of sesiones) {
+    if (s.estado !== 'realizado') continue
     const p = Number(s.peso) || 0
     if (!pesosMaximosPorEjercicio[s.ejercicio] || p > pesosMaximosPorEjercicio[s.ejercicio].peso) {
       pesosMaximosPorEjercicio[s.ejercicio] = { peso: p, fecha: s.fecha }
@@ -118,9 +125,9 @@ export default function Gimnasio() {
       {vista === 'registro' && (
         <>
           <div className="grid grid-cols-3 gap-3">
-            <StatVolumen label="Hoy" valor={sesiones.filter((s) => s.fecha === hoy).reduce((a, s) => a + volumen(s), 0)} />
+            <StatVolumen label="Hoy" valor={sesiones.filter((s) => s.fecha === hoy && s.estado === 'realizado').reduce((a, s) => a + volumen(s), 0)} />
             <StatVolumen label="Esta semana" valor={volumenSemanal} />
-            <StatVolumen label="Este mes" valor={sesiones.filter((s) => s.fecha.slice(0, 7) === hoy.slice(0, 7)).reduce((a, s) => a + volumen(s), 0)} />
+            <StatVolumen label="Este mes" valor={sesiones.filter((s) => s.fecha.slice(0, 7) === hoy.slice(0, 7) && s.estado === 'realizado').reduce((a, s) => a + volumen(s), 0)} />
           </div>
 
           {planes.length > 0 && (
@@ -150,23 +157,31 @@ export default function Gimnasio() {
                 <div key={fecha}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold">{fecha}</span>
-                    <span className="readout text-xs text-ink-muted"><span className="text-hiviz font-semibold">{items.reduce((a, g) => a + volumen(g), 0).toLocaleString('es-AR')} kg</span> volumen del día</span>
+                    <span className="readout text-xs text-ink-muted"><span className="text-hiviz font-semibold">{items.filter((g) => g.estado === 'realizado').reduce((a, g) => a + volumen(g), 0).toLocaleString('es-AR')} kg</span> volumen del día</span>
                   </div>
                   <div className="flex flex-col gap-2">
                     {items.map((g) =>
                       editandoId === g.id ? (
                         <FormGimnasio key={g.id} planes={planes} valoresIniciales={g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => setEditandoId(null)} />
                       ) : (
-                        <div key={g.id} className="card flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-sm">{g.ejercicio} {prsPorId[g.id] && <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>}</p>
-                            {g.plan_id && <p className="text-ink-faint text-[11px]">{nombrePlan(g.plan_id)}</p>}
+                        <div key={g.id} className={`card flex items-center justify-between ${g.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
+                          <div className="flex items-center gap-2">
+                            {g.estado === 'pendiente' && <i className="w-2 h-2 rounded-full border border-ink-faint inline-block flex-shrink-0" title="Pendiente" />}
+                            <div>
+                              <p className="font-medium text-sm">{g.ejercicio} {prsPorId[g.id] && <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>}</p>
+                              {g.plan_id && <p className="text-ink-faint text-[11px]">{nombrePlan(g.plan_id)}{g.estado === 'pendiente' ? ' · Pendiente' : ''}</p>}
+                            </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <div className="flex gap-3 text-right">
-                              <MiniDato label="series" value={g.series} /><MiniDato label="reps" value={g.reps} /><MiniDato label="kg" value={g.peso} color="text-hiviz" />
-                            </div>
+                            {g.estado === 'realizado' && (
+                              <div className="flex gap-3 text-right">
+                                <MiniDato label="series" value={g.series} /><MiniDato label="reps" value={g.reps} /><MiniDato label="kg" value={g.peso} color="text-hiviz" />
+                              </div>
+                            )}
                             <div className="flex gap-1">
+                              {g.estado === 'pendiente' && (
+                                <button onClick={() => { setFormOpen(false); setEditandoId(g.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar resultado</button>
+                              )}
                               <button onClick={() => { setFormOpen(false); setEditandoId(g.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
                               <button onClick={() => { if (confirm('¿Borrar este ejercicio?')) eliminar(g.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                             </div>
@@ -302,11 +317,16 @@ function MiniDato({ label, value, color = 'text-ink' }) {
 }
 
 function FormGimnasio({ onGuardar, onCancelar, valoresIniciales, planes = [] }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', plan_id: '', ...valoresIniciales })
+  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', plan_id: '', estado: 'realizado', ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, plan_id: form.plan_id || null }) }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Estado</span>
+        <select {...campo('estado')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          <option value="realizado">Realizado</option>
+          <option value="pendiente">Pendiente</option>
+        </select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Ejercicio</span>
         <select {...campo('ejercicio')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}</select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Series</span><input type="number" {...campo('series')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
