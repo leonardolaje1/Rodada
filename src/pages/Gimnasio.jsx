@@ -258,23 +258,39 @@ export default function Gimnasio() {
         </>
       )}
 
-      {vista === 'records' && (
+            {vista === 'records' && (
         <div className="flex flex-col gap-2">
           {Object.keys(pesosMaximosPorEjercicio).length === 0 ? (
             <p className="text-ink-muted text-sm">Sin datos todavía.</p>
           ) : (
-            Object.entries(pesosMaximosPorEjercicio).map(([ejercicio, info]) => (
-              <div key={ejercicio} className="card flex items-center justify-between">
-                <div><p className="text-sm font-semibold">{ejercicio}</p><p className="text-ink-muted text-xs">{info.fecha}</p></div>
-                <span className="readout text-lg font-bold text-hiviz">{info.peso} kg</span>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {['Press banca', 'Sentadilla', 'Peso muerto'].map((ej) => {
+                  const info = pesosMaximosPorEjercicio[ej]
+                  return (
+                    <div key={ej} className="card border-hiviz">
+                      <span className="label-eyebrow">{ej}</span>
+                      <p className="readout text-2xl font-bold text-hiviz mt-1">{info ? `${info.peso} kg` : '—'}</p>
+                      {info && <p className="text-ink-faint text-xs mt-0.5">{info.fecha}</p>}
+                    </div>
+                  )
+                })}
               </div>
-            ))
+              <div className="flex flex-col gap-2 mt-1">
+                {Object.entries(pesosMaximosPorEjercicio)
+                  .filter(([ejercicio]) => !['Press banca', 'Sentadilla', 'Peso muerto'].includes(ejercicio))
+                  .map(([ejercicio, info]) => (
+                    <div key={ejercicio} className="card flex items-center justify-between">
+                      <div><p className="text-sm font-semibold">{ejercicio}</p><p className="text-ink-muted text-xs">{info.fecha}</p></div>
+                      <span className="readout text-lg font-bold text-hiviz">{info.peso} kg</span>
+                    </div>
+                  ))}
+              </div>
+            </>
           )}
         </div>
       )}
-    </div>
-  )
-}
+
 
 function StatVolumen({ label, valor }) {
   return <div className="card"><span className="label-eyebrow">{label}</span><p className="readout text-lg font-bold text-hiviz mt-1">{valor.toLocaleString('es-AR')} kg</p></div>
