@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 
 const NIVELES = [1, 2, 3, 4, 5]
@@ -28,6 +29,8 @@ function estadoRecuperacion(r) {
   if (promedio < 1.33) return { color: '#F5A623', texto: 'Moderado — controlar la carga' }
   return { color: '#F14A4A', texto: 'Fatiga alta — priorizar descanso' }
 }
+
+function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 
 export default function Recuperacion() {
   const [registros, setRegistros] = useState([])
@@ -61,6 +64,16 @@ export default function Recuperacion() {
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   const { color, texto } = estadoRecuperacion(entradaHoy || form)
 
+  const graficoData = [...registros].reverse().map((r) => ({
+    fecha: r.fecha,
+    sueño: r.sueño_horas != null ? Number(r.sueño_horas) : null,
+    bodyBattery: r.body_battery_manana != null ? Number(r.body_battery_manana) : null,
+    estres: r.estres_score != null ? Number(r.estres_score) : null
+  }))
+  const hayDatosSueño = graficoData.filter((d) => d.sueño != null).length > 1
+  const hayDatosBB = graficoData.filter((d) => d.bodyBattery != null).length > 1
+  const hayDatosEstres = graficoData.filter((d) => d.estres != null).length > 1
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -72,6 +85,62 @@ export default function Recuperacion() {
         <span className="label-eyebrow">Hoy</span>
         <p className="text-sm font-semibold mt-1.5" style={{ color }}>{texto}</p>
       </div>
+
+      {(hayDatosSueño || hayDatosBB || hayDatosEstres) && (
+        <div>
+          <h2 className="text-sm font-semibold mb-2">Evolución</h2>
+          <div className="flex flex-col gap-3">
+            {hayDatosSueño && (
+              <div className="card">
+                <span className="label-eyebrow">Horas de sueño</span>
+                <div className="mt-2 -ml-4">
+                  <ResponsiveContainer width="100%" height={140}>
+                    <LineChart data={graficoData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="#262A33" vertical={false} />
+                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                      <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={25} domain={[0, 10]} />
+                      <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                      <Line type="monotone" dataKey="sueño" stroke="#4A9EFF" strokeWidth={2} dot={{ r: 3 }} name="Horas" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+            {hayDatosBB && (
+              <div className="card">
+                <span className="label-eyebrow">Body Battery al despertar</span>
+                <div className="mt-2 -ml-4">
+                  <ResponsiveContainer width="100%" height={140}>
+                    <LineChart data={graficoData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="#262A33" vertical={false} />
+                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                      <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={25} domain={[0, 100]} />
+                      <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                      <Line type="monotone" dataKey="bodyBattery" stroke="#C4F135" strokeWidth={2} dot={{ r: 3 }} name="Body Battery" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+            {hayDatosEstres && (
+              <div className="card">
+                <span className="label-eyebrow">Stress score</span>
+                <div className="mt-2 -ml-4">
+                  <ResponsiveContainer width="100%" height={140}>
+                    <LineChart data={graficoData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="#262A33" vertical={false} />
+                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                      <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={25} domain={[0, 100]} />
+                      <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                      <Line type="monotone" dataKey="estres" stroke="#F14A4A" strokeWidth={2} dot={{ r: 3 }} name="Stress" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <form className="card flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); guardar() }}>
         <div>
