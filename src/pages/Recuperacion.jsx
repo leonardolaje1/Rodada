@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 
 const NIVELES = [1, 2, 3, 4, 5]
+const PERIODOS = [
+  { dias: 7, label: '7 días' },
+  { dias: 30, label: '30 días' },
+  { dias: 90, label: '90 días' }
+]
+const ZONAS_LESION = ['Rodilla', 'Espalda baja', 'Cuello/cervical', 'Hombro', 'Muñeca/mano', 'Cadera', 'Isquiotibiales', 'Cuádriceps', 'Otro']
+const CAUSAS_LESION = [
+  { id: 'mala_posicion_bici', label: 'Mala posición en la bici' },
+  { id: 'sobrecarga', label: 'Sobrecarga / uso excesivo' },
+  { id: 'caida', label: 'Caída / accidente' },
+  { id: 'otro', label: 'Otro' }
+]
+const DIAS_ALERTA_BIKEFIT = 5
 
 function estadoRecuperacion(r) {
   if (!r) return { color: '#565B68', texto: 'Sin datos' }
@@ -31,9 +45,16 @@ function estadoRecuperacion(r) {
 }
 
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+function diasDesde(fecha) {
+  const ms = new Date().setHours(0, 0, 0, 0) - new Date(fecha + 'T00:00:00').getTime()
+  return Math.round(ms / 86400000)
+}
 
 export default function Recuperacion() {
   const [registros, setRegistros] = useState([])
+  const [lesiones, setLesiones] = useState([])
+  const [periodoDias, setPeriodoDias] = useState(30)
+  const [formLesionOpen, setFormLesionOpen] = useState(false)
   const hoy = new Date().toISOString().slice(0, 10)
   const entradaHoy = registros.find((r) => r.fecha === hoy)
   const [form, setForm] = useState({
@@ -44,15 +65,19 @@ export default function Recuperacion() {
   })
 
   async function cargar() {
-    const { data } = await supabase.from('metricas_diarias').select('*').order('fecha', { ascending: false }).limit(30)
+    const [{ data }, { data: les }] = await Promise.all([
+      supabase.from('metricas_diarias').select('*').order('fecha', { ascending: false }).limit(100),
+      supabase.from('lesiones').select('*').order('fecha_inicio', { ascending: false })
+    ])
     setRegistros(data || [])
+    setLesiones(les || [])
     const hoyData = (data || []).find((r) => r.fecha === hoy)
     if (hoyData) setForm(hoyData)
   }
 
   useEffect(() => { cargar() }, [])
 
-    async function guardar() {
+  async function guardar() {
     const { data: userData } = await supabase.auth.getUser()
     const { error } = await supabase.from('metricas_diarias').upsert(
       { ...form, user_id: userData.user.id, fuente: 'manual' },
@@ -62,10 +87,28 @@ export default function Recuperacion() {
     cargar()
   }
 
+  async function crearLesion(datos) {
+    const { error } = await supabase.from('lesiones').insert(datos)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setFormLesionOpen(false); cargar()
+  }
+  async function marcarRecuperada(id) {
+    await supabase.from('lesiones').update({ estado: 'recuperada' }).eq('id', id); cargar()
+  }
+  async function eliminarLesion(id) {
+    if (!confirm('¿Borrar este registro de lesión?')) return
+    await supabase.from('lesiones').delete().eq('id', id); cargar()
+  }
+
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   const { color, texto } = estadoRecuperacion(entradaHoy || form)
 
-  const graficoData = [...registros].reverse().map((r) => ({
+  const fechaLimite = new Date()
+  fechaLimite.setDate(fechaLimite.getDate() - periodoDias)
+  const fechaLimiteStr = fechaLimite.toISOString().slice(0, 10)
+  const registrosPeriodo = registros.filter((r) => r.fecha >= fechaLimiteStr)
+
+  const graficoData = [...registrosPeriodo].reverse().map((r) => ({
     fecha: r.fecha,
     sueño: r.sueño_horas != null ? Number(r.sueño_horas) : null,
     bodyBattery: r.body_battery_manana != null ? Number(r.body_battery_manana) : null,
@@ -74,6 +117,10 @@ export default function Recuperacion() {
   const hayDatosSueño = graficoData.filter((d) => d.sueño != null).length > 1
   const hayDatosBB = graficoData.filter((d) => d.bodyBattery != null).length > 1
   const hayDatosEstres = graficoData.filter((d) => d.estres != null).length > 1
+
+  const alertaBikeFit = lesiones.find((l) =>
+    l.estado === 'activa' && l.causa === 'mala_posicion_bici' && diasDesde(l.fecha_inicio) >= DIAS_ALERTA_BIKEFIT
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -87,9 +134,35 @@ export default function Recuperacion() {
         <p className="text-sm font-semibold mt-1.5" style={{ color }}>{texto}</p>
       </div>
 
-      {(hayDatosSueño || hayDatosBB || hayDatosEstres) && (
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Evolución</h2>
+      {alertaBikeFit && (
+        <div className="card border-alert-amber">
+          <span className="label-eyebrow text-alert-amber">Posible causa: postura en la bici</span>
+          <p className="text-sm mt-1.5">
+            Tenés una molestia en <b>{alertaBikeFit.zona}</b> hace {diasDesde(alertaBikeFit.fecha_inicio)} días,
+            asociada a mala posición en la bici. Podría convenir un nuevo estudio de bike fitting.
+          </p>
+          <Link to="/bicicletas" className="text-hiviz text-xs mt-2 inline-block">Ir a Bicis →</Link>
+        </div>
+      )}
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Evolución</h2>
+          <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg">
+            {PERIODOS.map((p) => (
+              <button
+                key={p.dias}
+                onClick={() => setPeriodoDias(p.dias)}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold ${periodoDias === p.dias ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {!hayDatosSueño && !hayDatosBB && !hayDatosEstres ? (
+          <p className="text-ink-muted text-sm">No hay suficientes registros en este período para graficar.</p>
+        ) : (
           <div className="flex flex-col gap-3">
             {hayDatosSueño && (
               <div className="card">
@@ -140,8 +213,8 @@ export default function Recuperacion() {
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <form className="card flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); guardar() }}>
         <div>
@@ -188,7 +261,7 @@ export default function Recuperacion() {
 
       {registros.length > 0 && (
         <div className="flex flex-col gap-2">
-          {registros.slice(0, 10).map((r) => {
+          {registrosPeriodo.slice(0, 10).map((r) => {
             const est = estadoRecuperacion(r)
             return (
               <div key={r.fecha} className="card flex justify-between items-center py-2.5">
@@ -203,6 +276,42 @@ export default function Recuperacion() {
           })}
         </div>
       )}
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Lesiones</h2>
+          <button onClick={() => setFormLesionOpen((v) => !v)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">+ Registro</button>
+        </div>
+        {formLesionOpen && <FormLesion onGuardar={crearLesion} onCancelar={() => setFormLesionOpen(false)} />}
+        {lesiones.length === 0 ? (
+          <p className="text-ink-muted text-sm">Sin lesiones registradas.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {lesiones.map((l) => (
+              <div key={l.id} className={`card ${l.estado === 'recuperada' ? 'opacity-60' : ''}`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className={`font-semibold text-sm ${l.estado === 'recuperada' ? 'line-through' : ''}`}>{l.zona}</p>
+                    <p className="text-ink-muted text-xs mt-0.5">
+                      {CAUSAS_LESION.find((c) => c.id === l.causa)?.label} · desde {l.fecha_inicio}
+                      {l.estado === 'activa' ? ` · hace ${diasDesde(l.fecha_inicio)} días` : ''}
+                    </p>
+                    {l.profesional_tratante && <p className="text-ink-faint text-xs mt-0.5">Tratante: {l.profesional_tratante}</p>}
+                    {l.tiempo_estimado_dias && <p className="text-ink-faint text-xs">Recuperación estimada: {l.tiempo_estimado_dias} días</p>}
+                    {l.notas && <p className="text-ink-faint text-xs mt-1">{l.notas}</p>}
+                  </div>
+                  <div className="flex gap-1">
+                    {l.estado === 'activa' && (
+                      <button onClick={() => marcarRecuperada(l.id)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Marcar recuperada</button>
+                    )}
+                    <button onClick={() => eliminarLesion(l.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -234,5 +343,40 @@ function Escala({ label, value, onChange }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function FormLesion({ onGuardar, onCancelar }) {
+  const [form, setForm] = useState({
+    fecha_inicio: new Date().toISOString().slice(0, 10), zona: 'Rodilla', causa: 'sobrecarga',
+    profesional_tratante: '', tiempo_estimado_dias: '', notas: ''
+  })
+  const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  return (
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => {
+      e.preventDefault()
+      onGuardar({ ...form, tiempo_estimado_dias: form.tiempo_estimado_dias ? Number(form.tiempo_estimado_dias) : null })
+    }}>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de inicio</span>
+        <input type="date" {...campo('fecha_inicio')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Zona</span>
+        <select {...campo('zona')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {ZONAS_LESION.map((z) => <option key={z}>{z}</option>)}
+        </select></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Causa probable</span>
+        <select {...campo('causa')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {CAUSAS_LESION.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Profesional tratante</span>
+        <input {...campo('profesional_tratante')} placeholder="Kinesiólogo / traumatólogo" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Recuperación estimada (días)</span>
+        <input type="number" {...campo('tiempo_estimado_dias')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Notas</span>
+        <input {...campo('notas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <div className="col-span-2 flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
+      </div>
+    </form>
   )
 }
