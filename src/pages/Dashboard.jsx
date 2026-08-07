@@ -4,27 +4,45 @@ import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../li
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 
+const DIAS_ADHERENCIA = 14
+const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
+
+function diaIdDe(fecha) {
+  return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()]
+}
+
 export default function Dashboard() {
   const [entrenamientos, setEntrenamientos] = useState([])
   const [bicicletas, setBicicletas] = useState([])
+  const [planesEntreno, setPlanesEntreno] = useState([])
+  const [planesGym, setPlanesGym] = useState([])
+  const [gimnasio, setGimnasio] = useState([])
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
     async function cargar() {
       const desde90 = new Date()
       desde90.setDate(desde90.getDate() - 90)
+      const desde14 = new Date()
+      desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
 
-      const [{ data: ents }, { data: bicis }] = await Promise.all([
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
           .gte('fecha', desde90.toISOString().slice(0, 10))
           .order('fecha', { ascending: true }),
-        supabase.from('bicicletas').select('*')
+        supabase.from('bicicletas').select('*'),
+        supabase.from('planes_entrenamiento').select('*').eq('activo', true),
+        supabase.from('planes_gimnasio').select('*').eq('activo', true),
+        supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10))
       ])
 
       setEntrenamientos(ents || [])
       setBicicletas(bicis || [])
+      setPlanesEntreno(plsE || [])
+      setPlanesGym(plsG || [])
+      setGimnasio(gym || [])
       setCargando(false)
     }
     cargar()
@@ -45,6 +63,44 @@ export default function Dashboard() {
   const entrenosSemana = entrenamientos.filter((e) => e.fecha >= inicioSemana.toISOString().slice(0, 10))
   const kmSemana = entrenosSemana.reduce((acc, e) => acc + (e.km || 0), 0)
   const horasSemana = entrenosSemana.reduce((acc, e) => acc + (e.duracion_min || 0), 0) / 60
+
+  // --- Adherencia al plan (últimos 14 días) ---
+  const diasEvaluados = []
+  const cursor = new Date()
+  cursor.setDate(cursor.getDate() - (DIAS_ADHERENCIA - 1))
+  for (let i = 0; i < DIAS_ADHERENCIA; i++) {
+    diasEvaluados.push(cursor.toISOString().slice(0, 10))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  let diasEsperadosEntreno = 0
+  let diasCumplidosEntreno = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesEntreno.some((p) => (p.sesiones || []).some((s) => s.dia === diaId && s.tipo !== 'Descanso'))
+    if (!seEspera) continue
+    diasEsperadosEntreno++
+    const hecho = entrenamientos.some((e) => e.fecha === fecha && e.estado === 'realizado')
+    if (hecho) diasCumplidosEntreno++
+  }
+
+  let diasEsperadosGym = 0
+  let diasCumplidosGym = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesGym.some((p) => (p.dias_semana || []).includes(diaId))
+    if (!seEspera) continue
+    diasEsperadosGym++
+    const hecho = gimnasio.some((g) => g.fecha === fecha)
+    if (hecho) diasCumplidosGym++
+  }
+
+  const diasEsperadosTotal = diasEsperadosEntreno + diasEsperadosGym
+  const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
+  const tieneAlgunPlan = planesEntreno.length > 0 || planesGym.length > 0
+  const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
+
+  const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
 
   if (cargando) {
     return <p className="text-ink-muted text-sm">Cargando panel…</p>
@@ -71,6 +127,33 @@ export default function Dashboard() {
           <span className="text-sm text-ink-muted">{forma.texto}</span>
         </div>
       </div>
+
+      {tieneAlgunPlan && (
+        <div className="card" style={{ borderColor: colorAdherencia }}>
+          <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
+          {adherenciaPct != null ? (
+            <>
+              <div className="flex items-baseline gap-3 mt-1">
+                <span className="readout text-4xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
+                <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
+              </div>
+              <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
+                <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
+              </div>
+              <div className="flex gap-4 mt-2.5">
+                {diasEsperadosEntreno > 0 && (
+                  <span className="text-ink-muted text-xs">Entrenamiento: {diasCumplidosEntreno}/{diasEsperadosEntreno}</span>
+                )}
+                {diasEsperadosGym > 0 && (
+                  <span className="text-ink-muted text-xs">Gimnasio: {diasCumplidosGym}/{diasEsperadosGym}</span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
+          )}
+        </div>
+      )}
 
       <PMCChart data={serie} />
 
