@@ -10,6 +10,18 @@ function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 const DIAS_ADHERENCIA = 14
 function diaIdDe(fecha) { return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()] }
+const NIVELES_ACTIVIDAD = [
+  { id: 'sedentario', label: 'Sedentario', factor: 1.2 },
+  { id: 'ligero', label: 'Entreno ligero (1-3 d/sem)', factor: 1.375 },
+  { id: 'moderado', label: 'Entreno moderado (3-5 d/sem)', factor: 1.55 },
+  { id: 'alto', label: 'Entreno intenso (6-7 d/sem)', factor: 1.725 },
+  { id: 'muy_alto', label: 'Doble sesión / muy intenso', factor: 1.9 }
+]
+function calcularBMR({ peso, altura, edad, sexo }) {
+  const p = Number(peso), a = Number(altura), e = Number(edad)
+  if (!p || !a || !e) return null
+  return sexo === 'F' ? 10 * p + 6.25 * a - 5 * e - 161 : 10 * p + 6.25 * a - 5 * e + 5
+}
 
 const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' },
@@ -42,6 +54,8 @@ export default function VerAtleta() {
   const [feedbackPorEntreno, setFeedbackPorEntreno] = useState({})
   const [comentandoId, setComentandoId] = useState(null)
   const [tipoComparar, setTipoComparar] = useState('')
+  const [perfilNutri, setPerfilNutri] = useState(null)
+  const [editandoPerfil, setEditandoPerfil] = useState(false)
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
@@ -83,6 +97,8 @@ export default function VerAtleta() {
     if (esNutricionista) {
       const { data: cms } = await supabase.from('comidas').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde)
       setComidas(cms || [])
+      const { data: perfil } = await supabase.from('perfil_nutricional').select('*').eq('user_id', atletaId).maybeSingle()
+      setPerfilNutri(perfil || { peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
     }
     setCargando(false)
   }
@@ -125,6 +141,13 @@ export default function VerAtleta() {
       comentario: comentario.trim()
     })
     setComentandoId(null)
+    cargar()
+  }
+
+  async function guardarPerfilNutri(datos) {
+    const { error } = await supabase.from('perfil_nutricional').upsert({ ...datos, user_id: atletaId })
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setEditandoPerfil(false)
     cargar()
   }
 
@@ -225,6 +248,32 @@ export default function VerAtleta() {
               <span className="label-eyebrow">Nutrición — promedio diario</span>
               <p className="readout text-2xl font-bold text-hiviz mt-1">{kcalProm.toFixed(0)} kcal/día</p>
               <p className="text-ink-muted text-xs mt-1">{comidas.length} comidas registradas en el período</p>
+            </div>
+          )}
+
+          {esNutricionista && perfilNutri && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-2">
+                <span className="label-eyebrow">Perfil y necesidades calóricas</span>
+                <button onClick={() => setEditandoPerfil((v) => !v)} className="text-hiviz text-xs">{editandoPerfil ? 'Cerrar' : 'Editar'}</button>
+              </div>
+              {editandoPerfil ? (
+                <FormPerfilNutri valoresIniciales={perfilNutri} onGuardar={guardarPerfilNutri} onCancelar={() => setEditandoPerfil(false)} />
+              ) : (
+                (() => {
+                  const bmr = calcularBMR(perfilNutri)
+                  const nivel = NIVELES_ACTIVIDAD.find((n) => n.id === perfilNutri.nivel_actividad) || NIVELES_ACTIVIDAD[2]
+                  const tdee = bmr ? Math.round(bmr * nivel.factor) : null
+                  return (
+                    <div className="grid grid-cols-2 gap-2">
+                      <MiniDato label="Peso" value={perfilNutri.peso ? `${perfilNutri.peso} kg` : '—'} />
+                      <MiniDato label="Altura" value={perfilNutri.altura ? `${perfilNutri.altura} cm` : '—'} />
+                      <MiniDato label="Edad" value={perfilNutri.edad || '—'} />
+                      <MiniDato label="TDEE estimado" value={tdee ? `${tdee} kcal` : '—'} accent />
+                    </div>
+                  )
+                })()
+              )}
             </div>
           )}
 
@@ -679,6 +728,33 @@ function FormFeedback({ onGuardar, onCancelar }) {
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-xs px-3 py-1.5">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Enviar</button>
+      </div>
+    </form>
+  )
+}
+
+function FormPerfilNutri({ onGuardar, onCancelar, valoresIniciales }) {
+  const [form, setForm] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado', ...valoresIniciales })
+  const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  return (
+    <form className="grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso (kg)</span>
+        <input type="number" {...campo('peso')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Altura (cm)</span>
+        <input type="number" {...campo('altura')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Edad</span>
+        <input type="number" {...campo('edad')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Sexo</span>
+        <select {...campo('sexo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          <option value="M">Masculino</option><option value="F">Femenino</option>
+        </select></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Nivel de actividad</span>
+        <select {...campo('nivel_actividad')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {NIVELES_ACTIVIDAD.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+        </select></label>
+      <div className="col-span-2 flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
       </div>
     </form>
   )
