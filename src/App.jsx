@@ -15,6 +15,7 @@ import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
 import FTP from './pages/FTP'
 import Calendario from './pages/Calendario'
+import Analitica from './pages/Analitica'
 import Reportes from './pages/Reportes'
 import Equipo from './pages/Equipo'
 import VerAtleta from './pages/VerAtleta'
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/gimnasio" element={<Gimnasio />} />
         <Route path="/bike-fitting" element={<BikeFitting />} />
         <Route path="/ftp" element={<FTP />} />
+        <Route path="/analitica" element={<Analitica />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/equipo" element={<Equipo />} />
         <Route path="/equipo/:id" element={<VerAtleta />} />
