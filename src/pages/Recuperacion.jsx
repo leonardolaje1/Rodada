@@ -52,12 +52,13 @@ export default function Recuperacion() {
 
   useEffect(() => { cargar() }, [])
 
-  async function guardar() {
+    async function guardar() {
     const { data: userData } = await supabase.auth.getUser()
-    await supabase.from('metricas_diarias').upsert(
+    const { error } = await supabase.from('metricas_diarias').upsert(
       { ...form, user_id: userData.user.id, fuente: 'manual' },
       { onConflict: 'user_id,fecha' }
     )
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
     cargar()
   }
 
