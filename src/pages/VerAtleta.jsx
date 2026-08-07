@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS } from '../lib/tss'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
+function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+
 const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' },
   { id: 'mar', label: 'Mar' },
@@ -33,6 +36,9 @@ export default function VerAtleta() {
   const [planEntrenoEditando, setPlanEntrenoEditando] = useState(null)
   const [formPlanGymOpen, setFormPlanGymOpen] = useState(false)
   const [planGymEditando, setPlanGymEditando] = useState(null)
+  const [feedbackPorEntreno, setFeedbackPorEntreno] = useState({})
+  const [comentandoId, setComentandoId] = useState(null)
+  const [tipoComparar, setTipoComparar] = useState('')
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
@@ -54,6 +60,22 @@ export default function VerAtleta() {
     setGimnasio(gym || [])
     setPlanesEntreno(plsE || [])
     setPlanesGimnasio(plsG || [])
+
+    if (ents && ents.length > 0) {
+      const { data: fbs } = await supabase
+        .from('feedback_entrenamientos')
+        .select('*')
+        .in('entrenamiento_id', ents.map((e) => e.id))
+        .order('created_at', { ascending: true })
+      const agrupado = {}
+      for (const fb of fbs || []) {
+        if (!agrupado[fb.entrenamiento_id]) agrupado[fb.entrenamiento_id] = []
+        agrupado[fb.entrenamiento_id].push(fb)
+      }
+      setFeedbackPorEntreno(agrupado)
+    } else {
+      setFeedbackPorEntreno({})
+    }
 
     if (esNutricionista) {
       const { data: cms } = await supabase.from('comidas').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde)
@@ -90,6 +112,19 @@ export default function VerAtleta() {
     setPlanGymEditando(null)
     cargar()
   }
+  async function crearFeedback(entrenamientoId, comentario) {
+    if (!comentario.trim()) return
+    const { data: userData } = await supabase.auth.getUser()
+    await supabase.from('feedback_entrenamientos').insert({
+      entrenamiento_id: entrenamientoId,
+      atleta_id: atletaId,
+      profesional_id: userData.user.id,
+      comentario: comentario.trim()
+    })
+    setComentandoId(null)
+    cargar()
+  }
+
   async function borrarPlanGym(id) {
     if (!confirm('¿Borrar esta rutina?')) return
     await supabase.from('planes_gimnasio').update({ activo: false }).eq('id', id)
@@ -151,22 +186,89 @@ export default function VerAtleta() {
               <p className="text-ink-muted text-sm">Sin entrenamientos en los últimos 30 días.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {entrenamientos.slice(0, 10).map((e) => (
-                  <div key={e.id} className="card flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{e.tipo} — {e.ruta || 'sin ruta'}</p>
-                      <p className="text-ink-muted text-xs">{e.fecha}</p>
+                {entrenamientos.slice(0, 10).map((e) => {
+                  const comentarios = feedbackPorEntreno[e.id] || []
+                  return (
+                    <div key={e.id} className="card">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{e.tipo} — {e.ruta || 'sin ruta'}</p>
+                          <p className="text-ink-muted text-xs">{e.fecha}</p>
+                        </div>
+                        <div className="flex gap-3 text-right">
+                          <MiniDato label="km" value={e.km} />
+                          <MiniDato label="min" value={e.duracion_min} />
+                          <MiniDato label="TSS" value={e.tss} accent />
+                        </div>
+                      </div>
+
+                      {comentarios.length > 0 && (
+                        <div className="flex flex-col gap-1.5 mt-2.5 pt-2.5 border-t border-asphalt-700">
+                          {comentarios.map((c) => (
+                            <p key={c.id} className="text-ink-muted text-xs">
+                              <span className="text-hiviz">Tu feedback:</span> {c.comentario}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+
+                      {esEntrenador && (
+                        comentandoId === e.id ? (
+                          <FormFeedback onGuardar={(texto) => crearFeedback(e.id, texto)} onCancelar={() => setComentandoId(null)} />
+                        ) : (
+                          <button onClick={() => setComentandoId(e.id)} className="text-hiviz text-xs mt-2.5">
+                            {comentarios.length > 0 ? '+ Agregar otro comentario' : '+ Dar feedback'}
+                          </button>
+                        )
+                      )}
                     </div>
-                    <div className="flex gap-3 text-right">
-                      <MiniDato label="km" value={e.km} />
-                      <MiniDato label="min" value={e.duracion_min} />
-                      <MiniDato label="TSS" value={e.tss} accent />
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
+
+          {esEntrenador && entrenamientos.length > 1 && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-2">
+                <span className="label-eyebrow">Comparar entrenamientos similares</span>
+                <select
+                  value={tipoComparar}
+                  onChange={(e) => setTipoComparar(e.target.value)}
+                  className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs"
+                >
+                  <option value="">Elegí un tipo</option>
+                  {[...new Set(entrenamientos.map((e) => e.tipo))].map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              {tipoComparar ? (
+                (() => {
+                  const datos = [...entrenamientos]
+                    .filter((e) => e.tipo === tipoComparar)
+                    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    .map((e) => ({ fecha: e.fecha, tss: e.tss, potencia: e.potencia_avg }))
+                  return datos.length > 1 ? (
+                    <div className="mt-2 -ml-4">
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={datos} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                          <CartesianGrid stroke="#262A33" vertical={false} />
+                          <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                          <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} />
+                          <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                          <Line type="monotone" dataKey="tss" stroke="#C4F135" strokeWidth={2} dot={{ r: 3 }} name="TSS" />
+                          <Line type="monotone" dataKey="potencia" stroke="#4A9EFF" strokeWidth={2} dot={{ r: 3 }} name="Potencia (W)" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-ink-muted text-xs mt-2">Necesita al menos 2 sesiones de tipo "{tipoComparar}" en los últimos 30 días.</p>
+                  )
+                })()
+              ) : (
+                <p className="text-ink-muted text-xs mt-2">Elegí un tipo de entrenamiento para ver su evolución (TSS y potencia) en el período.</p>
+              )}
+            </div>
+          )}
 
           <div>
             <h2 className="text-sm font-semibold mb-2">Gimnasio reciente</h2>
@@ -507,6 +609,28 @@ function FormPlanGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
       <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar rutina</button>
+      </div>
+    </form>
+  )
+}
+
+function FormFeedback({ onGuardar, onCancelar }) {
+  const [texto, setTexto] = useState('')
+  return (
+    <form
+      className="mt-2.5 pt-2.5 border-t border-asphalt-700 flex flex-col gap-2"
+      onSubmit={(e) => { e.preventDefault(); onGuardar(texto) }}
+    >
+      <textarea
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        rows={2}
+        placeholder="Cómo viste esta sesión, qué ajustarías..."
+        className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm"
+      />
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-xs px-3 py-1.5">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Enviar</button>
       </div>
     </form>
   )
