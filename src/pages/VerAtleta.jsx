@@ -7,6 +7,9 @@ import { calcularTSS } from '../lib/tss'
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
+const DIAS_ADHERENCIA = 14
+function diaIdDe(fecha) { return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()] }
 
 const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' },
@@ -140,6 +143,34 @@ export default function VerAtleta() {
   const diasConComida = new Set(comidas.map((c) => c.fecha)).size || 1
   const kcalProm = comidas.reduce((a, c) => a + (Number(c.kcal) || 0), 0) / diasConComida
 
+  const diasEvaluados = []
+  const cursorAdh = new Date()
+  cursorAdh.setDate(cursorAdh.getDate() - (DIAS_ADHERENCIA - 1))
+  for (let i = 0; i < DIAS_ADHERENCIA; i++) {
+    diasEvaluados.push(cursorAdh.toISOString().slice(0, 10))
+    cursorAdh.setDate(cursorAdh.getDate() + 1)
+  }
+  let diasEsperadosEntreno = 0, diasCumplidosEntreno = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesEntreno.some((p) => (p.sesiones || []).some((s) => s.dia === diaId && s.tipo !== 'Descanso'))
+    if (!seEspera) continue
+    diasEsperadosEntreno++
+    if (entrenamientos.some((e) => e.fecha === fecha && e.estado === 'realizado')) diasCumplidosEntreno++
+  }
+  let diasEsperadosGym = 0, diasCumplidosGym = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesGimnasio.some((p) => (p.dias_semana || []).includes(diaId))
+    if (!seEspera) continue
+    diasEsperadosGym++
+    if (gimnasio.some((g) => g.fecha === fecha && g.estado === 'realizado')) diasCumplidosGym++
+  }
+  const diasEsperadosTotal = diasEsperadosEntreno + diasEsperadosGym
+  const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
+  const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
+  const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
+
   return (
     <div className="flex flex-col gap-6">
       <Link to="/equipo" className="text-ink-muted text-sm">← Equipo</Link>
@@ -171,6 +202,23 @@ export default function VerAtleta() {
             <Dato label="TSS acumulado" value={tssTotal.toFixed(0)} accent />
             <Dato label="Volumen gym (kg)" value={volumenGym.toLocaleString('es-AR')} />
           </div>
+
+          {esEntrenador && diasEsperadosTotal > 0 && (
+            <div className="card" style={{ borderColor: colorAdherencia }}>
+              <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
+              <div className="flex items-baseline gap-3 mt-1">
+                <span className="readout text-3xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
+                <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
+              </div>
+              <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
+                <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
+              </div>
+              <div className="flex gap-4 mt-2.5">
+                {diasEsperadosEntreno > 0 && <span className="text-ink-muted text-xs">Entrenamiento: {diasCumplidosEntreno}/{diasEsperadosEntreno}</span>}
+                {diasEsperadosGym > 0 && <span className="text-ink-muted text-xs">Gimnasio: {diasCumplidosGym}/{diasEsperadosGym}</span>}
+              </div>
+            </div>
+          )}
 
           {esNutricionista && (
             <div className="card">
