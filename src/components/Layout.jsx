@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -21,6 +22,21 @@ const NAV = [
 ]
 
 export default function Layout() {
+  const [pendientes, setPendientes] = useState(0)
+
+  useEffect(() => {
+    async function cargar() {
+      const { data: userData } = await supabase.auth.getUser()
+      const { data } = await supabase
+        .from('vinculos')
+        .select('id, iniciado_por')
+        .eq('estado', 'pendiente')
+      const paraMi = (data || []).filter((v) => v.iniciado_por !== userData.user.id)
+      setPendientes(paraMi.length)
+    }
+    cargar()
+  }, [])
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col w-56 border-r border-asphalt-700 p-5 gap-1 overflow-y-auto">
@@ -28,7 +44,7 @@ export default function Layout() {
           <span className="font-display font-bold text-xl text-hiviz">bikeiq</span>
         </div>
         {NAV.map((item) => (
-          <NavItem key={item.to} {...item} />
+          <NavItem key={item.to} {...item} badge={item.to === '/equipo' ? pendientes : 0} />
         ))}
         <button
           onClick={() => supabase.auth.signOut()}
@@ -51,14 +67,14 @@ export default function Layout() {
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-asphalt-700 bg-asphalt-900 flex overflow-x-auto">
         {NAV.map((item) => (
-          <NavItem key={item.to} {...item} mobile />
+          <NavItem key={item.to} {...item} mobile badge={item.to === '/equipo' ? pendientes : 0} />
         ))}
       </nav>
     </div>
   )
 }
 
-function NavItem({ to, label, icon, end, mobile }) {
+function NavItem({ to, label, icon, end, mobile, badge }) {
   return (
     <NavLink
       to={to}
@@ -75,7 +91,12 @@ function NavItem({ to, label, icon, end, mobile }) {
             }`
       }
     >
-      <span aria-hidden>{icon}</span>
+      <span aria-hidden className="relative">
+        {icon}
+        {badge > 0 && (
+          <i className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-alert-red inline-block" />
+        )}
+      </span>
       <span>{label}</span>
     </NavLink>
   )
