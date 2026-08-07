@@ -39,9 +39,11 @@ export default function Calendario() {
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth())
   const [entrenamientos, setEntrenamientos] = useState([])
+  const [gimnasio, setGimnasio] = useState([])
   const [competencias, setCompetencias] = useState([])
   const [mantenimientos, setMantenimientos] = useState([])
   const [planes, setPlanes] = useState([])
+  const [planesGym, setPlanesGym] = useState([])
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [cargando, setCargando] = useState(true)
 
@@ -52,16 +54,20 @@ export default function Calendario() {
     const desde = aFecha(inicioGrilla)
     const hasta = aFecha(finGrilla)
 
-    const [{ data: ents }, { data: comps }, { data: mants }, { data: pls }] = await Promise.all([
+    const [{ data: ents }, { data: gym }, { data: comps }, { data: mants }, { data: pls }, { data: plsGym }] = await Promise.all([
       supabase.from('entrenamientos').select('*').gte('fecha', desde).lte('fecha', hasta),
+      supabase.from('gimnasio').select('*').gte('fecha', desde).lte('fecha', hasta),
       supabase.from('competencias').select('*').gte('fecha', desde).lte('fecha', hasta),
       supabase.from('mantenimientos').select('*').gte('fecha', desde).lte('fecha', hasta),
-      supabase.from('planes_entrenamiento').select('*').eq('activo', true)
+      supabase.from('planes_entrenamiento').select('*').eq('activo', true),
+      supabase.from('planes_gimnasio').select('*').eq('activo', true)
     ])
     setEntrenamientos(ents || [])
+    setGimnasio(gym || [])
     setCompetencias(comps || [])
     setMantenimientos(mants || [])
     setPlanes(pls || [])
+    setPlanesGym(plsGym || [])
     setCargando(false)
   }
 
@@ -85,12 +91,14 @@ export default function Calendario() {
 
   function itemsDelDia(fecha, diaSemanaId) {
     const ents = entrenamientos.filter((e) => e.fecha === fecha)
+    const gyms = gimnasio.filter((g) => g.fecha === fecha)
     const comps = competencias.filter((c) => c.fecha === fecha)
     const mants = mantenimientos.filter((m) => m.fecha === fecha)
     const sesionesPlanificadas = ents.length === 0
       ? planes.flatMap((p) => (p.sesiones || []).filter((s) => s.dia === diaSemanaId).map((s) => ({ ...s, planNombre: p.nombre })))
       : []
-    return { ents, comps, mants, sesionesPlanificadas }
+    const gymPlanificado = gyms.length === 0 && planesGym.some((p) => (p.dias_semana || []).includes(diaSemanaId))
+    return { ents, gyms, comps, mants, sesionesPlanificadas, gymPlanificado }
   }
 
   const infoSeleccionado = diaSeleccionado
@@ -113,6 +121,7 @@ export default function Calendario() {
 
       <div className="flex gap-3 text-[11px] text-ink-muted flex-wrap">
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-hiviz inline-block" /> Entrenamiento</span>
+        <span className="flex items-center gap-1" style={{ color: undefined }}><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#C34AF1' }} /> Gimnasio</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-alert-red inline-block" /> Competencia</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-route inline-block" /> Mantenimiento</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full border border-ink-faint inline-block" /> Plan sugerido</span>
@@ -127,7 +136,7 @@ export default function Calendario() {
           <div className="col-span-7 text-center text-ink-muted text-sm py-8">Cargando…</div>
         ) : (
           dias.map((dia) => {
-            const { ents, comps, mants, sesionesPlanificadas } = itemsDelDia(dia.fecha, dia.diaSemanaId)
+            const { ents, gyms, comps, mants, sesionesPlanificadas, gymPlanificado } = itemsDelDia(dia.fecha, dia.diaSemanaId)
             const esHoy = dia.fecha === aFecha(hoy)
             const seleccionado = dia.fecha === diaSeleccionado
             return (
@@ -141,9 +150,10 @@ export default function Calendario() {
                 <span className={`text-xs ${esHoy ? 'text-hiviz font-bold' : 'text-ink'}`}>{dia.diaMes}</span>
                 <div className="flex gap-0.5 mt-1 flex-wrap justify-center">
                   {ents.length > 0 && <i className="w-1.5 h-1.5 rounded-full bg-hiviz inline-block" />}
+                  {gyms.length > 0 && <i className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: '#C34AF1' }} />}
                   {comps.length > 0 && <i className="w-1.5 h-1.5 rounded-full bg-alert-red inline-block" />}
                   {mants.length > 0 && <i className="w-1.5 h-1.5 rounded-full bg-route inline-block" />}
-                  {sesionesPlanificadas.length > 0 && <i className="w-1.5 h-1.5 rounded-full border border-ink-faint inline-block" />}
+                  {(sesionesPlanificadas.length > 0 || gymPlanificado) && <i className="w-1.5 h-1.5 rounded-full border border-ink-faint inline-block" />}
                 </div>
               </button>
             )
@@ -155,7 +165,7 @@ export default function Calendario() {
         <div className="card">
           <span className="label-eyebrow">{diaSeleccionado}</span>
 
-          {infoSeleccionado.ents.length === 0 && infoSeleccionado.comps.length === 0 && infoSeleccionado.mants.length === 0 && infoSeleccionado.sesionesPlanificadas.length === 0 ? (
+          {infoSeleccionado.ents.length === 0 && infoSeleccionado.gyms.length === 0 && infoSeleccionado.comps.length === 0 && infoSeleccionado.mants.length === 0 && infoSeleccionado.sesionesPlanificadas.length === 0 && !infoSeleccionado.gymPlanificado ? (
             <p className="text-ink-muted text-sm mt-2">Sin nada registrado ni planificado este día.</p>
           ) : (
             <div className="flex flex-col gap-3 mt-3">
@@ -165,6 +175,18 @@ export default function Calendario() {
                   <p className="text-sm">{e.tipo}{e.ruta ? ` — ${e.ruta}` : ''} {e.km ? `· ${e.km} km` : ''}</p>
                 </div>
               ))}
+              {infoSeleccionado.gyms.map((g) => (
+                <div key={g.id} className="flex items-center gap-2">
+                  <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: '#C34AF1' }} />
+                  <p className="text-sm">{g.ejercicio}{g.estado === 'pendiente' ? ' · Pendiente' : g.peso ? ` · ${g.peso} kg` : ''}</p>
+                </div>
+              ))}
+              {infoSeleccionado.gymPlanificado && (
+                <div className="flex items-center gap-2">
+                  <i className="w-2 h-2 rounded-full border border-ink-faint inline-block flex-shrink-0" />
+                  <p className="text-sm text-ink-muted">Rutina de gimnasio planificada para hoy</p>
+                </div>
+              )}
               {infoSeleccionado.comps.map((c) => (
                 <div key={c.id} className="flex items-center gap-2">
                   <i className="w-2 h-2 rounded-full bg-alert-red inline-block flex-shrink-0" />
