@@ -10,7 +10,6 @@ import Nutricion from './pages/Nutricion'
 import Recuperacion from './pages/Recuperacion'
 import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
-import BikeFitting from './pages/BikeFitting'
 import Calendario from './pages/Calendario'
 import Analitica from './pages/Analitica'
 import Reportes from './pages/Reportes'
@@ -50,7 +49,6 @@ export default function App() {
         <Route path="/recuperacion" element={<Recuperacion />} />
         <Route path="/competencias" element={<Competencias />} />
         <Route path="/gimnasio" element={<Gimnasio />} />
-        <Route path="/bike-fitting" element={<BikeFitting />} />
         <Route path="/analitica" element={<Analitica />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/equipo" element={<Equipo />} />
