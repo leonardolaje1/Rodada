@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
@@ -26,27 +27,37 @@ function agruparPorFecha(items) {
   return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
 
+function fmtFecha(f) {
+  const [, m, d] = f.split('-')
+  return `${d}/${m}`
+}
+
 export default function Nutricion() {
   const [sub, setSub] = useState('resumen')
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
   const [comidas, setComidas] = useState([])
   const [hidratacion, setHidratacion] = useState([])
   const [suplementos, setSuplementos] = useState([])
+  const [pesoHistorial, setPesoHistorial] = useState([])
   const [formComida, setFormComida] = useState(false)
   const [comidaEditando, setComidaEditando] = useState(null)
   const [formSuplemento, setFormSuplemento] = useState(false)
+  const [formPeso, setFormPeso] = useState(false)
+  const [pesoEditando, setPesoEditando] = useState(null)
 
   async function cargar() {
-    const [{ data: p }, { data: cm }, { data: h }, { data: s }] = await Promise.all([
+    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }] = await Promise.all([
       supabase.from('perfil_nutricional').select('*').maybeSingle(),
       supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(100),
       supabase.from('hidratacion').select('*').order('fecha', { ascending: false }).limit(30),
-      supabase.from('suplementos').select('*').eq('activo', true)
+      supabase.from('suplementos').select('*').eq('activo', true),
+      supabase.from('peso_historial').select('*').order('fecha', { ascending: true })
     ])
     if (p) setPerfil(p)
     setComidas(cm || [])
     setHidratacion(h || [])
     setSuplementos(s || [])
+    setPesoHistorial(pesos || [])
   }
 
   useEffect(() => { cargar() }, [])
@@ -62,15 +73,30 @@ export default function Nutricion() {
     setFormComida(false)
     cargar()
   }
-
   async function actualizarComida(id, n) {
     await supabase.from('comidas').update(n).eq('id', id)
     setComidaEditando(null)
     cargar()
   }
-
   async function eliminarComida(id) {
     await supabase.from('comidas').delete().eq('id', id)
+    cargar()
+  }
+
+  async function crearPeso(form) {
+    await supabase.from('peso_historial').insert(form)
+    await guardarPerfil({ ...perfil, peso: form.peso })
+    setFormPeso(false)
+    cargar()
+  }
+  async function actualizarPeso(id, form) {
+    await supabase.from('peso_historial').update(form).eq('id', id)
+    setPesoEditando(null)
+    cargar()
+  }
+  async function eliminarPeso(id) {
+    if (!confirm('¿Borrar este registro de peso?')) return
+    await supabase.from('peso_historial').delete().eq('id', id)
     cargar()
   }
 
@@ -88,6 +114,13 @@ export default function Nutricion() {
 
   const comidasPorDia = agruparPorFecha(comidas)
 
+  const pesoActual = pesoHistorial[pesoHistorial.length - 1] || null
+  const pesoInicial = pesoHistorial[0] || null
+  const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1
+    ? (pesoActual.peso - pesoInicial.peso)
+    : null
+  const graficoPeso = pesoHistorial.map((p) => ({ fecha: p.fecha, peso: p.peso }))
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -96,7 +129,7 @@ export default function Nutricion() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['resumen', 'Resumen'], ['comidas', 'Comidas'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
+        {[['resumen', 'Resumen'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
           <button
             key={id}
             onClick={() => setSub(id)}
@@ -243,6 +276,100 @@ export default function Nutricion() {
         </>
       )}
 
+      {sub === 'peso' && (
+        <>
+          <div className="flex justify-end">
+            <button
+              className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg"
+              onClick={() => { setPesoEditando(null); setFormPeso((v) => !v) }}
+            >
+              + Registro
+            </button>
+          </div>
+
+          {formPeso && <FormPeso onGuardar={crearPeso} onCancelar={() => setFormPeso(false)} />}
+
+          {!pesoActual ? (
+            <p className="text-ink-muted text-sm">Todavía no cargaste ningún registro de peso.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="card">
+                  <span className="label-eyebrow">Peso actual</span>
+                  <p className="readout text-3xl font-bold text-hiviz mt-1">{pesoActual.peso} <span className="text-sm text-ink-muted">kg</span></p>
+                  <p className="text-ink-faint text-xs mt-1">{pesoActual.fecha}</p>
+                </div>
+                <div className="card">
+                  <span className="label-eyebrow">Variación total</span>
+                  {diferenciaPeso != null ? (
+                    <p className={`readout text-3xl font-bold mt-1 ${diferenciaPeso < 0 ? 'text-route' : diferenciaPeso > 0 ? 'text-alert-amber' : 'text-ink'}`}>
+                      {diferenciaPeso > 0 ? '+' : ''}{diferenciaPeso.toFixed(1)} <span className="text-sm text-ink-muted">kg</span>
+                    </p>
+                  ) : (
+                    <p className="readout text-3xl font-bold text-ink-faint mt-1">—</p>
+                  )}
+                  <p className="text-ink-faint text-xs mt-1">{pesoInicial && pesoHistorial.length > 1 ? `desde ${pesoInicial.fecha}` : 'necesita 2+ registros'}</p>
+                </div>
+              </div>
+
+              {pesoHistorial.length > 1 && (
+                <div className="card">
+                  <span className="label-eyebrow">Evolución</span>
+                  <div className="mt-2 -ml-4">
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={graficoPeso} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid stroke="#262A33" vertical={false} />
+                        <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                        <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
+                        <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                        <Line type="monotone" dataKey="peso" stroke="#C4F135" strokeWidth={2} dot={{ r: 3 }} name="Peso (kg)" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {pesoHistorial.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {[...pesoHistorial].reverse().map((p) =>
+                pesoEditando === p.id ? (
+                  <FormPeso
+                    key={p.id}
+                    valoresIniciales={p}
+                    onGuardar={(datos) => actualizarPeso(p.id, datos)}
+                    onCancelar={() => setPesoEditando(null)}
+                  />
+                ) : (
+                  <div key={p.id} className="card flex items-center justify-between py-2.5">
+                    <div>
+                      <span className="readout text-sm font-semibold">{p.peso} kg</span>
+                      <span className="text-ink-muted text-xs ml-2">{p.fecha}</span>
+                      {p.notas && <p className="text-ink-faint text-xs mt-0.5">{p.notas}</p>}
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => { setFormPeso(false); setPesoEditando(p.id) }}
+                        className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => eliminarPeso(p.id)}
+                        className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+                      >
+                        Borrar
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {sub === 'hidratacion' && (
         <>
           <div className="card">
@@ -379,6 +506,34 @@ function FormComida({ onGuardar, onCancelar, valoresIniciales }) {
         <input type="number" {...campo('carbohidratos')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Grasas (g)</span>
         <input type="number" {...campo('grasas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <div className="col-span-2 flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
+      </div>
+    </form>
+  )
+}
+
+function FormPeso({ onGuardar, onCancelar, valoresIniciales }) {
+  const [form, setForm] = useState({
+    fecha: new Date().toISOString().slice(0, 10),
+    peso: '',
+    notas: '',
+    ...valoresIniciales
+  })
+  const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+
+  return (
+    <form
+      className="card grid grid-cols-2 gap-3"
+      onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, peso: Number(form.peso) }) }}
+    >
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
+        <input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso (kg)</span>
+        <input type="number" step="0.1" {...campo('peso')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Notas</span>
+        <input {...campo('notas')} placeholder="En ayunas / post entreno / etc." className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
