@@ -5,6 +5,14 @@ import { supabase } from '../lib/supabaseClient'
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
 const BEBIDAS = ['Agua', 'Isotónica', 'Café', 'Té', 'Otra']
+const METRICAS_ANTROPOMETRIA = [
+  { id: 'grasa_corporal_pct', label: '% Grasa corporal', color: '#F14A4A' },
+  { id: 'masa_muscular_pct', label: '% Masa muscular', color: '#C4F135' },
+  { id: 'perimetro_cintura', label: 'Cintura (cm)', color: '#4A9EFF' },
+  { id: 'perimetro_cadera', label: 'Cadera (cm)', color: '#F5A623' },
+  { id: 'perimetro_brazo', label: 'Brazo (cm)', color: '#C34AF1' },
+  { id: 'perimetro_pierna', label: 'Pierna (cm)', color: '#7A4AF1' }
+]
 const NIVELES_ACTIVIDAD = [
   { id: 'sedentario', label: 'Sedentario', factor: 1.2 },
   { id: 'ligero', label: 'Entreno ligero (1-3 d/sem)', factor: 1.375 },
@@ -41,6 +49,7 @@ export default function Nutricion() {
   const [formAntropo, setFormAntropo] = useState(false)
   const [antropoEditando, setAntropoEditando] = useState(null)
   const [formBebidaOpen, setFormBebidaOpen] = useState(false)
+  const [metricaGrafico, setMetricaGrafico] = useState('grasa_corporal_pct')
 
   async function cargar() {
     const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }] = await Promise.all([
@@ -110,6 +119,12 @@ export default function Nutricion() {
   const pesoInicial = pesoHistorial[0] || null
   const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1 ? (pesoActual.peso - pesoInicial.peso) : null
   const graficoPeso = pesoHistorial.map((p) => ({ fecha: p.fecha, peso: p.peso }))
+
+  const antropometriaAsc = [...antropometria].reverse()
+  const graficoAntropo = antropometriaAsc
+    .filter((a) => a[metricaGrafico] != null)
+    .map((a) => ({ fecha: a.fecha, valor: a[metricaGrafico] }))
+  const metricaActual = METRICAS_ANTROPOMETRIA.find((m) => m.id === metricaGrafico)
 
   return (
     <div className="flex flex-col gap-6">
@@ -261,6 +276,37 @@ export default function Nutricion() {
       {sub === 'antropometria' && (
         <>
           <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setAntropoEditando(null); setFormAntropo((v) => !v) }}>+ Registro</button></div>
+
+          {antropometria.length > 1 && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-2">
+                <span className="label-eyebrow">Evolución</span>
+                <select
+                  value={metricaGrafico}
+                  onChange={(e) => setMetricaGrafico(e.target.value)}
+                  className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs"
+                >
+                  {METRICAS_ANTROPOMETRIA.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+              {graficoAntropo.length > 1 ? (
+                <div className="mt-2 -ml-4">
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={graficoAntropo} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke="#262A33" vertical={false} />
+                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                      <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
+                      <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                      <Line type="monotone" dataKey="valor" stroke={metricaActual.color} strokeWidth={2} dot={{ r: 3 }} name={metricaActual.label} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-ink-muted text-xs mt-2">No hay suficientes registros de "{metricaActual.label}" para graficar todavía.</p>
+              )}
+            </div>
+          )}
+
           {formAntropo && <FormAntropometria onGuardar={crearAntropo} onCancelar={() => setFormAntropo(false)} />}
           {antropometria.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin registros de antropometría todavía.</p>
