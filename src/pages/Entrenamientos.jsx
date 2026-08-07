@@ -58,6 +58,7 @@ export default function Entrenamientos() {
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
   const [formFtpOpen, setFormFtpOpen] = useState(false)
   const [ftpEditando, setFtpEditando] = useState(null)
+  const [feedbackPorEntreno, setFeedbackPorEntreno] = useState({})
   const inputArchivoRef = useRef(null)
 
   async function cargar() {
@@ -74,6 +75,23 @@ export default function Entrenamientos() {
     setPlanes(pls || [])
     setObjetivos(objs || [])
     setFtpHistorial(ftps || [])
+
+    if (ents && ents.length > 0) {
+      const { data: fbs } = await supabase
+        .from('feedback_entrenamientos')
+        .select('*')
+        .in('entrenamiento_id', ents.map((e) => e.id))
+        .order('created_at', { ascending: true })
+      const agrupado = {}
+      for (const fb of fbs || []) {
+        if (!agrupado[fb.entrenamiento_id]) agrupado[fb.entrenamiento_id] = []
+        agrupado[fb.entrenamiento_id].push(fb)
+      }
+      setFeedbackPorEntreno(agrupado)
+    } else {
+      setFeedbackPorEntreno({})
+    }
+
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -115,12 +133,10 @@ export default function Entrenamientos() {
     setEditandoId(null); setMostrarForm(true)
   }
 
-    async function crearObjetivo(form) {
-    const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'entrenamiento', estado: 'activo', valor_actual: 0 })
-    if (error) { alert('No se pudo guardar el objetivo: ' + error.message); return }
+  async function crearObjetivo(form) {
+    await supabase.from('objetivos').insert({ ...form, categoria: 'entrenamiento', estado: 'activo', valor_actual: 0 })
     setFormObjetivoOpen(false); cargar()
   }
-
   async function actualizarValorObjetivo(id, valor) { await supabase.from('objetivos').update({ valor_actual: valor }).eq('id', id); cargar() }
   async function marcarCumplidoObjetivo(o) { await supabase.from('objetivos').update({ estado: o.estado === 'cumplido' ? 'activo' : 'cumplido' }).eq('id', o.id); cargar() }
   async function borrarObjetivo(id) { if (!confirm('¿Borrar este objetivo?')) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
@@ -235,6 +251,15 @@ export default function Entrenamientos() {
                                 </p>
                               </div>
                             </div>
+                            {(feedbackPorEntreno[e.id] || []).length > 0 && (
+                              <div className="flex flex-col gap-1 mt-1.5 ml-4">
+                                {feedbackPorEntreno[e.id].map((c) => (
+                                  <p key={c.id} className="text-ink-muted text-xs">
+                                    <span className="text-hiviz">Feedback de tu entrenador:</span> {c.comentario}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                             <div className="flex items-center gap-3">
                               {e.estado === 'realizado' && (
                                 <div className="flex gap-4 text-right">
