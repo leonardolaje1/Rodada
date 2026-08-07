@@ -163,6 +163,7 @@ export default function Entrenamientos() {
     km: realizados.reduce((max, e) => (Number(e.km) > (max?.km || 0) ? e : max), null),
     desnivel: realizados.reduce((max, e) => (Number(e.desnivel) > (max?.desnivel || 0) ? e : max), null),
     potencia: realizados.filter((e) => e.potencia_avg).reduce((max, e) => (Number(e.potencia_avg) > (max?.potencia_avg || 0) ? e : max), null),
+    normalizada: realizados.filter((e) => e.potencia_normalizada).reduce((max, e) => (Number(e.potencia_normalizada) > (max?.potencia_normalizada || 0) ? e : max), null),
     tss: realizados.reduce((max, e) => (Number(e.tss) > (max?.tss || 0) ? e : max), null)
   }
 
@@ -475,9 +476,25 @@ export default function Entrenamientos() {
 
       {vista === 'records' && (
         <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="card border-hiviz">
+              <span className="label-eyebrow">FTP actual</span>
+              <p className="readout text-2xl font-bold text-hiviz mt-1">{ftpActual ? `${ftpActual.ftp_watts} W` : '—'}</p>
+              {ftpActual && <p className="text-ink-faint text-xs mt-0.5">{ftpActual.fecha}</p>}
+            </div>
+            <div className="card border-hiviz">
+              <span className="label-eyebrow">Potencia media pico</span>
+              <p className="readout text-2xl font-bold text-hiviz mt-1">{records.potencia ? `${records.potencia.potencia_avg} W` : '—'}</p>
+              {records.potencia && <p className="text-ink-faint text-xs mt-0.5">{records.potencia.fecha}</p>}
+            </div>
+            <div className="card border-hiviz">
+              <span className="label-eyebrow">NP más alta</span>
+              <p className="readout text-2xl font-bold text-hiviz mt-1">{records.normalizada ? `${records.normalizada.potencia_normalizada} W` : '—'}</p>
+              {records.normalizada && <p className="text-ink-faint text-xs mt-0.5">{records.normalizada.fecha}</p>}
+            </div>
+          </div>
           <RecordCard label="Salida más larga" item={records.km} valor={records.km ? `${records.km.km} km` : null} />
           <RecordCard label="Mayor desnivel" item={records.desnivel} valor={records.desnivel ? `${records.desnivel.desnivel} m` : null} />
-          <RecordCard label="Mayor potencia media" item={records.potencia} valor={records.potencia ? `${records.potencia.potencia_avg} W` : null} />
           <RecordCard label="Mayor TSS en una salida" item={records.tss} valor={records.tss ? `${records.tss.tss} TSS` : null} />
         </div>
       )}
@@ -509,7 +526,7 @@ function MiniDato({ label, value, accent }) {
 function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales, planes = [] }) {
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10), tipo: 'Ruta', ruta: '', bicicleta_id: '',
-    duracion_min: '', km: '', desnivel: '', potencia_avg: '', fc_avg: '', rpe: '', comentarios: '',
+    duracion_min: '', km: '', desnivel: '', potencia_avg: '', potencia_normalizada: '', fc_avg: '', rpe: '', comentarios: '',
     plan_id: '', estado: 'realizado', es_clave: false,
     ...valoresIniciales
   })
@@ -528,6 +545,7 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
         km: form.km ? Number(form.km) : null,
         desnivel: form.desnivel ? Number(form.desnivel) : null,
         potencia_avg: form.potencia_avg ? Number(form.potencia_avg) : null,
+        potencia_normalizada: form.potencia_normalizada ? Number(form.potencia_normalizada) : null,
         fc_avg: form.fc_avg ? Number(form.fc_avg) : null,
         rpe: form.rpe ? Number(form.rpe) : null
       })
@@ -564,6 +582,7 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
       <Campo label="Km" type="number" step="0.1" {...campo('km')} />
       <Campo label="Desnivel (m)" type="number" {...campo('desnivel')} />
       <Campo label="Potencia media (W)" type="number" {...campo('potencia_avg')} />
+      <Campo label="Potencia normalizada / NP (W)" type="number" {...campo('potencia_normalizada')} />
       <Campo label="FC media" type="number" {...campo('fc_avg')} />
       <Campo label="RPE (1-10)" type="number" min="1" max="10" {...campo('rpe')} />
       <label className="flex flex-col gap-1 text-sm sm:col-span-3"><span className="text-ink-muted text-xs">Comentarios</span>
