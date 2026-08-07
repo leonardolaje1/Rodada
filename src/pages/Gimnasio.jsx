@@ -78,7 +78,7 @@ export default function Gimnasio() {
     const { data } = await supabase.from('gimnasio').insert(nuevos).select()
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); setVista('registro'); cargar()
-  }  
+  }
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
     if (error) { alert('No se pudo guardar el objetivo: ' + error.message); return }
@@ -258,7 +258,7 @@ export default function Gimnasio() {
         </>
       )}
 
-            {vista === 'records' && (
+      {vista === 'records' && (
         <div className="flex flex-col gap-2">
           {Object.keys(pesosMaximosPorEjercicio).length === 0 ? (
             <p className="text-ink-muted text-sm">Sin datos todavía.</p>
@@ -290,7 +290,9 @@ export default function Gimnasio() {
           )}
         </div>
       )}
-
+    </div>
+  )
+}
 
 function StatVolumen({ label, valor }) {
   return <div className="card"><span className="label-eyebrow">{label}</span><p className="readout text-lg font-bold text-hiviz mt-1">{valor.toLocaleString('es-AR')} kg</p></div>
