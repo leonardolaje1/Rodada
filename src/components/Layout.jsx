@@ -7,16 +7,12 @@ const NAV = [
   { to: '/calendario', label: 'Calendario', icon: '▦' },
   { to: '/entrenamientos', label: 'Entrenamientos', icon: '⟢' },
   { to: '/bicicletas', label: 'Bicis', icon: '⊙' },
-  { to: '/ftp', label: 'FTP y zonas', icon: '⚡' },
   { to: '/nutricion', label: 'Nutrición', icon: '◈' },
-  { to: '/mantenimiento', label: 'Mantenimiento', icon: '⚙' },
-  { to: '/objetivos', label: 'Objetivos', icon: '◎' },
   { to: '/recuperacion', label: 'Recuperación', icon: '☾' },
   { to: '/competencias', label: 'Competencias', icon: '▲' },
   { to: '/gimnasio', label: 'Gimnasio', icon: '⬢' },
-  { to: '/bike-fitting', label: 'Bike Fitting', icon: '⟁' },
   { to: '/analitica', label: 'Análisis', icon: '∿' },
-  { to: '/equipo', label: 'Equipo', icon: '☺' },
+  { to: '/equipo', label: 'Equipo', icon: '⚯' },
   { to: '/reportes', label: 'Reportes', icon: '▤' },
   { to: '/configuracion', label: 'Configuración', icon: '✦' }
 ]
