@@ -80,6 +80,7 @@ export default function Nutricion() {
   async function crearAntropo(form) { await supabase.from('antropometria').insert(form); setFormAntropo(false); cargar() }
   async function actualizarAntropo(id, form) { await supabase.from('antropometria').update(form).eq('id', id); setAntropoEditando(null); cargar() }
   async function eliminarAntropo(id) { if (!confirm('¿Borrar este registro?')) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
+  async function eliminarSuplemento(id) { if (!confirm('¿Borrar este suplemento?')) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
 
   async function cargarBebida(bebida, ml) {
     await supabase.from('hidratacion').insert({ fecha: hoy, ml, bebida, hora: new Date().toTimeString().slice(0, 5) })
@@ -349,12 +350,17 @@ export default function Nutricion() {
                 <div className="flex flex-col gap-2">
                   {items.map((s) => (
                     <div key={s.id} className="card">
-                      <div className="flex justify-between">
-                        <p className="font-medium text-sm">{s.nombre}</p>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.tipo === 'Natural' ? 'text-hiviz border-hiviz-dim' : 'text-route border-route-dim'}`}>{s.tipo}</span>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-sm">{s.nombre}</p>
+                          <p className="text-ink-muted text-xs mt-1">{s.dosis}{s.frecuencia ? ` · ${s.frecuencia}` : ''}</p>
+                          {s.notas && <p className="text-ink-faint text-xs mt-1">{s.notas}</p>}
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${s.tipo === 'Natural' ? 'text-hiviz border-hiviz-dim' : 'text-route border-route-dim'}`}>{s.tipo}</span>
+                          <button onClick={() => eliminarSuplemento(s.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                        </div>
                       </div>
-                      <p className="text-ink-muted text-xs mt-1">{s.dosis}{s.frecuencia ? ` · ${s.frecuencia}` : ''}</p>
-                      {s.notas && <p className="text-ink-faint text-xs mt-1">{s.notas}</p>}
                     </div>
                   ))}
                 </div>
