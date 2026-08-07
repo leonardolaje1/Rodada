@@ -7,9 +7,16 @@ const ROLES = [
   { id: 'nutricionista', label: 'Nutricionista' }
 ]
 
+function diasDesde(fecha) {
+  if (!fecha) return null
+  const ms = new Date().setHours(0, 0, 0, 0) - new Date(fecha + 'T00:00:00').getTime()
+  return Math.round(ms / 86400000)
+}
+
 export default function Equipo() {
   const [vinculos, setVinculos] = useState([])
   const [emails, setEmails] = useState({})
+  const [resumenAtletas, setResumenAtletas] = useState({})
   const [miId, setMiId] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [error, setError] = useState('')
@@ -36,6 +43,34 @@ export default function Equipo() {
       })
     )
     setEmails(nuevosEmails)
+
+    const misAtletasIds = (data || [])
+      .filter((v) => v.estado === 'aceptado' && v.profesional_id === userData.user.id)
+      .map((v) => v.atleta_id)
+
+    if (misAtletasIds.length > 0) {
+      const desde7 = new Date()
+      desde7.setDate(desde7.getDate() - 7)
+      const fecha7 = desde7.toISOString().slice(0, 10)
+
+      const nuevoResumen = {}
+      await Promise.all(
+        misAtletasIds.map(async (atletaId) => {
+          const { data: ents } = await supabase
+            .from('entrenamientos')
+            .select('fecha, tss')
+            .eq('user_id', atletaId)
+            .order('fecha', { ascending: false })
+            .limit(30)
+          const ultimaFecha = ents && ents.length > 0 ? ents[0].fecha : null
+          const tssSemana = (ents || [])
+            .filter((e) => e.fecha >= fecha7)
+            .reduce((a, e) => a + (Number(e.tss) || 0), 0)
+          nuevoResumen[atletaId] = { ultimaFecha, tssSemana }
+        })
+      )
+      setResumenAtletas(nuevoResumen)
+    }
   }
 
   useEffect(() => { cargar() }, [])
@@ -112,7 +147,6 @@ export default function Equipo() {
                   <p className="text-sm">
                     <span className="font-medium">{emails[otroId] || '…'}</span>
                     {' '}te invitó a ser {soyElProfesional ? 'su' : 'tu'} <b className="text-hiviz">{v.rol}</b>
-                    {soyElProfesional ? '' : ''}
                   </p>
                   <p className="text-ink-muted text-xs mt-1">
                     {soyElProfesional ? 'Vos serías el profesional de esta persona.' : 'Esta persona sería tu profesional.'}
@@ -149,20 +183,48 @@ export default function Equipo() {
       )}
 
       <div>
-        <h2 className="text-sm font-semibold mb-2">Mis atletas</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold">Mis atletas</h2>
+          {misAtletas.length > 0 && (
+            <div className="flex gap-3 text-[11px] text-ink-muted">
+              <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-hiviz inline-block" /> Entrenó hoy</span>
+              <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-alert-amber inline-block" /> 3+ días sin entrenar</span>
+              <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-alert-red inline-block" /> 7+ días sin entrenar</span>
+            </div>
+          )}
+        </div>
         {misAtletas.length === 0 ? (
           <p className="text-ink-muted text-sm">Todavía no tenés atletas a cargo.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {misAtletas.map((v) => (
-              <Link key={v.id} to={`/equipo/${v.atleta_id}?rol=${v.rol}`} className="card flex items-center justify-between hover:border-hiviz">
-                <div>
-                  <p className="text-sm font-medium">{emails[v.atleta_id] || '…'}</p>
-                  <p className="text-ink-muted text-xs">Sos su {v.rol}</p>
-                </div>
-                <span className="text-hiviz text-xs">Ver →</span>
-              </Link>
-            ))}
+            {misAtletas.map((v) => {
+              const resumen = resumenAtletas[v.atleta_id]
+              const dias = resumen ? diasDesde(resumen.ultimaFecha) : null
+              const color = dias == null ? '#565B68' : dias === 0 ? '#C4F135' : dias >= 7 ? '#F14A4A' : dias >= 3 ? '#F5A623' : '#C4F135'
+              const textoEstado = dias == null
+                ? 'Sin entrenamientos registrados'
+                : dias === 0
+                  ? 'Entrenó hoy'
+                  : `Hace ${dias} día${dias === 1 ? '' : 's'}`
+
+              return (
+                <Link key={v.id} to={`/equipo/${v.atleta_id}?rol=${v.rol}`} className="card flex items-center justify-between hover:border-hiviz">
+                  <div className="flex items-center gap-2.5">
+                    <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: color }} />
+                    <div>
+                      <p className="text-sm font-medium">{emails[v.atleta_id] || '…'}</p>
+                      <p className="text-ink-muted text-xs">Sos su {v.rol} · {textoEstado}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {resumen && (
+                      <p className="readout text-xs text-hiviz font-semibold">{resumen.tssSemana.toFixed(0)} TSS <span className="text-ink-faint font-normal">/ 7d</span></p>
+                    )}
+                    <span className="text-hiviz text-xs">Ver →</span>
+                  </div>
+                </Link>
+              )
+            })}
           </div>
         )}
       </div>
