@@ -4,6 +4,11 @@ import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../li
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 
+const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+function direccionViento(grados) {
+  return DIRECCIONES[Math.round(grados / 45) % 8]
+}
+
 const DIAS_ADHERENCIA = 14
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
@@ -18,6 +23,8 @@ export default function Dashboard() {
   const [planesGym, setPlanesGym] = useState([])
   const [gimnasio, setGimnasio] = useState([])
   const [cargando, setCargando] = useState(true)
+  const [clima, setClima] = useState(null)
+  const [climaError, setClimaError] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -46,6 +53,33 @@ export default function Dashboard() {
       setCargando(false)
     }
     cargar()
+  }, [])
+
+  useEffect(() => {
+    if (!navigator.geolocation) { setClimaError(true); return }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m`
+          )
+          const data = await res.json()
+          if (data.current) {
+            setClima({
+              temp: Math.round(data.current.temperature_2m),
+              viento: Math.round(data.current.wind_speed_10m),
+              direccion: direccionViento(data.current.wind_direction_10m)
+            })
+          } else {
+            setClimaError(true)
+          }
+        } catch {
+          setClimaError(true)
+        }
+      },
+      () => setClimaError(true)
+    )
   }, [])
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -108,9 +142,20 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Panel</h1>
-        <p className="text-ink-muted text-sm mt-1">Resumen de tu actividad</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Panel</h1>
+          <p className="text-ink-muted text-sm mt-1">Resumen de tu actividad</p>
+        </div>
+        {clima && (
+          <div className="card py-2.5 px-3.5 flex items-center gap-3 flex-shrink-0">
+            <span className="readout text-2xl font-bold text-hiviz">{clima.temp}°</span>
+            <div className="text-right">
+              <p className="text-ink-muted text-xs">{clima.viento} km/h</p>
+              <p className="text-ink-faint text-[10px] uppercase">{clima.direccion}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
