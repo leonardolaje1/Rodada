@@ -7,13 +7,10 @@ import Bicicletas from './pages/Bicicletas'
 import BicicletaDetalle from './pages/BicicletaDetalle'
 import Entrenamientos from './pages/Entrenamientos'
 import Nutricion from './pages/Nutricion'
-import Mantenimiento from './pages/Mantenimiento'
-import Objetivos from './pages/Objetivos'
 import Recuperacion from './pages/Recuperacion'
 import Competencias from './pages/Competencias'
 import Gimnasio from './pages/Gimnasio'
 import BikeFitting from './pages/BikeFitting'
-import FTP from './pages/FTP'
 import Calendario from './pages/Calendario'
 import Analitica from './pages/Analitica'
 import Reportes from './pages/Reportes'
@@ -50,13 +47,10 @@ export default function App() {
         <Route path="/bicicletas" element={<Bicicletas />} />
         <Route path="/bicicletas/:id" element={<BicicletaDetalle />} />
         <Route path="/nutricion" element={<Nutricion />} />
-        <Route path="/mantenimiento" element={<Mantenimiento />} />
-        <Route path="/objetivos" element={<Objetivos />} />
         <Route path="/recuperacion" element={<Recuperacion />} />
         <Route path="/competencias" element={<Competencias />} />
         <Route path="/gimnasio" element={<Gimnasio />} />
         <Route path="/bike-fitting" element={<BikeFitting />} />
-        <Route path="/ftp" element={<FTP />} />
         <Route path="/analitica" element={<Analitica />} />
         <Route path="/reportes" element={<Reportes />} />
         <Route path="/equipo" element={<Equipo />} />
