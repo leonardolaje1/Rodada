@@ -24,6 +24,14 @@ export default function Bicicletas() {
     cargar()
   }
 
+  async function eliminar(id, nombre, e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm(`¿Eliminar "${nombre}"? Se borrarán también sus componentes, desgaste, mantenimiento y bike fitting registrados. Los entrenamientos históricos quedan, pero sin bici asociada.`)) return
+    await supabase.from('bicicletas').delete().eq('id', id)
+    cargar()
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -48,8 +56,14 @@ export default function Bicicletas() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {bicicletas.map((b) => (
-            <Link key={b.id} to={`/bicicletas/${b.id}`} className="card hover:border-hiviz transition-colors">
-              <p className="font-display font-semibold text-lg">{b.nombre}</p>
+            <Link key={b.id} to={`/bicicletas/${b.id}`} className="card hover:border-hiviz transition-colors relative">
+              <button
+                onClick={(e) => eliminar(b.id, b.nombre, e)}
+                className="absolute top-3 right-3 text-ink-faint hover:text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+              >
+                Eliminar
+              </button>
+              <p className="font-display font-semibold text-lg pr-16">{b.nombre}</p>
               <p className="text-ink-muted text-sm">{b.marca} {b.modelo} · {b.año}</p>
               <div className="flex items-center justify-between mt-4">
                 <span className="readout text-xl font-bold text-hiviz">
