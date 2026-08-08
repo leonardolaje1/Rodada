@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import Skeleton from '../components/Skeleton'
 
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -132,9 +133,12 @@ export default function Calendario() {
           <div key={d} className="text-center text-[10px] text-ink-faint uppercase pb-1">{d}</div>
         ))}
 
-        {cargando ? (
-          <div className="col-span-7 text-center text-ink-muted text-sm py-8">Cargando…</div>
+                {cargando ? (
+          Array.from({ length: 35 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square" />
+          ))
         ) : (
+      
           dias.map((dia) => {
             const { ents, gyms, comps, mants, sesionesPlanificadas, gymPlanificado } = itemsDelDia(dia.fecha, dia.diaSemanaId)
             const esHoy = dia.fecha === aFecha(hoy)
