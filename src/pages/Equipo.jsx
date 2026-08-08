@@ -19,6 +19,7 @@ export default function Equipo() {
   const [resumenAtletas, setResumenAtletas] = useState({})
   const [miId, setMiId] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [compartirCopiado, setCompartirCopiado] = useState(false)
   const [error, setError] = useState('')
 
   async function cargar() {
@@ -74,6 +75,21 @@ export default function Equipo() {
   }
 
   useEffect(() => { cargar() }, [])
+
+  async function compartirApp() {
+    const datos = {
+      title: 'BikeIQ',
+      text: 'Te invito a usar BikeIQ, la app que uso para llevar mi entrenamiento de ciclismo, nutrición y recuperación.',
+      url: 'https://rodada-rose.vercel.app'
+    }
+    if (navigator.share) {
+      try { await navigator.share(datos) } catch { /* usuario canceló, no hacemos nada */ }
+    } else {
+      await navigator.clipboard.writeText(`${datos.text} ${datos.url}`)
+      setCompartirCopiado(true)
+      setTimeout(() => setCompartirCopiado(false), 3000)
+    }
+  }
 
   async function invitar({ email, rol, direccion }) {
     setError('')
@@ -134,6 +150,17 @@ export default function Equipo() {
       </div>
 
       {formOpen && <FormInvitar onGuardar={invitar} onCancelar={() => setFormOpen(false)} error={error} />}
+
+      <div className="card">
+        <span className="label-eyebrow">¿Todavía no tiene BikeIQ?</span>
+        <p className="text-ink-muted text-sm mt-1.5">
+          Compartí la app por WhatsApp, mail, mensaje de texto o cualquier medio, y una vez que se registre lo invitás normalmente con el botón de arriba.
+        </p>
+        <button onClick={compartirApp} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg mt-3">
+          Compartir BikeIQ
+        </button>
+        {compartirCopiado && <p className="text-hiviz text-xs mt-2">Link copiado al portapapeles.</p>}
+      </div>
 
       {pendientesParaMi.length > 0 && (
         <div>
