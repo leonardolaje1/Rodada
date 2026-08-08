@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   Gauge, Calendar, Activity, Bike, Apple, Moon, Trophy, Dumbbell,
-  LineChart, Users, FileText, Settings
+  LineChart, Users, FileText, Settings, MoreHorizontal, X
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 
@@ -21,9 +21,12 @@ const NAV = [
   { to: '/configuracion', label: 'Configuración', Icon: Settings }
 ]
 
+const RUTAS_DIRECTAS = ['/', '/entrenamientos', '/gimnasio', '/nutricion', '/calendario']
+
 export default function Layout() {
   const [pendientes, setPendientes] = useState(0)
   const [tema, setTema] = useState(() => localStorage.getItem('tema') || 'dark')
+  const [masAbierto, setMasAbierto] = useState(false)
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', tema === 'light')
@@ -46,6 +49,10 @@ export default function Layout() {
     }
     cargar()
   }, [])
+
+  const navDirectos = NAV.filter((item) => RUTAS_DIRECTAS.includes(item.to))
+  const navResto = NAV.filter((item) => !RUTAS_DIRECTAS.includes(item.to))
+  const pendientesEnResto = navResto.some((item) => item.to === '/equipo') && pendientes > 0
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -87,13 +94,65 @@ export default function Layout() {
         <Outlet />
       </main>
 
+      {masAbierto && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMasAbierto(false)}>
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-asphalt-900 border-t border-asphalt-700 rounded-t-2xl p-4"
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-display font-bold text-sm text-ink-muted uppercase tracking-wide">Más opciones</span>
+              <button onClick={() => setMasAbierto(false)} className="text-ink-muted p-1" aria-label="Cerrar">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {navResto.map(({ to, label, Icon, end }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  onClick={() => setMasAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex flex-col items-center gap-1.5 py-3 rounded-lg text-[11px] font-medium relative ${
+                      isActive ? 'bg-asphalt-800 text-hiviz' : 'text-ink-muted hover:bg-asphalt-800'
+                    }`
+                  }
+                >
+                  <span className="relative inline-flex">
+                    <Icon size={22} strokeWidth={2} aria-hidden />
+                    {to === '/equipo' && pendientes > 0 && (
+                      <i className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-alert-red inline-block" />
+                    )}
+                  </span>
+                  <span className="text-center leading-tight">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 border-t border-asphalt-700 bg-asphalt-900 flex overflow-x-auto"
+        className="md:hidden fixed bottom-0 left-0 right-0 border-t border-asphalt-700 bg-asphalt-900 flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {NAV.map((item) => (
-          <NavItem key={item.to} {...item} mobile badge={item.to === '/equipo' ? pendientes : 0} />
+        {navDirectos.map((item) => (
+          <NavItem key={item.to} {...item} mobile />
         ))}
+        <button
+          onClick={() => setMasAbierto(true)}
+          className="flex-1 flex flex-col items-center gap-0.5 px-3 py-2 text-[10px] whitespace-nowrap text-ink-muted"
+        >
+          <span className="relative inline-flex">
+            <MoreHorizontal size={20} strokeWidth={2} aria-hidden />
+            {pendientesEnResto && (
+              <i className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-alert-red inline-block" />
+            )}
+          </span>
+          <span>Más</span>
+        </button>
       </nav>
     </div>
   )
@@ -106,7 +165,7 @@ function NavItem({ to, label, Icon, end, mobile, badge }) {
       end={end}
       className={({ isActive }) =>
         mobile
-          ? `flex flex-col items-center gap-0.5 px-3 py-2 text-[10px] whitespace-nowrap flex-shrink-0 ${
+          ? `flex-1 flex flex-col items-center gap-0.5 px-3 py-2 text-[10px] whitespace-nowrap ${
               isActive ? 'text-hiviz' : 'text-ink-muted'
             }`
           : `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
