@@ -54,16 +54,20 @@ export default function Nutricion() {
   const [formPlanOpen, setFormPlanOpen] = useState(false)
   const [planEditando, setPlanEditando] = useState(null)
   const [registrandoComida, setRegistrandoComida] = useState(null)
+  const [documentos, setDocumentos] = useState([])
+  const [subiendoArchivo, setSubiendoArchivo] = useState(false)
+  const [errorArchivo, setErrorArchivo] = useState('')
 
   async function cargar() {
-    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }] = await Promise.all([
+    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }] = await Promise.all([
       supabase.from('perfil_nutricional').select('*').maybeSingle(),
       supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(100),
       supabase.from('hidratacion').select('*').order('fecha', { ascending: false }).limit(60),
       supabase.from('suplementos').select('*').eq('activo', true),
       supabase.from('peso_historial').select('*').order('fecha', { ascending: true }),
       supabase.from('antropometria').select('*').order('fecha', { ascending: false }),
-      supabase.from('planes_nutricion').select('*').eq('activo', true).order('created_at', { ascending: true })
+      supabase.from('planes_nutricion').select('*').eq('activo', true).order('created_at', { ascending: true }),
+      supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false })
     ])
     if (p) setPerfil(p)
     setComidas(cm || [])
@@ -72,6 +76,7 @@ export default function Nutricion() {
     setPesoHistorial(pesos || [])
     setAntropometria(antro || [])
     setPlanes(pl || [])
+    setDocumentos(docs || [])
   }
   useEffect(() => { cargar() }, [])
 
@@ -118,6 +123,41 @@ export default function Nutricion() {
     await supabase.from('planes_nutricion').update({ activo: false }).eq('id', id); cargar()
   }
 
+  async function subirDocumento(file) {
+    if (!file) return
+    setErrorArchivo('')
+    setSubiendoArchivo(true)
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      const uid = userData.user.id
+      const rutaStorage = `${uid}/${Date.now()}-${file.name}`
+      const { error: errSubida } = await supabase.storage.from('documentos-nutricion').upload(rutaStorage, file)
+      if (errSubida) throw errSubida
+      const { error: errFila } = await supabase.from('documentos_nutricion').insert({
+        user_id: uid, nombre: file.name, ruta_storage: rutaStorage, tipo_archivo: file.type
+      })
+      if (errFila) throw errFila
+      cargar()
+    } catch (err) {
+      setErrorArchivo('No se pudo subir el archivo: ' + (err.message || ''))
+    } finally {
+      setSubiendoArchivo(false)
+    }
+  }
+
+  async function verDocumento(doc) {
+    const { data, error } = await supabase.storage.from('documentos-nutricion').createSignedUrl(doc.ruta_storage, 60)
+    if (error) { alert('No se pudo abrir el archivo: ' + error.message); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function borrarDocumento(doc) {
+    if (!confirm(`¿Borrar "${doc.nombre}"?`)) return
+    await supabase.storage.from('documentos-nutricion').remove([doc.ruta_storage])
+    await supabase.from('documentos_nutricion').delete().eq('id', doc.id)
+    cargar()
+  }
+
   function registrarDesdeComida(comidaPlan) {
     setRegistrandoComida({
       tipo: comidaPlan.momento, descripcion: comidaPlan.nombre,
@@ -161,7 +201,7 @@ export default function Nutricion() {
       <div><h1 className="text-2xl font-bold">Nutrición</h1><p className="text-ink-muted text-sm mt-1">Calorías, hidratación y composición corporal</p></div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['resumen', 'Resumen'], ['planes', 'Planes'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
+        {[['resumen', 'Resumen'], ['planes', 'Planes'], ['documentos', 'Documentos'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
           <button key={id} onClick={() => setSub(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${sub === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
         ))}
       </div>
@@ -255,6 +295,49 @@ export default function Nutricion() {
                   </div>
                 )
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {sub === 'documentos' && (
+        <>
+          <div className="card">
+            <span className="label-eyebrow">Subir plan de comidas (PDF o foto)</span>
+            <p className="text-ink-muted text-xs mt-1.5">
+              Si tu nutricionista te pasa el plan en PDF o como foto, subilo acá para tenerlo siempre a mano dentro de la app.
+            </p>
+            <label className="inline-block mt-3">
+              <span className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-4 py-2.5 rounded-lg inline-block cursor-pointer hover:text-ink hover:border-hiviz">
+                {subiendoArchivo ? 'Subiendo…' : 'Elegir archivo'}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                disabled={subiendoArchivo}
+                onChange={(e) => { subirDocumento(e.target.files[0]); e.target.value = '' }}
+              />
+            </label>
+            {errorArchivo && <p className="text-alert-red text-xs mt-3">{errorArchivo}</p>}
+          </div>
+
+          {documentos.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin documentos subidos todavía.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {documentos.map((doc) => (
+                <div key={doc.id} className="card flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{doc.nombre}</p>
+                    <p className="text-ink-muted text-xs">{new Date(doc.created_at).toLocaleDateString('es-AR')}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => verDocumento(doc)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Ver</button>
+                    <button onClick={() => borrarDocumento(doc)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </>
