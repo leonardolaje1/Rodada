@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import { parseActivityFile } from '../lib/parseActivity'
+import { SkeletonList } from '../components/Skeleton'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -290,8 +291,8 @@ export default function Entrenamientos() {
             <FormEntrenamiento bicicletas={bicicletas} planes={planes} valoresIniciales={valoresImportados} onGuardar={crear} onCancelar={() => { setMostrarForm(false); setValoresImportados(null) }} />
           )}
 
-          {cargando ? (
-            <p className="text-ink-muted text-sm">Cargando…</p>
+                    {cargando ? (
+            <SkeletonList rows={4} />
           ) : porDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin entrenamientos registrados.</p>
           ) : (
