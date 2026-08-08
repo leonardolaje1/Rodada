@@ -49,7 +49,7 @@ export default function Reportes() {
       const doc = new jsPDF()
       let y = 20
 
-      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('BikeIQ', 14, y)
+      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('HELU', 14, y)
       doc.setFontSize(10); doc.setTextColor(...grisTexto); doc.text('Reporte general de actividad', 14, y + 6)
       doc.text(`Período: ${desde} a ${hasta}`, 14, y + 14)
       doc.text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, 14, y + 19)
@@ -126,7 +126,7 @@ export default function Reportes() {
       }
 
       agregarPie(doc, grisTexto)
-      doc.save(`bikeiq-resumen-${desde}-a-${hasta}.pdf`)
+      doc.save(`helu-resumen-${desde}-a-${hasta}.pdf`)
     } catch (err) {
       console.error(err); setError('No se pudo generar el PDF. ' + (err.message || ''))
     } finally { setGenerando('') }
@@ -148,7 +148,7 @@ export default function Reportes() {
       const doc = new jsPDF()
       let y = 20
 
-      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('BikeIQ', 14, y)
+      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('HELU', 14, y)
       doc.setFontSize(10); doc.setTextColor(...grisTexto)
       doc.text('Reporte de entrenamiento — para uso profesional', 14, y + 6)
       doc.text(`Período: ${desde} a ${hasta}`, 14, y + 14)
@@ -198,7 +198,7 @@ export default function Reportes() {
       }
 
       agregarPie(doc, grisTexto)
-      doc.save(`bikeiq-entrenamiento-${desde}-a-${hasta}.pdf`)
+      doc.save(`helu-entrenamiento-${desde}-a-${hasta}.pdf`)
     } catch (err) {
       console.error(err); setError('No se pudo generar el PDF. ' + (err.message || ''))
     } finally { setGenerando('') }
@@ -220,7 +220,7 @@ export default function Reportes() {
       const doc = new jsPDF()
       let y = 20
 
-      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('BikeIQ', 14, y)
+      doc.setFontSize(20); doc.setTextColor(...negro); doc.text('HELU', 14, y)
       doc.setFontSize(10); doc.setTextColor(...grisTexto)
       doc.text('Reporte de nutrición — para uso profesional', 14, y + 6)
       doc.text(`Período: ${desde} a ${hasta}`, 14, y + 14)
@@ -275,7 +275,7 @@ export default function Reportes() {
       }
 
       agregarPie(doc, grisTexto)
-      doc.save(`bikeiq-nutricion-${desde}-a-${hasta}.pdf`)
+      doc.save(`helu-nutricion-${desde}-a-${hasta}.pdf`)
     } catch (err) {
       console.error(err); setError('No se pudo generar el PDF. ' + (err.message || ''))
     } finally { setGenerando('') }
@@ -287,7 +287,7 @@ export default function Reportes() {
       doc.setPage(i)
       doc.setFontSize(8)
       doc.setTextColor(...grisTexto)
-      doc.text('Generado con BikeIQ', 14, 290)
+      doc.text('Generado con HELU', 14, 290)
     }
   }
 
