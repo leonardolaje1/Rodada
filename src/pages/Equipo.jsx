@@ -78,8 +78,8 @@ export default function Equipo() {
 
   async function compartirApp() {
     const datos = {
-      title: 'BikeIQ',
-      text: 'Te invito a usar BikeIQ, la app que uso para llevar mi entrenamiento de ciclismo, nutrición y recuperación.',
+      title: 'HELU',
+      text: 'Te invito a usar HELU, la app que uso para llevar mi entrenamiento de ciclismo, nutrición y recuperación.',
       url: 'https://rodada-rose.vercel.app'
     }
     if (navigator.share) {
@@ -95,7 +95,7 @@ export default function Equipo() {
     setError('')
     const { data: otroId } = await supabase.rpc('buscar_usuario_por_email', { p_email: email })
     if (!otroId) {
-      setError('No encontramos ninguna cuenta con ese email en BikeIQ.')
+      setError('No encontramos ninguna cuenta con ese email en HELU.')
       return
     }
     if (otroId === miId) {
@@ -152,12 +152,12 @@ export default function Equipo() {
       {formOpen && <FormInvitar onGuardar={invitar} onCancelar={() => setFormOpen(false)} error={error} />}
 
       <div className="card">
-        <span className="label-eyebrow">¿Todavía no tiene BikeIQ?</span>
+        <span className="label-eyebrow">¿Todavía no tiene HELU?</span>
         <p className="text-ink-muted text-sm mt-1.5">
           Compartí la app por WhatsApp, mail, mensaje de texto o cualquier medio, y una vez que se registre lo invitás normalmente con el botón de arriba.
         </p>
         <button onClick={compartirApp} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg mt-3">
-          Compartir BikeIQ
+          Compartir HELU
         </button>
         {compartirCopiado && <p className="text-hiviz text-xs mt-2">Link copiado al portapapeles.</p>}
       </div>
