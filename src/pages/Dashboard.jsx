@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [cargando, setCargando] = useState(true)
   const [clima, setClima] = useState(null)
   const [climaError, setClimaError] = useState(false)
+  const [proximaCompetencia, setProximaCompetencia] = useState(null)
 
   useEffect(() => {
     async function cargar() {
@@ -33,7 +34,8 @@ export default function Dashboard() {
       const desde14 = new Date()
       desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
 
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }] = await Promise.all([
+      const hoyStr = new Date().toISOString().slice(0, 10)
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -42,7 +44,8 @@ export default function Dashboard() {
         supabase.from('bicicletas').select('*'),
         supabase.from('planes_entrenamiento').select('*').eq('activo', true),
         supabase.from('planes_gimnasio').select('*').eq('activo', true),
-        supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10))
+        supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10)),
+        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1)
       ])
 
       setEntrenamientos(ents || [])
@@ -50,6 +53,7 @@ export default function Dashboard() {
       setPlanesEntreno(plsE || [])
       setPlanesGym(plsG || [])
       setGimnasio(gym || [])
+      setProximaCompetencia((comps && comps[0]) || null)
       setCargando(false)
     }
     cargar()
@@ -199,6 +203,20 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {proximaCompetencia && (() => {
+        const dias = Math.round((new Date(proximaCompetencia.fecha + 'T00:00:00') - new Date().setHours(0, 0, 0, 0)) / 86400000)
+        return (
+          <div className="card">
+            <span className="label-eyebrow">Próxima competencia</span>
+            <div className="flex items-baseline justify-between mt-1">
+              <p className="text-sm font-semibold">{proximaCompetencia.nombre}</p>
+              <span className="readout text-2xl font-bold text-hiviz">{dias === 0 ? 'Hoy' : `${dias}d`}</span>
+            </div>
+            <p className="text-ink-faint text-xs mt-0.5">{proximaCompetencia.fecha}</p>
+          </div>
+        )
+      })()}
 
       <PMCChart data={serie} />
 
