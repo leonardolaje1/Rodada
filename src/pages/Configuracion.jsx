@@ -71,7 +71,7 @@ export default function Configuracion() {
 
       const backup = {
         generado_el: new Date().toISOString(),
-        app: 'bikeiq',
+        app: 'helu',
         version_schema: 2,
         datos: Object.fromEntries(TABLAS.map((tabla, i) => [tabla, resultados[i].data || []]))
       }
@@ -81,7 +81,7 @@ export default function Configuracion() {
       const a = document.createElement('a')
       const fecha = new Date().toISOString().slice(0, 10)
       a.href = url
-      a.download = `bikeiq-backup-${fecha}.json`
+      a.download = `helu-backup-${fecha}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -110,7 +110,7 @@ export default function Configuracion() {
       const json = JSON.parse(texto)
 
       if (!json.datos || typeof json.datos !== 'object') {
-        setErrorRestaurar('Este archivo no tiene el formato de un backup de BikeIQ.')
+        setErrorRestaurar('Este archivo no tiene el formato de un backup de HELU.')
         return
       }
 
@@ -126,7 +126,7 @@ export default function Configuracion() {
       setArchivoBackup(json)
       setResumenBackup(resumen)
     } catch (err) {
-      setErrorRestaurar('No se pudo leer el archivo. ¿Es un backup de BikeIQ en formato JSON?')
+      setErrorRestaurar('No se pudo leer el archivo. ¿Es un backup de HELU en formato JSON?')
     }
   }
 
@@ -236,7 +236,7 @@ export default function Configuracion() {
       <div className="card">
         <span className="label-eyebrow">Backup completo</span>
         <p className="text-ink-muted text-sm mt-2">
-          Descarga un archivo JSON con absolutamente todo lo que cargaste en BikeIQ. Es una copia de
+          Descarga un archivo JSON con absolutamente todo lo que cargaste en HELU. Es una copia de
           seguridad — guardala donde quieras (Drive, email a vos mismo, etc.).
         </p>
 
@@ -318,7 +318,7 @@ export default function Configuracion() {
       <div className="card border-alert-red">
         <span className="label-eyebrow text-alert-red">Zona de peligro</span>
         <p className="text-ink-muted text-sm mt-2">
-          Eliminar tu cuenta borra permanentemente todos tus datos de BikeIQ: bicicletas, entrenamientos,
+          Eliminar tu cuenta borra permanentemente todos tus datos de HELU: bicicletas, entrenamientos,
           nutrición, recuperación, vínculos de Equipo y todo lo demás. Esta acción no se puede deshacer.
         </p>
         <label className="flex flex-col gap-1 text-sm mt-4">
