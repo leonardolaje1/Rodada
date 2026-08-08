@@ -77,10 +77,19 @@ export default function Recuperacion() {
 
   useEffect(() => { cargar() }, [])
 
-  async function guardar() {
+    async function guardar() {
+    const camposNumericos = [
+      'sueño_horas', 'sueño_score', 'estres_score', 'body_battery_manana', 'body_battery_noche',
+      'hrv', 'fc_reposo', 'spo2', 'respiracion_rpm', 'calidad_sueño', 'dolor_muscular', 'fatiga', 'estres'
+    ]
+    const payload = { ...form }
+    for (const campo of camposNumericos) {
+      if (payload[campo] === '') payload[campo] = null
+    }
+
     const { data: userData } = await supabase.auth.getUser()
     const { error } = await supabase.from('metricas_diarias').upsert(
-      { ...form, user_id: userData.user.id, fuente: 'manual' },
+      { ...payload, user_id: userData.user.id, fuente: 'manual' },
       { onConflict: 'user_id,fecha' }
     )
     if (error) { alert('No se pudo guardar: ' + error.message); return }
