@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
-import { calcularTSS } from '../lib/tss'
+import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import { parseActivityFile } from '../lib/parseActivity'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
@@ -24,6 +24,13 @@ const ZONAS_POTENCIA = [
   { zona: 'Z5', nombre: 'VO2 máx', desde: 1.06, hasta: 1.20, color: '#F14A4A' },
   { zona: 'Z6', nombre: 'Capacidad anaeróbica', desde: 1.21, hasta: 1.50, color: '#C34AF1' },
   { zona: 'Z7', nombre: 'Neuromuscular', desde: 1.51, hasta: null, color: '#7A4AF1' }
+]
+const TIPOS_MESOCICLO = [
+  { id: 'base', label: 'Base', color: '#4A9EFF' },
+  { id: 'construccion', label: 'Construcción', color: '#C4F135' },
+  { id: 'especifico', label: 'Específico', color: '#F5A623' },
+  { id: 'pico', label: 'Pico', color: '#F14A4A' },
+  { id: 'transicion', label: 'Transición / Descanso', color: '#8A8F9C' }
 ]
 const TIPOS_TEST_FTP = [
   { id: 'ftp', label: 'Test de FTP (20/60 min)' },
@@ -68,22 +75,30 @@ export default function Entrenamientos() {
   const [formFtpOpen, setFormFtpOpen] = useState(false)
   const [ftpEditando, setFtpEditando] = useState(null)
   const [feedbackPorEntreno, setFeedbackPorEntreno] = useState({})
+  const [mesociclos, setMesociclos] = useState([])
+  const [competencias, setCompetencias] = useState([])
+  const [formMesoOpen, setFormMesoOpen] = useState(false)
+  const [mesoEditando, setMesoEditando] = useState(null)
   const inputArchivoRef = useRef(null)
 
   async function cargar() {
     setCargando(true)
-    const [{ data: ents }, { data: bicis }, { data: pls }, { data: objs }, { data: ftps }] = await Promise.all([
+    const [{ data: ents }, { data: bicis }, { data: pls }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }] = await Promise.all([
       supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
       supabase.from('bicicletas').select('id, nombre'),
       supabase.from('planes_entrenamiento').select('*').eq('activo', true).order('created_at', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'entrenamiento').order('created_at', { ascending: false }),
-      supabase.from('ftp_historial').select('*').order('fecha', { ascending: true })
+      supabase.from('ftp_historial').select('*').order('fecha', { ascending: true }),
+      supabase.from('mesociclos').select('*').order('fecha_inicio', { ascending: true }),
+      supabase.from('competencias').select('id, nombre, fecha').order('fecha', { ascending: true })
     ])
     setLista(ents || [])
     setBicicletas(bicis || [])
     setPlanes(pls || [])
     setObjetivos(objs || [])
     setFtpHistorial(ftps || [])
+    setMesociclos(mesos || [])
+    setCompetencias(comps || [])
 
     if (ents && ents.length > 0) {
       const { data: fbs } = await supabase
@@ -132,7 +147,7 @@ export default function Entrenamientos() {
     const descripcion = descripcionPartes.join(' · ') + (e.comentarios ? ` — ${e.comentarios}` : '')
 
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="BikeIQ" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="HELU" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
     <name>${escaparXml(nombre)}</name>
     <desc>${escaparXml(descripcion)}</desc>
@@ -182,6 +197,21 @@ export default function Entrenamientos() {
   async function actualizarFtp(id, form) { await supabase.from('ftp_historial').update(form).eq('id', id); setFtpEditando(null); cargar() }
   async function eliminarFtp(id) { if (!confirm('¿Borrar este registro de FTP?')) return; await supabase.from('ftp_historial').delete().eq('id', id); cargar() }
 
+  async function crearMesociclo(form) {
+    const { error } = await supabase.from('mesociclos').insert(form)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setFormMesoOpen(false); cargar()
+  }
+  async function actualizarMesociclo(id, form) {
+    const { error } = await supabase.from('mesociclos').update(form).eq('id', id)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setMesoEditando(null); cargar()
+  }
+  async function eliminarMesociclo(id) {
+    if (!confirm('¿Borrar este mesociclo?')) return
+    await supabase.from('mesociclos').delete().eq('id', id); cargar()
+  }
+
   const nombreBici = (id) => bicicletas.find((b) => b.id === id)?.nombre || null
   const nombrePlan = (id) => planes.find((p) => p.id === id)?.nombre || null
   const porDia = agruparPorFecha(lista)
@@ -204,6 +234,12 @@ export default function Entrenamientos() {
     tss: realizados.reduce((max, e) => (Number(e.tss) > (max?.tss || 0) ? e : max), null)
   }
 
+  const hoyStr = new Date().toISOString().slice(0, 10)
+  const desde400 = new Date(); desde400.setDate(desde400.getDate() - 400)
+  const serieCTL = calcularCargaDiaria(construirSerieDiaria(realizados, desde400.toISOString().slice(0, 10), hoyStr))
+  const ctlActual = serieCTL[serieCTL.length - 1]?.ctl ?? 0
+  const nombreCompetencia = (id) => competencias.find((c) => c.id === id)?.nombre || null
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -212,7 +248,7 @@ export default function Entrenamientos() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['registro', 'Registro'], ['planes', 'Planes'], ['objetivos', 'Objetivos'], ['ftp', 'FTP y zonas'], ['records', 'Récords']].map(([id, label]) => (
+        {[['registro', 'Registro'], ['planes', 'Planes'], ['objetivos', 'Objetivos'], ['ftp', 'FTP y zonas'], ['temporada', 'Temporada'], ['records', 'Récords']].map(([id, label]) => (
           <button key={id} onClick={() => setVista(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${vista === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
             {label}
           </button>
@@ -521,6 +557,73 @@ export default function Entrenamientos() {
         </>
       )}
 
+      {vista === 'temporada' && (
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
+          </div>
+          {formMesoOpen && <FormMesociclo competencias={competencias} onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
+
+          <div className="card">
+            <span className="label-eyebrow">CTL actual</span>
+            <p className="readout text-2xl font-bold text-hiviz mt-1">{ctlActual}</p>
+          </div>
+
+          {mesociclos.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu temporada en bloques: base, construcción, específico, pico y transición.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {mesociclos.map((m) =>
+                mesoEditando === m.id ? (
+                  <FormMesociclo key={m.id} valoresIniciales={m} competencias={competencias} onGuardar={(datos) => actualizarMesociclo(m.id, datos)} onCancelar={() => setMesoEditando(null)} />
+                ) : (
+                  (() => {
+                    const tipoInfo = TIPOS_MESOCICLO.find((t) => t.id === m.tipo) || TIPOS_MESOCICLO[0]
+                    const enCurso = hoyStr >= m.fecha_inicio && hoyStr <= m.fecha_fin
+                    const totalDias = (new Date(m.fecha_fin) - new Date(m.fecha_inicio)) / 86400000 + 1
+                    const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
+                    const pctTiempo = Math.round((diasPasados / totalDias) * 100)
+                    return (
+                      <div key={m.id} className="card" style={enCurso ? { borderColor: tipoInfo.color } : undefined}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full inline-block" style={{ background: tipoInfo.color }} />
+                              <p className="font-semibold text-sm">{m.nombre}</p>
+                              {enCurso && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-hiviz text-asphalt-950">EN CURSO</span>}
+                            </div>
+                            <p className="text-ink-muted text-xs mt-0.5">
+                              {tipoInfo.label} · {m.fecha_inicio} a {m.fecha_fin}
+                              {m.competencia_id && nombreCompetencia(m.competencia_id) && ` · → ${nombreCompetencia(m.competencia_id)}`}
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => { setFormMesoOpen(false); setMesoEditando(m.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                            <button onClick={() => eliminarMesociclo(m.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                          </div>
+                        </div>
+                        {enCurso && (
+                          <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-2.5 overflow-hidden">
+                            <div className="h-full" style={{ width: `${pctTiempo}%`, background: tipoInfo.color }} />
+                          </div>
+                        )}
+                        {m.ctl_objetivo && (
+                          <p className="text-ink-muted text-xs mt-2">
+                            CTL objetivo: <span className="text-ink font-semibold">{m.ctl_objetivo}</span>
+                            {enCurso && <span className={ctlActual >= m.ctl_objetivo ? 'text-hiviz' : 'text-alert-amber'}> · actual {ctlActual} ({ctlActual >= m.ctl_objetivo ? 'cumplido' : `faltan ${(m.ctl_objetivo - ctlActual).toFixed(0)}`})</span>}
+                          </p>
+                        )}
+                        {m.notas && <p className="text-ink-faint text-xs mt-1.5">{m.notas}</p>}
+                      </div>
+                    )
+                  })()
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {vista === 'records' && (
         <div className="flex flex-col gap-2">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -717,6 +820,50 @@ function FormObjetivo({ onGuardar, onCancelar }) {
         <input type="number" {...campo('valor_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Fecha límite</span>
         <input type="date" {...campo('fecha_limite')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <div className="col-span-2 flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
+      </div>
+    </form>
+  )
+}
+
+function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias = [] }) {
+  const [form, setForm] = useState({
+    nombre: '', tipo: 'base', fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '',
+    competencia_id: '', ctl_objetivo: '', notas: '', ...valoresIniciales
+  })
+  const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  return (
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => {
+      e.preventDefault()
+      onGuardar({
+        ...form,
+        competencia_id: form.competencia_id || null,
+        ctl_objetivo: form.ctl_objetivo === '' ? null : Number(form.ctl_objetivo)
+      })
+    }}>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Nombre</span>
+        <input {...campo('nombre')} required placeholder="Base invierno / Pico pre-fondo" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Tipo</span>
+        <select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {TIPOS_MESOCICLO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de inicio</span>
+        <input type="date" {...campo('fecha_inicio')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de fin</span>
+        <input type="date" {...campo('fecha_fin')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      {competencias.length > 0 && (
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Competencia objetivo (opcional)</span>
+          <select {...campo('competencia_id')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+            <option value="">—</option>
+            {competencias.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({c.fecha})</option>)}
+          </select></label>
+      )}
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">CTL objetivo (opcional)</span>
+        <input type="number" {...campo('ctl_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Notas</span>
+        <input {...campo('notas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
