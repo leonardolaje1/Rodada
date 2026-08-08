@@ -556,7 +556,6 @@ export default function Entrenamientos() {
           {mesociclos.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu bloque de 4 semanas: base, construcción, específico, pico o transición.</p>
           ) : (
-          ) : (
             <div className="flex flex-col gap-2">
               {mesociclos.map((m) =>
                 mesoEditando === m.id ? (
