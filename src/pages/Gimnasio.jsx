@@ -31,6 +31,7 @@ export default function Gimnasio() {
   const [objetivos, setObjetivos] = useState([])
   const [formOpen, setFormOpen] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
+  const [valoresEdicion, setValoresEdicion] = useState(null)
   const [formPlanOpen, setFormPlanOpen] = useState(false)
   const [planEditando, setPlanEditando] = useState(null)
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
@@ -79,11 +80,6 @@ export default function Gimnasio() {
     const { data } = await supabase.from('gimnasio').insert(nuevos).select()
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); setVista('registro'); cargar()
-  }
-  async function marcarRealizado(id) {
-    await supabase.from('gimnasio').update({ estado: 'realizado' }).eq('id', id)
-    const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, estado: 'realizado' } : s))
-    await sincronizarPRs(nuevaLista); cargar()
   }
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
@@ -162,7 +158,7 @@ export default function Gimnasio() {
                   <div className="flex flex-col gap-2">
                     {items.map((g) =>
                       editandoId === g.id ? (
-                        <FormGimnasio key={g.id} planes={planes} valoresIniciales={g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => setEditandoId(null)} />
+                        <FormGimnasio key={g.id} planes={planes} valoresIniciales={valoresEdicion && valoresEdicion.id === g.id ? valoresEdicion : g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
                       ) : (
                         <div key={g.id} className={`card flex items-center justify-between ${g.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
                           <div className="flex items-center gap-2">
@@ -180,9 +176,9 @@ export default function Gimnasio() {
                             )}
                             <div className="flex gap-1">
                               {g.estado === 'pendiente' && (
-                                <button onClick={() => { setFormOpen(false); setEditandoId(g.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar resultado</button>
+                                <button onClick={() => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar resultado</button>
                               )}
-                              <button onClick={() => { setFormOpen(false); setEditandoId(g.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                              <button onClick={() => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
                               <button onClick={() => { if (confirm('¿Borrar este ejercicio?')) eliminar(g.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                             </div>
                           </div>
