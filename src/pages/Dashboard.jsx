@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [proximaCompetencia, setProximaCompetencia] = useState(null)
   const [componentes, setComponentes] = useState([])
   const [desgaste, setDesgaste] = useState([])
+  const [mostrarExplicacion, setMostrarExplicacion] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -208,6 +209,16 @@ export default function Dashboard() {
           <span className={`readout text-4xl font-bold text-${forma.color}`}>{ultimo.tsb}</span>
           <span className="text-sm text-ink-muted">{forma.texto}</span>
         </div>
+        <button onClick={() => setMostrarExplicacion((v) => !v)} className="text-hiviz text-xs mt-2.5">
+          {mostrarExplicacion ? 'Ocultar explicación' : '¿Qué significan estos números?'}
+        </button>
+        {mostrarExplicacion && (
+          <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-asphalt-700">
+            <p className="text-ink-muted text-xs"><b className="text-ink">CTL — tu fondo de forma.</b> Cuánto entrenaste en las últimas 6 semanas. Sube y baja lento: hace falta constancia para moverlo.</p>
+            <p className="text-ink-muted text-xs"><b className="text-ink">ATL — tu cansancio reciente.</b> Cuánto entrenaste en la última semana. Sube y baja rápido: unos días duros y ya lo notás.</p>
+            <p className="text-ink-muted text-xs"><b className="text-ink">TSB — tu estado hoy.</b> Es CTL menos ATL. Positivo: estás descansado. Muy negativo: estás cargado, conviene bajar un cambio.</p>
+          </div>
+        )}
       </div>
 
       {tieneAlgunPlan && (
