@@ -7,6 +7,7 @@ const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' }, { id: 'mar', label: 'Mar' }, { id: 'mie', label: 'Mié' },
   { id: 'jue', label: 'Jue' }, { id: 'vie', label: 'Vie' }, { id: 'sab', label: 'Sáb' }, { id: 'dom', label: 'Dom' }
 ]
+const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
 
 function agruparPorFecha(items) {
   const grupos = {}
@@ -24,27 +25,41 @@ function recalcularPRs(sesiones) {
   }
   return marcados
 }
+function lunesDeSemana(fechaStr) {
+  const d = new Date(fechaStr + 'T12:00:00')
+  const dow = d.getDay()
+  const offset = dow === 0 ? -6 : 1 - dow
+  d.setDate(d.getDate() + offset)
+  return d
+}
+function crearSemanaVacia(numero) {
+  return {
+    semana: numero,
+    dias: DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, es_clave: false, ejercicios: [{ ejercicio: 'Sentadilla', series: '', reps: '' }] }))
+  }
+}
 
 export default function Gimnasio() {
-  const [vista, setVista] = useState('registro')
+  const [vista, setVista] = useState('planificacion')
   const [sesiones, setSesiones] = useState([])
-  const [planes, setPlanes] = useState([])
+  const [mesociclos, setMesociclos] = useState([])
   const [objetivos, setObjetivos] = useState([])
   const [formOpen, setFormOpen] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [valoresEdicion, setValoresEdicion] = useState(null)
-  const [formPlanOpen, setFormPlanOpen] = useState(false)
-  const [planEditando, setPlanEditando] = useState(null)
+  const [formMesoOpen, setFormMesoOpen] = useState(false)
+  const [mesoEditando, setMesoEditando] = useState(null)
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
-    const [{ data: s }, { data: p }, { data: objs }] = await Promise.all([
+    setCargando(true)
+    const [{ data: s }, { data: mesos }, { data: objs }] = await Promise.all([
       supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).limit(300),
-      supabase.from('planes_gimnasio').select('*').eq('activo', true).order('created_at', { ascending: true }),
+      supabase.from('mesociclos_gimnasio').select('*').eq('activo', true).order('fecha_inicio', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'gimnasio').order('created_at', { ascending: false })
     ])
-    setSesiones(s || []); setPlanes(p || []); setObjetivos(objs || [])
+    setSesiones(s || []); setMesociclos(mesos || []); setObjetivos(objs || [])
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -65,7 +80,7 @@ export default function Gimnasio() {
   }
   async function actualizar(id, form) {
     await supabase.from('gimnasio').update(form).eq('id', id)
-    setEditandoId(null)
+    setEditandoId(null); setValoresEdicion(null)
     const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, ...form } : s))
     await sincronizarPRs(nuevaLista); cargar()
   }
@@ -74,38 +89,62 @@ export default function Gimnasio() {
     const nuevaLista = sesiones.filter((s) => s.id !== id)
     await sincronizarPRs(nuevaLista); cargar()
   }
-  async function crearPlan(form) { await supabase.from('planes_gimnasio').insert(form); setFormPlanOpen(false); cargar() }
-  async function actualizarPlan(id, form) { await supabase.from('planes_gimnasio').update(form).eq('id', id); setPlanEditando(null); cargar() }
-  async function borrarPlan(id) { await supabase.from('planes_gimnasio').update({ activo: false }).eq('id', id); cargar() }
-  async function registrarDesdesPlan(plan) {
-    const hoy = new Date().toISOString().slice(0, 10)
-    const nuevos = (plan.ejercicios || []).map((ej) => ({ fecha: hoy, ejercicio: ej.ejercicio, series: ej.series, reps: ej.reps, peso: null, plan_id: plan.id, estado: 'pendiente' }))
-    const { data } = await supabase.from('gimnasio').insert(nuevos).select()
-    const nuevaLista = [...(data || []), ...sesiones]
-    await sincronizarPRs(nuevaLista); setVista('registro'); cargar()
-  }
-  async function marcarRealizado(id) {
-    await supabase.from('gimnasio').update({ estado: 'realizado' }).eq('id', id)
-    const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, estado: 'realizado' } : s))
-    await sincronizarPRs(nuevaLista); cargar()
-  }
+
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
     if (error) { alert('No se pudo guardar el objetivo: ' + error.message); return }
     setFormObjetivoOpen(false); cargar()
   }
-
   async function actualizarValorObjetivo(id, valor) { await supabase.from('objetivos').update({ valor_actual: valor }).eq('id', id); cargar() }
   async function marcarCumplidoObjetivo(o) { await supabase.from('objetivos').update({ estado: o.estado === 'cumplido' ? 'activo' : 'cumplido' }).eq('id', o.id); cargar() }
   async function borrarObjetivo(id) { if (!confirm('¿Borrar este objetivo?')) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
 
+  async function crearMesociclo(form) {
+    const { semanas, ...meta } = form
+    const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas }).select().single()
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+
+    const lunesBase = lunesDeSemana(meta.fecha_inicio)
+    const filasNuevas = []
+    semanas.forEach((semana, si) => {
+      DIAS_SEMANA.forEach((diaInfo, oi) => {
+        const d = (semana.dias || []).find((x) => x.dia === diaInfo.id)
+        if (!d || !d.activo) return
+        const fecha = new Date(lunesBase)
+        fecha.setDate(fecha.getDate() + si * 7 + oi)
+        const fechaStr = fecha.toISOString().slice(0, 10)
+        for (const ej of d.ejercicios || []) {
+          if (!ej.ejercicio) continue
+          filasNuevas.push({
+            fecha: fechaStr, ejercicio: ej.ejercicio,
+            series: ej.series ? Number(ej.series) : null,
+            reps: ej.reps ? Number(ej.reps) : null,
+            peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
+            mesociclo_gimnasio_id: nuevo.id
+          })
+        }
+      })
+    })
+    if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
+
+    setFormMesoOpen(false); cargar()
+  }
+  async function actualizarMesociclo(id, form) {
+    const { semanas, ...meta } = form
+    const { error } = await supabase.from('mesociclos_gimnasio').update(meta).eq('id', id)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setMesoEditando(null); cargar()
+  }
+  async function eliminarMesociclo(id) {
+    if (!confirm('¿Borrar este mesociclo? Los ejercicios pendientes generados se van a borrar (los ya realizados quedan como historial).')) return
+    await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
+    await supabase.from('mesociclos_gimnasio').delete().eq('id', id)
+    cargar()
+  }
+
   const porDia = agruparPorFecha(sesiones)
   const hoy = new Date().toISOString().slice(0, 10)
-  const inicioSemana = new Date(); inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
-  const inicioSemanaStr = inicioSemana.toISOString().slice(0, 10)
-  const volumen = (i) => (Number(i.series) || 0) * (Number(i.reps) || 0) * (Number(i.peso) || 0)
-  const volumenSemanal = sesiones.filter((g) => g.fecha >= inicioSemanaStr && g.estado === 'realizado').reduce((a, g) => a + volumen(g), 0)
-  const nombrePlan = (id) => planes.find((p) => p.id === id)?.nombre || 'Sin plan asignado'
+  const hoyStr = hoy
 
   const pesosMaximosPorEjercicio = {}
   for (const s of sesiones) {
@@ -118,40 +157,106 @@ export default function Gimnasio() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div><h1 className="text-2xl font-bold">Gimnasio</h1><p className="text-ink-muted text-sm mt-1">Rutinas, objetivos y récords</p></div>
+      <div><h1 className="text-2xl font-bold">Gimnasio</h1><p className="text-ink-muted text-sm mt-1">Planificación, objetivos y récords</p></div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['registro', 'Registro'], ['planes', 'Rutinas'], ['objetivos', 'Objetivos'], ['records', 'Récords']].map(([id, label]) => (
+        {[['planificacion', 'Planificación'], ['registro', 'Registro'], ['objetivos', 'Objetivos'], ['records', 'Récords']].map(([id, label]) => (
           <button key={id} onClick={() => setVista(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${vista === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
         ))}
       </div>
 
-      {vista === 'registro' && (
-        <>
-          <div className="grid grid-cols-3 gap-3">
-            <StatVolumen label="Hoy" valor={sesiones.filter((s) => s.fecha === hoy && s.estado === 'realizado').reduce((a, s) => a + volumen(s), 0)} />
-            <StatVolumen label="Esta semana" valor={volumenSemanal} />
-            <StatVolumen label="Este mes" valor={sesiones.filter((s) => s.fecha.slice(0, 7) === hoy.slice(0, 7) && s.estado === 'realizado').reduce((a, s) => a + volumen(s), 0)} />
+      {vista === 'planificacion' && (
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
           </div>
+          {formMesoOpen && <FormMesociclo onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
 
-          {planes.length > 0 && (
-            <div className="card">
-              <span className="label-eyebrow">Registrar desde una rutina</span>
-              <div className="flex flex-col gap-2 mt-2.5">
-                {planes.map((p) => (
-                  <button key={p.id} onClick={() => registrarDesdesPlan(p)} className="flex items-center justify-between border border-asphalt-700 rounded-lg px-3 py-2 text-left hover:border-hiviz">
-                    <div><p className="text-sm font-medium">{p.nombre}</p><p className="text-ink-muted text-xs">{(p.ejercicios || []).length} ejercicios</p></div>
-                    <span className="text-hiviz text-xs font-semibold">+ Registrar hoy</span>
-                  </button>
-                ))}
-              </div>
+          {mesociclos.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu bloque de 4 semanas con los días y ejercicios de cada uno.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {mesociclos.map((m) =>
+                mesoEditando === m.id ? (
+                  <FormMesociclo key={m.id} valoresIniciales={m} onGuardar={(datos) => actualizarMesociclo(m.id, datos)} onCancelar={() => setMesoEditando(null)} />
+                ) : (
+                  (() => {
+                    const enCurso = hoyStr >= m.fecha_inicio && hoyStr <= m.fecha_fin
+                    const totalDias = (new Date(m.fecha_fin) - new Date(m.fecha_inicio)) / 86400000 + 1
+                    const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
+                    const pctTiempo = Math.round((diasPasados / totalDias) * 100)
+                    const filasMeso = sesiones.filter((s) => s.mesociclo_gimnasio_id === m.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    return (
+                      <div key={m.id} className={`card ${enCurso ? 'border-hiviz' : ''}`}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-sm">{m.nombre}</p>
+                              {enCurso && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-hiviz text-asphalt-950">EN CURSO</span>}
+                            </div>
+                            <p className="text-ink-muted text-xs mt-0.5">{m.fecha_inicio} a {m.fecha_fin}</p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => { setFormMesoOpen(false); setMesoEditando(m.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                            <button onClick={() => eliminarMesociclo(m.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                          </div>
+                        </div>
+                        {enCurso && (
+                          <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-2.5 overflow-hidden">
+                            <div className="h-full bg-hiviz" style={{ width: `${pctTiempo}%` }} />
+                          </div>
+                        )}
+                        {m.notas && <p className="text-ink-faint text-xs mt-1.5">{m.notas}</p>}
+
+                        {filasMeso.length > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
+                            {agruparPorFecha(filasMeso).map(([fecha, items]) => (
+                              <div key={fecha} className="flex flex-col gap-1">
+                                <p className="text-ink-faint text-[10px] uppercase">{fecha}</p>
+                                {items.map((s) =>
+                                  editandoId === s.id ? (
+                                    <FormGimnasio key={s.id} valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s} onGuardar={(datos) => actualizar(s.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
+                                  ) : (
+                                    <SesionMesocicloGymRow
+                                      key={s.id}
+                                      s={s}
+                                      onCargarDatos={() => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                    />
+                                  )
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()
+                )
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {vista === 'registro' && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {PRS_DESTACADOS.map((ej) => {
+              const info = pesosMaximosPorEjercicio[ej]
+              return (
+                <div key={ej} className="card border-hiviz">
+                  <span className="label-eyebrow">{ej}</span>
+                  <p className="readout text-xl font-bold text-hiviz mt-1">{info ? `${info.peso} kg` : '—'}</p>
+                  {info && <p className="text-ink-faint text-xs mt-0.5">{info.fecha}</p>}
+                </div>
+              )
+            })}
+          </div>
 
           <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setEditandoId(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setEditandoId(null); setValoresEdicion(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
           </div>
-          {formOpen && <FormGimnasio planes={planes} onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
+          {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
 
           {cargando ? (
             <SkeletonList rows={4} />
@@ -163,19 +268,19 @@ export default function Gimnasio() {
                 <div key={fecha}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold">{fecha}</span>
-                    <span className="readout text-xs text-ink-muted"><span className="text-hiviz font-semibold">{items.filter((g) => g.estado === 'realizado').reduce((a, g) => a + volumen(g), 0).toLocaleString('es-AR')} kg</span> volumen del día</span>
                   </div>
                   <div className="flex flex-col gap-2">
                     {items.map((g) =>
                       editandoId === g.id ? (
-                        <FormGimnasio key={g.id} planes={planes} valoresIniciales={valoresEdicion && valoresEdicion.id === g.id ? valoresEdicion : g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
+                        <FormGimnasio key={g.id} valoresIniciales={valoresEdicion && valoresEdicion.id === g.id ? valoresEdicion : g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
                       ) : (
                         <div key={g.id} className={`card flex items-center justify-between ${g.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
                           <div className="flex items-center gap-2">
                             {g.estado === 'pendiente' && <i className="w-2 h-2 rounded-full border border-ink-faint inline-block flex-shrink-0" title="Pendiente" />}
+                            {g.es_clave && <span className="text-hiviz" title="Sesión clave">★</span>}
                             <div>
                               <p className="font-medium text-sm">{g.ejercicio} {prsPorId[g.id] && <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>}</p>
-                              {g.plan_id && <p className="text-ink-faint text-[11px]">{nombrePlan(g.plan_id)}{g.estado === 'pendiente' ? ' · Pendiente' : ''}</p>}
+                              {g.estado === 'pendiente' && <p className="text-ink-faint text-[11px]">Pendiente</p>}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -198,40 +303,6 @@ export default function Gimnasio() {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {vista === 'planes' && (
-        <>
-          <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPlanEditando(null); setFormPlanOpen((v) => !v) }}>+ Rutina</button></div>
-          {formPlanOpen && <FormPlan onGuardar={crearPlan} onCancelar={() => setFormPlanOpen(false)} />}
-          {planes.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin rutinas cargadas.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {planes.map((p) =>
-                planEditando === p.id ? (
-                  <FormPlan key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPlan(p.id, datos)} onCancelar={() => setPlanEditando(null)} />
-                ) : (
-                  <div key={p.id} className="card">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm">{p.nombre}</p>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setFormPlanOpen(false); setPlanEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                        <button onClick={() => { if (confirm('¿Borrar esta rutina?')) borrarPlan(p.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5 mt-2">
-                      {DIAS_SEMANA.map((d) => <span key={d.id} className={`text-[10px] px-1.5 py-0.5 rounded ${(p.dias_semana || []).includes(d.id) ? 'bg-hiviz text-asphalt-950 font-semibold' : 'text-ink-faint border border-asphalt-700'}`}>{d.label}</span>)}
-                    </div>
-                    <div className="mt-2.5 flex flex-col gap-1">
-                      {(p.ejercicios || []).map((ej, i) => <p key={i} className="text-ink-muted text-xs">{ej.ejercicio} — {ej.series}x{ej.reps}</p>)}
-                    </div>
-                  </div>
-                )
-              )}
             </div>
           )}
         </>
@@ -286,7 +357,7 @@ export default function Gimnasio() {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {['Press banca', 'Sentadilla', 'Peso muerto'].map((ej) => {
+                {PRS_DESTACADOS.map((ej) => {
                   const info = pesosMaximosPorEjercicio[ej]
                   return (
                     <div key={ej} className="card border-hiviz">
@@ -299,7 +370,7 @@ export default function Gimnasio() {
               </div>
               <div className="flex flex-col gap-2 mt-1">
                 {Object.entries(pesosMaximosPorEjercicio)
-                  .filter(([ejercicio]) => !['Press banca', 'Sentadilla', 'Peso muerto'].includes(ejercicio))
+                  .filter(([ejercicio]) => !PRS_DESTACADOS.includes(ejercicio))
                   .map(([ejercicio, info]) => (
                     <div key={ejercicio} className="card flex items-center justify-between">
                       <div><p className="text-sm font-semibold">{ejercicio}</p><p className="text-ink-muted text-xs">{info.fecha}</p></div>
@@ -315,18 +386,31 @@ export default function Gimnasio() {
   )
 }
 
-function StatVolumen({ label, valor }) {
-  return <div className="card"><span className="label-eyebrow">{label}</span><p className="readout text-lg font-bold text-hiviz mt-1">{valor.toLocaleString('es-AR')} kg</p></div>
-}
 function MiniDato({ label, value, color = 'text-ink' }) {
   return <div><p className={`readout text-sm font-semibold ${color}`}>{value}</p><p className="text-ink-muted text-[10px] uppercase">{label}</p></div>
 }
 
-function FormGimnasio({ onGuardar, onCancelar, valoresIniciales, planes = [] }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', plan_id: '', estado: 'realizado', ...valoresIniciales })
+function SesionMesocicloGymRow({ s, onCargarDatos }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        {s.es_clave && <span className="text-hiviz text-xs" title="Sesión clave">★</span>}
+        <p className="text-xs font-medium">{s.ejercicio}{s.estado === 'realizado' ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : ''}</p>
+      </div>
+      {s.estado === 'pendiente' ? (
+        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar resultado</button>
+      ) : (
+        <span className="text-hiviz text-[11px]">✓ hecho</span>
+      )}
+    </div>
+  )
+}
+
+function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
+  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', estado: 'realizado', es_clave: false, ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, plan_id: form.plan_id || null }) }}>
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Estado</span>
         <select {...campo('estado')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
@@ -335,57 +419,15 @@ function FormGimnasio({ onGuardar, onCancelar, valoresIniciales, planes = [] }) 
         </select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Ejercicio</span>
         <select {...campo('ejercicio')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}</select></label>
+      <label className="flex items-center gap-2 text-sm mt-6">
+        <input type="checkbox" checked={!!form.es_clave} onChange={(e) => setForm((f) => ({ ...f, es_clave: e.target.checked }))} />
+        <span className="text-ink-muted text-xs">Sesión clave</span>
+      </label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Series</span><input type="number" {...campo('series')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Reps</span><input type="number" {...campo('reps')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso (kg)</span><input type="number" {...campo('peso')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">RPE (1-10)</span><input type="number" min="1" max="10" {...campo('rpe')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      {planes.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Rutina</span>
-          <select {...campo('plan_id')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink"><option value="">— Suelto —</option>{planes.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
-      )}
       <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
-    </form>
-  )
-}
-
-function FormPlan({ onGuardar, onCancelar, valoresIniciales }) {
-  const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
-  const [dias, setDias] = useState(valoresIniciales?.dias_semana || [])
-  const [ejercicios, setEjercicios] = useState(valoresIniciales?.ejercicios || [{ ejercicio: 'Sentadilla', series: 4, reps: 8 }])
-  function toggleDia(id) { setDias((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id])) }
-  function actualizarEjercicio(i, campo, valor) { setEjercicios((ejs) => ejs.map((e, idx) => (idx === i ? { ...e, [campo]: valor } : e))) }
-  function agregarEjercicio() { setEjercicios((ejs) => [...ejs, { ejercicio: 'Sentadilla', series: 3, reps: 10 }]) }
-  function quitarEjercicio(i) { setEjercicios((ejs) => ejs.filter((_, idx) => idx !== i)) }
-  return (
-    <form className="card flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ nombre, dias_semana: dias, ejercicios }) }}>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre de la rutina</span><input value={nombre} onChange={(e) => setNombre(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <div>
-        <span className="text-ink-muted text-xs">Días de la semana</span>
-        <div className="flex gap-1.5 mt-1.5">
-          {DIAS_SEMANA.map((d) => (
-            <button key={d.id} type="button" onClick={() => toggleDia(d.id)} className={`flex-1 text-center py-1.5 rounded-md text-xs border ${dias.includes(d.id) ? 'bg-hiviz text-asphalt-950 border-hiviz font-semibold' : 'border-asphalt-700 text-ink-muted'}`}>{d.label}</button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <span className="text-ink-muted text-xs">Ejercicios</span>
-        <div className="flex flex-col gap-2 mt-1.5">
-          {ejercicios.map((ej, i) => (
-            <div key={i} className="grid grid-cols-4 gap-2 items-end">
-              <select value={ej.ejercicio} onChange={(e) => actualizarEjercicio(i, 'ejercicio', e.target.value)} className="col-span-2 bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm">
-                {EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}
-              </select>
-              <input type="number" value={ej.series} onChange={(e) => actualizarEjercicio(i, 'series', e.target.value)} placeholder="Series" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
-              <div className="flex gap-1">
-                <input type="number" value={ej.reps} onChange={(e) => actualizarEjercicio(i, 'reps', e.target.value)} placeholder="Reps" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm w-full" />
-                <button type="button" onClick={() => quitarEjercicio(i)} className="text-alert-red text-xs px-2">✕</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button type="button" onClick={agregarEjercicio} className="text-hiviz text-xs mt-2">+ Agregar ejercicio</button>
-      </div>
-      <div className="flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar rutina</button></div>
     </form>
   )
 }
@@ -403,6 +445,123 @@ function FormObjetivo({ onGuardar, onCancelar, ejercicios }) {
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso objetivo (kg)</span><input type="number" {...campo('valor_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Fecha límite</span><input type="date" {...campo('fecha_limite')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
+    </form>
+  )
+}
+
+function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
+  const esEdicion = !!valoresIniciales
+  const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
+  const [fechaInicio, setFechaInicio] = useState(valoresIniciales?.fecha_inicio || new Date().toISOString().slice(0, 10))
+  const [notas, setNotas] = useState(valoresIniciales?.notas || '')
+  const [semanas, setSemanas] = useState(
+    valoresIniciales?.semanas?.length ? valoresIniciales.semanas : [1, 2, 3, 4].map(crearSemanaVacia)
+  )
+
+  function actualizarDia(semanaIdx, diaId, cambios) {
+    setSemanas((prev) => prev.map((s, i) => (
+      i !== semanaIdx ? s : { ...s, dias: s.dias.map((d) => (d.dia === diaId ? { ...d, ...cambios } : d)) }
+    )))
+  }
+  function actualizarEjercicio(semanaIdx, diaId, ejIdx, cambios) {
+    setSemanas((prev) => prev.map((s, i) => (
+      i !== semanaIdx ? s : {
+        ...s,
+        dias: s.dias.map((d) => (d.dia !== diaId ? d : {
+          ...d,
+          ejercicios: d.ejercicios.map((ej, j) => (j === ejIdx ? { ...ej, ...cambios } : ej))
+        }))
+      }
+    )))
+  }
+  function agregarEjercicio(semanaIdx, diaId) {
+    setSemanas((prev) => prev.map((s, i) => (
+      i !== semanaIdx ? s : {
+        ...s,
+        dias: s.dias.map((d) => (d.dia !== diaId ? d : { ...d, ejercicios: [...d.ejercicios, { ejercicio: 'Sentadilla', series: '', reps: '' }] }))
+      }
+    )))
+  }
+  function quitarEjercicio(semanaIdx, diaId, ejIdx) {
+    setSemanas((prev) => prev.map((s, i) => (
+      i !== semanaIdx ? s : {
+        ...s,
+        dias: s.dias.map((d) => (d.dia !== diaId ? d : { ...d, ejercicios: d.ejercicios.filter((_, j) => j !== ejIdx) }))
+      }
+    )))
+  }
+
+  return (
+    <form className="card flex flex-col gap-3" onSubmit={(e) => {
+      e.preventDefault()
+      const lunes = lunesDeSemana(fechaInicio)
+      const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + 27)
+      onGuardar({
+        nombre,
+        fecha_inicio: lunes.toISOString().slice(0, 10),
+        fecha_fin: fechaFin.toISOString().slice(0, 10),
+        notas,
+        semanas
+      })
+    }}>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre</span>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder="Fuerza base / Hipertrofia" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Semana 1 empieza (lunes más cercano)</span>
+        <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required disabled={esEdicion} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink disabled:opacity-50" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Notas</span>
+        <input value={notas} onChange={(e) => setNotas(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+
+      {esEdicion ? (
+        <p className="text-ink-faint text-xs">Para cambiar el cronograma de ejercicios, borrá este mesociclo y creá uno nuevo.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <span className="label-eyebrow">Cronograma — 4 semanas</span>
+          {semanas.map((semana, si) => (
+            <div key={si} className="border border-asphalt-700 rounded-lg p-2.5">
+              <p className="text-sm font-semibold mb-2">Semana {semana.semana}</p>
+              <div className="flex flex-col gap-2.5">
+                {DIAS_SEMANA.map((diaInfo) => {
+                  const d = semana.dias.find((x) => x.dia === diaInfo.id)
+                  return (
+                    <div key={diaInfo.id} className="flex flex-col gap-1.5">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={!!d.activo} onChange={(e) => actualizarDia(si, diaInfo.id, { activo: e.target.checked })} />
+                        <span className="font-medium w-8">{diaInfo.label}</span>
+                        {d.activo && (
+                          <label className="flex items-center gap-1 text-ink-muted whitespace-nowrap ml-auto">
+                            <input type="checkbox" checked={!!d.es_clave} onChange={(e) => actualizarDia(si, diaInfo.id, { es_clave: e.target.checked })} />
+                            ★ clave
+                          </label>
+                        )}
+                      </label>
+                      {d.activo && (
+                        <div className="pl-9 flex flex-col gap-1.5">
+                          {d.ejercicios.map((ej, ejIdx) => (
+                            <div key={ejIdx} className="flex gap-1.5 items-center">
+                              <select value={ej.ejercicio} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { ejercicio: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
+                                {EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}
+                              </select>
+                              <input type="number" value={ej.series} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { series: e.target.value })} placeholder="Series" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-16" />
+                              <input type="number" value={ej.reps} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { reps: e.target.value })} placeholder="Reps" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-16" />
+                              <button type="button" onClick={() => quitarEjercicio(si, diaInfo.id, ejIdx)} className="text-alert-red text-xs px-1">✕</button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => agregarEjercicio(si, diaInfo.id)} className="text-hiviz text-xs self-start">+ Ejercicio</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
+      </div>
     </form>
   )
 }
