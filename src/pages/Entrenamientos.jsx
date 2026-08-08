@@ -59,6 +59,7 @@ export default function Entrenamientos() {
   const [cargando, setCargando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
+  const [valoresEdicion, setValoresEdicion] = useState(null)
   const [valoresImportados, setValoresImportados] = useState(null)
   const [errorImport, setErrorImport] = useState('')
   const [formPlanOpen, setFormPlanOpen] = useState(false)
@@ -149,10 +150,6 @@ export default function Entrenamientos() {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
-  async function marcarRealizado(id) {
-    await supabase.from('entrenamientos').update({ estado: 'realizado' }).eq('id', id); cargar()
-  }
-
   async function manejarArchivo(e) {
     const file = e.target.files[0]; e.target.value = ''
     if (!file) return
@@ -277,7 +274,7 @@ export default function Entrenamientos() {
                     <div className="flex flex-col gap-2">
                       {items.map((e) =>
                         editandoId === e.id ? (
-                          <FormEntrenamiento key={e.id} bicicletas={bicicletas} planes={planes} valoresIniciales={e} onGuardar={(datos) => actualizar(e.id, datos)} onCancelar={() => setEditandoId(null)} />
+                          <FormEntrenamiento key={e.id} bicicletas={bicicletas} planes={planes} valoresIniciales={valoresEdicion && valoresEdicion.id === e.id ? valoresEdicion : e} onGuardar={(datos) => actualizar(e.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
                         ) : (
                           <div key={e.id} className={`card flex items-center justify-between gap-4 ${e.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
                             <div className="flex items-center gap-2">
@@ -311,12 +308,12 @@ export default function Entrenamientos() {
                               )}
                               <div className="flex gap-1">
                                 {e.estado === 'pendiente' && (
-                                  <button onClick={() => marcarRealizado(e.id)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Marcar hecho</button>
+                                  <button onClick={() => { setMostrarForm(false); setValoresEdicion({ ...e, estado: 'realizado' }); setEditandoId(e.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar datos</button>
                                 )}
                                 {e.estado === 'realizado' && (
                                   <button onClick={() => exportarGPX(e)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">GPX</button>
                                 )}
-                                <button onClick={() => { setMostrarForm(false); setEditandoId(e.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                                <button onClick={() => { setMostrarForm(false); setValoresEdicion(null); setEditandoId(e.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
                                 <button onClick={() => { if (confirm('¿Borrar este entrenamiento?')) eliminar(e.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                               </div>
                             </div>
