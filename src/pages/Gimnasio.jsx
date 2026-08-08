@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { SkeletonList } from '../components/Skeleton'
 
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
 const DIAS_SEMANA = [
@@ -35,6 +36,7 @@ export default function Gimnasio() {
   const [formPlanOpen, setFormPlanOpen] = useState(false)
   const [planEditando, setPlanEditando] = useState(null)
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
+  const [cargando, setCargando] = useState(true)
 
   async function cargar() {
     const [{ data: s }, { data: p }, { data: objs }] = await Promise.all([
@@ -43,6 +45,7 @@ export default function Gimnasio() {
       supabase.from('objetivos').select('*').eq('categoria', 'gimnasio').order('created_at', { ascending: false })
     ])
     setSesiones(s || []); setPlanes(p || []); setObjetivos(objs || [])
+    setCargando(false)
   }
   useEffect(() => { cargar() }, [])
 
@@ -80,6 +83,11 @@ export default function Gimnasio() {
     const { data } = await supabase.from('gimnasio').insert(nuevos).select()
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); setVista('registro'); cargar()
+  }
+  async function marcarRealizado(id) {
+    await supabase.from('gimnasio').update({ estado: 'realizado' }).eq('id', id)
+    const nuevaLista = sesiones.map((s) => (s.id === id ? { ...s, estado: 'realizado' } : s))
+    await sincronizarPRs(nuevaLista); cargar()
   }
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
@@ -145,7 +153,9 @@ export default function Gimnasio() {
           </div>
           {formOpen && <FormGimnasio planes={planes} onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
 
-          {porDia.length === 0 ? (
+          {cargando ? (
+            <SkeletonList rows={4} />
+          ) : porDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin sesiones registradas todavía.</p>
           ) : (
             <div className="flex flex-col gap-5">
