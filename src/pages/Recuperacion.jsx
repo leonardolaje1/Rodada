@@ -56,13 +56,14 @@ export default function Recuperacion() {
   const [periodoDias, setPeriodoDias] = useState(30)
   const [formLesionOpen, setFormLesionOpen] = useState(false)
   const hoy = new Date().toISOString().slice(0, 10)
-  const entradaHoy = registros.find((r) => r.fecha === hoy)
-  const [form, setForm] = useState({
-    fecha: hoy, sueño_horas: '', sueño_score: '', calidad_sueño: 3,
+  const valoresVacios = {
+    sueño_horas: '', sueño_score: '', calidad_sueño: 3,
     estres_score: '', body_battery_manana: '', body_battery_noche: '',
     hrv: '', hrv_estado: '', fc_reposo: '', spo2: '', respiracion_rpm: '',
     dolor_muscular: 2, fatiga: 2, estres: 2
-  })
+  }
+  const [form, setForm] = useState({ fecha: hoy, ...valoresVacios })
+  const entradaExistente = registros.find((r) => r.fecha === form.fecha)
 
   async function cargar() {
     const [{ data }, { data: les }] = await Promise.all([
@@ -71,20 +72,37 @@ export default function Recuperacion() {
     ])
     setRegistros(data || [])
     setLesiones(les || [])
-    const hoyData = (data || []).find((r) => r.fecha === hoy)
-    if (hoyData) setForm(hoyData)
+  }
+
+  function cambiarFecha(nuevaFecha) {
+    const existente = registros.find((r) => r.fecha === nuevaFecha)
+    setForm(existente ? { ...valoresVacios, ...existente } : { fecha: nuevaFecha, ...valoresVacios })
+  }
+
+  function editarRegistro(r) {
+    setForm({ ...valoresVacios, ...r })
+    window.scrollTo({ top: document.body.scrollHeight * 0.35, behavior: 'smooth' })
+  }
+
+  async function eliminarRegistro(fecha) {
+    if (!confirm(`¿Borrar el registro de recuperación del ${fecha}?`)) return
+    const { data: userData } = await supabase.auth.getUser()
+    const { error } = await supabase.from('metricas_diarias').delete().eq('user_id', userData.user.id).eq('fecha', fecha)
+    if (error) { alert('No se pudo borrar: ' + error.message); return }
+    if (form.fecha === fecha) setForm({ fecha: hoy, ...valoresVacios })
+    cargar()
   }
 
   useEffect(() => { cargar() }, [])
 
-    async function guardar() {
+  async function guardar() {
     const camposNumericos = [
       'sueño_horas', 'sueño_score', 'estres_score', 'body_battery_manana', 'body_battery_noche',
       'hrv', 'fc_reposo', 'spo2', 'respiracion_rpm', 'calidad_sueño', 'dolor_muscular', 'fatiga', 'estres'
     ]
     const payload = { ...form }
-    for (const campo of camposNumericos) {
-      if (payload[campo] === '') payload[campo] = null
+    for (const c of camposNumericos) {
+      if (payload[c] === '') payload[c] = null
     }
 
     const { data: userData } = await supabase.auth.getUser()
@@ -110,7 +128,7 @@ export default function Recuperacion() {
   }
 
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
-  const { color, texto } = estadoRecuperacion(entradaHoy || form)
+  const { color, texto } = estadoRecuperacion(entradaExistente || form)
 
   const fechaLimite = new Date()
   fechaLimite.setDate(fechaLimite.getDate() - periodoDias)
@@ -139,7 +157,7 @@ export default function Recuperacion() {
       </div>
 
       <div className="card" style={{ borderColor: color }}>
-        <span className="label-eyebrow">Hoy</span>
+        <span className="label-eyebrow">{form.fecha === hoy ? 'Hoy' : form.fecha}</span>
         <p className="text-sm font-semibold mt-1.5" style={{ color }}>{texto}</p>
       </div>
 
@@ -226,6 +244,18 @@ export default function Recuperacion() {
       </div>
 
       <form className="card flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); guardar() }}>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink-muted text-xs">Fecha del registro</span>
+          <input
+            type="date"
+            value={form.fecha}
+            max={hoy}
+            onChange={(e) => cambiarFecha(e.target.value)}
+            className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink"
+          />
+          {entradaExistente && <span className="text-ink-faint text-xs mt-1">Ya existe un registro para este día — al guardar lo vas a actualizar.</span>}
+        </label>
+
         <div>
           <span className="label-eyebrow">Datos de wearable (Garmin, Whoop, etc.)</span>
           <p className="text-ink-faint text-xs mt-0.5 mb-3">Cuando conectemos Garmin Connect, estos campos se van a completar solos.</p>
@@ -263,7 +293,7 @@ export default function Recuperacion() {
 
         <div className="flex justify-end">
           <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">
-            {entradaHoy ? 'Actualizar' : 'Guardar'}
+            {entradaExistente ? 'Actualizar' : 'Guardar'}
           </button>
         </div>
       </form>
@@ -274,11 +304,17 @@ export default function Recuperacion() {
             const est = estadoRecuperacion(r)
             return (
               <div key={r.fecha} className="card flex justify-between items-center py-2.5">
-                <span className="text-sm">{r.fecha}</span>
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: est.color }} />
+                  <span className="text-sm">{r.fecha}</span>
+                </div>
                 <div className="flex gap-2.5 items-center">
                   {r.body_battery_manana != null && <span className="text-ink-muted text-xs">BB {r.body_battery_manana}</span>}
                   <span className="text-ink-muted text-xs">{r.sueño_horas || '—'}h sueño</span>
-                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: est.color }} />
+                  <div className="flex gap-1">
+                    <button onClick={() => editarRegistro(r)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                    <button onClick={() => eliminarRegistro(r.fecha)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                  </div>
                 </div>
               </div>
             )
