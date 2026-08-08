@@ -56,7 +56,7 @@ export default function Layout() {
           onClick={alternarTema}
           className="mt-6 text-ink-muted text-sm px-3 py-2 text-left hover:text-ink flex items-center gap-2"
         >
-          <span aria-hidden>{tema === 'dark' ? '☀' : '☾'}</span>
+          <span aria-hidden>{tema === 'dark' ? '◐' : '◑'}</span>
           {tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}
         </button>
         <button
@@ -71,7 +71,7 @@ export default function Layout() {
         <span className="font-display font-bold text-lg text-hiviz">bikeiq</span>
         <div className="flex items-center gap-3">
           <button onClick={alternarTema} className="text-ink-muted text-xs" aria-label="Cambiar tema">
-            {tema === 'dark' ? '☀' : '☾'}
+            {tema === 'dark' ? '◐' : '◑'}
           </button>
           <button onClick={() => supabase.auth.signOut()} className="text-ink-muted text-xs">
             Salir
