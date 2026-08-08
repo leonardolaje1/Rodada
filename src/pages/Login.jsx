@@ -3,8 +3,11 @@ import { supabase } from '../lib/supabaseClient'
 
 export default function Login() {
   const [modo, setModo] = useState('ingresar')
+  const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mostrarPassword, setMostrarPassword] = useState(false)
   const [error, setError] = useState('')
   const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -19,7 +22,11 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(traducirError(error.message))
     } else if (modo === 'registrarse') {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { nombre, apellido } }
+      })
       if (error) {
         setError(traducirError(error.message))
       } else {
@@ -79,6 +86,33 @@ export default function Login() {
         )}
 
         <form onSubmit={manejarSubmit} className="flex flex-col gap-3">
+          {modo === 'registrarse' && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-ink-muted text-xs">Nombre</span>
+                <input
+                  type="text"
+                  required
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="bg-asphalt-800 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+                  placeholder="Tu nombre"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-ink-muted text-xs">Apellido</span>
+                <input
+                  type="text"
+                  required
+                  value={apellido}
+                  onChange={(e) => setApellido(e.target.value)}
+                  className="bg-asphalt-800 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+                  placeholder="Tu apellido"
+                />
+              </label>
+            </div>
+          )}
+
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-ink-muted text-xs">Email</span>
             <input
@@ -94,15 +128,26 @@ export default function Login() {
           {modo !== 'recuperar' && (
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-ink-muted text-xs">Contraseña</span>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="bg-asphalt-800 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
-                placeholder="Mínimo 6 caracteres"
-              />
+              <div className="relative">
+                <input
+                  type={mostrarPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-asphalt-800 border border-asphalt-700 rounded-lg px-3 py-2 pr-10 text-ink focus:border-hiviz outline-none w-full"
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarPassword((v) => !v)}
+                  className="absolute right-0 top-0 bottom-0 px-3 text-ink-muted text-xs"
+                  tabIndex={-1}
+                  aria-label={mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {mostrarPassword ? 'Ocultar' : 'Ver'}
+                </button>
+              </div>
             </label>
           )}
 
