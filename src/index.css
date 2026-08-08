@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-asphalt-900: 20 22 26;
+  --color-asphalt-800: 28 31 38;
+  --color-asphalt-700: 38 42 51;
+  --color-asphalt-600: 52 57 70;
+  --color-hiviz: 196 241 53;
+  --color-hiviz-dim: 143 174 42;
+  --color-route: 74 158 255;
+  --color-route-dim: 46 107 179;
+  --color-alert-amber: 245 166 35;
+  --color-alert-red: 241 74 74;
+  --color-ink: 232 233 237;
+  --color-ink-muted: 138 143 156;
+  --color-ink-faint: 86 91 104;
+}
+
+.light {
+  --color-asphalt-900: 244 245 247;
+  --color-asphalt-800: 255 255 255;
+  --color-asphalt-700: 225 228 233;
+  --color-asphalt-600: 203 208 216;
+  --color-hiviz: 92 120 24;
+  --color-hiviz-dim: 74 96 19;
+  --color-route: 46 107 179;
+  --color-route-dim: 31 74 125;
+  --color-alert-amber: 181 120 15;
+  --color-alert-red: 217 54 54;
+  --color-ink: 20 22 26;
+  --color-ink-muted: 91 98 112;
+  --color-ink-faint: 139 146 160;
+}
+
 @layer base {
   html {
     @apply bg-asphalt-900 text-ink;
