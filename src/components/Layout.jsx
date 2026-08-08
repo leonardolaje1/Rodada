@@ -10,7 +10,7 @@ const NAV = [
   { to: '/', label: 'Panel', Icon: Gauge, end: true },
   { to: '/calendario', label: 'Calendario', Icon: Calendar },
   { to: '/entrenamientos', label: 'Entrenamientos', Icon: Activity },
-  { to: '/bicicletas', label: 'Bicis', Icon: Bike },
+  { to: '/bicicletas', label: 'Bicicletas', Icon: Bike },
   { to: '/nutricion', label: 'Nutrición', Icon: Apple },
   { to: '/recuperacion', label: 'Recuperación', Icon: Moon },
   { to: '/competencias', label: 'Competencias', Icon: Trophy },
