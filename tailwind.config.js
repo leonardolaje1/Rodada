@@ -1,32 +1,33 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: ['selector'],
   theme: {
     extend: {
       colors: {
         asphalt: {
           950: '#0D0F13',
-          900: '#14161A',
-          800: '#1C1F26',
-          700: '#262A33',
-          600: '#343946'
+          900: 'rgb(var(--color-asphalt-900) / <alpha-value>)',
+          800: 'rgb(var(--color-asphalt-800) / <alpha-value>)',
+          700: 'rgb(var(--color-asphalt-700) / <alpha-value>)',
+          600: 'rgb(var(--color-asphalt-600) / <alpha-value>)'
         },
         hiviz: {
-          DEFAULT: '#C4F135',
-          dim: '#8FAE2A'
+          DEFAULT: 'rgb(var(--color-hiviz) / <alpha-value>)',
+          dim: 'rgb(var(--color-hiviz-dim) / <alpha-value>)'
         },
         route: {
-          DEFAULT: '#4A9EFF',
-          dim: '#2E6BB3'
+          DEFAULT: 'rgb(var(--color-route) / <alpha-value>)',
+          dim: 'rgb(var(--color-route-dim) / <alpha-value>)'
         },
         alert: {
-          amber: '#F5A623',
-          red: '#F14A4A'
+          amber: 'rgb(var(--color-alert-amber) / <alpha-value>)',
+          red: 'rgb(var(--color-alert-red) / <alpha-value>)'
         },
         ink: {
-          DEFAULT: '#E8E9ED',
-          muted: '#8A8F9C',
-          faint: '#565B68'
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          muted: 'rgb(var(--color-ink-muted) / <alpha-value>)',
+          faint: 'rgb(var(--color-ink-faint) / <alpha-value>)'
         }
       },
       fontFamily: {
