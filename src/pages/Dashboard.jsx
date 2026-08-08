@@ -5,6 +5,7 @@ import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../li
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
+import Skeleton, { SkeletonStatGrid, SkeletonList } from '../components/Skeleton'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 function direccionViento(grados) {
@@ -174,8 +175,19 @@ export default function Dashboard() {
 
   const alertasMantenimiento = [...alertasDesgaste, ...alertasComponentes].sort((a, b) => b.pct - a.pct)
 
-  if (cargando) {
-    return <p className="text-ink-muted text-sm">Cargando panel…</p>
+    if (cargando) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Skeleton className="h-7 w-24 mb-2" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <SkeletonStatGrid count={4} />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <SkeletonList rows={2} />
+      </div>
+    )
   }
 
   return (
