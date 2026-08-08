@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import {
+  Gauge, Calendar, Activity, Bike, Apple, Moon, Trophy, Dumbbell,
+  LineChart, Users, FileText, Settings
+} from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 
 const NAV = [
-  { to: '/', label: 'Panel', icon: '◆', end: true },
-  { to: '/calendario', label: 'Calendario', icon: '▦' },
-  { to: '/entrenamientos', label: 'Entrenamientos', icon: '⟢' },
-  { to: '/bicicletas', label: 'Bicis', icon: '⊙' },
-  { to: '/nutricion', label: 'Nutrición', icon: '◈' },
-  { to: '/recuperacion', label: 'Recuperación', icon: '☾' },
-  { to: '/competencias', label: 'Competencias', icon: '▲' },
-  { to: '/gimnasio', label: 'Gimnasio', icon: '⬢' },
-  { to: '/analitica', label: 'Análisis', icon: '∿' },
-  { to: '/equipo', label: 'Equipo', icon: '⚯' },
-  { to: '/reportes', label: 'Reportes', icon: '▤' },
-  { to: '/configuracion', label: 'Configuración', icon: '✦' }
+  { to: '/', label: 'Panel', Icon: Gauge, end: true },
+  { to: '/calendario', label: 'Calendario', Icon: Calendar },
+  { to: '/entrenamientos', label: 'Entrenamientos', Icon: Activity },
+  { to: '/bicicletas', label: 'Bicis', Icon: Bike },
+  { to: '/nutricion', label: 'Nutrición', Icon: Apple },
+  { to: '/recuperacion', label: 'Recuperación', Icon: Moon },
+  { to: '/competencias', label: 'Competencias', Icon: Trophy },
+  { to: '/gimnasio', label: 'Gimnasio', Icon: Dumbbell },
+  { to: '/analitica', label: 'Análisis', Icon: LineChart },
+  { to: '/equipo', label: 'Equipo', Icon: Users },
+  { to: '/reportes', label: 'Reportes', Icon: FileText },
+  { to: '/configuracion', label: 'Configuración', Icon: Settings }
 ]
 
 export default function Layout() {
@@ -95,7 +99,7 @@ export default function Layout() {
   )
 }
 
-function NavItem({ to, label, icon, end, mobile, badge }) {
+function NavItem({ to, label, Icon, end, mobile, badge }) {
   return (
     <NavLink
       to={to}
@@ -112,8 +116,8 @@ function NavItem({ to, label, icon, end, mobile, badge }) {
             }`
       }
     >
-      <span aria-hidden className="relative">
-        {icon}
+      <span className="relative inline-flex">
+        <Icon size={mobile ? 20 : 18} strokeWidth={2} aria-hidden />
         {badge > 0 && (
           <i className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-alert-red inline-block" />
         )}
