@@ -47,7 +47,7 @@ export default function Layout() {
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col w-56 border-r border-asphalt-700 p-5 gap-1 overflow-y-auto">
         <div className="mb-8">
-          <span className="font-display font-bold text-xl text-hiviz">bikeiq</span>
+          <span className="font-display font-bold text-xl text-hiviz">HELU</span>
         </div>
         {NAV.map((item) => (
           <NavItem key={item.to} {...item} badge={item.to === '/equipo' ? pendientes : 0} />
@@ -68,7 +68,7 @@ export default function Layout() {
       </aside>
 
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-asphalt-700">
-        <span className="font-display font-bold text-lg text-hiviz">bikeiq</span>
+        <span className="font-display font-bold text-lg text-hiviz">HELU</span>
         <div className="flex items-center gap-3">
           <button onClick={alternarTema} className="text-ink-muted text-xs" aria-label="Cambiar tema">
             {tema === 'dark' ? '◐' : '◑'}
