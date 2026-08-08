@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         asphalt: {
-          950: '#0D0F13',
+          950: '#0F0F0F',
           900: 'rgb(var(--color-asphalt-900) / <alpha-value>)',
           800: 'rgb(var(--color-asphalt-800) / <alpha-value>)',
           700: 'rgb(var(--color-asphalt-700) / <alpha-value>)',
@@ -31,7 +31,7 @@ export default {
         }
       },
       fontFamily: {
-        display: ['"Space Grotesk"', 'sans-serif'],
+        display: ['"Jost"', 'sans-serif'],
         body: ['"Inter"', 'sans-serif'],
         data: ['"JetBrains Mono"', 'monospace']
       }
