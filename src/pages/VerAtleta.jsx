@@ -23,6 +23,7 @@ function calcularBMR({ peso, altura, edad, sexo }) {
   return sexo === 'F' ? 10 * p + 6.25 * a - 5 * e - 161 : 10 * p + 6.25 * a - 5 * e + 5
 }
 
+const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' },
   { id: 'mar', label: 'Mar' },
@@ -56,6 +57,9 @@ export default function VerAtleta() {
   const [tipoComparar, setTipoComparar] = useState('')
   const [perfilNutri, setPerfilNutri] = useState(null)
   const [editandoPerfil, setEditandoPerfil] = useState(false)
+  const [planesNutricion, setPlanesNutricion] = useState([])
+  const [formPlanNutriOpen, setFormPlanNutriOpen] = useState(false)
+  const [planNutriEditando, setPlanNutriEditando] = useState(null)
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
@@ -99,6 +103,8 @@ export default function VerAtleta() {
       setComidas(cms || [])
       const { data: perfil } = await supabase.from('perfil_nutricional').select('*').eq('user_id', atletaId).maybeSingle()
       setPerfilNutri(perfil || { peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
+      const { data: planesNutri } = await supabase.from('planes_nutricion').select('*').eq('user_id', atletaId).eq('activo', true).order('created_at', { ascending: true })
+      setPlanesNutricion(planesNutri || [])
     }
     setCargando(false)
   }
@@ -148,6 +154,24 @@ export default function VerAtleta() {
     const { error } = await supabase.from('perfil_nutricional').upsert({ ...datos, user_id: atletaId })
     if (error) { alert('No se pudo guardar: ' + error.message); return }
     setEditandoPerfil(false)
+    cargar()
+  }
+
+  async function crearPlanNutricion(form) {
+    const { error } = await supabase.from('planes_nutricion').insert({ ...form, user_id: atletaId })
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setFormPlanNutriOpen(false)
+    cargar()
+  }
+  async function actualizarPlanNutricion(id, form) {
+    const { error } = await supabase.from('planes_nutricion').update(form).eq('id', id)
+    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    setPlanNutriEditando(null)
+    cargar()
+  }
+  async function borrarPlanNutricion(id) {
+    if (!confirm('¿Borrar este plan de comidas?')) return
+    await supabase.from('planes_nutricion').update({ activo: false }).eq('id', id)
     cargar()
   }
 
@@ -203,9 +227,13 @@ export default function VerAtleta() {
         <p className="text-ink-muted text-sm mt-1">Sos su {rol} · últimos 30 días</p>
       </div>
 
-      {esEntrenador && (
+      {(esEntrenador || esNutricionista) && (
         <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-          {[['resumen', 'Resumen'], ['planes-entreno', 'Planes de entrenamiento'], ['planes-gym', 'Rutinas de gimnasio']].map(([id, label]) => (
+          {[
+            ['resumen', 'Resumen'],
+            ...(esEntrenador ? [['planes-entreno', 'Planes de entrenamiento'], ['planes-gym', 'Rutinas de gimnasio']] : []),
+            ...(esNutricionista ? [['planes-nutricion', 'Planes de nutrición']] : [])
+          ].map(([id, label]) => (
             <button
               key={id}
               onClick={() => setSeccion(id)}
@@ -506,6 +534,59 @@ export default function VerAtleta() {
           )}
         </div>
       )}
+
+      {seccion === 'planes-nutricion' && esNutricionista && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">Planes de nutrición</h2>
+            <button
+              onClick={() => { setPlanNutriEditando(null); setFormPlanNutriOpen((v) => !v) }}
+              className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg"
+            >
+              + Plan
+            </button>
+          </div>
+
+          {formPlanNutriOpen && (
+            <FormPlanNutricion onGuardar={crearPlanNutricion} onCancelar={() => setFormPlanNutriOpen(false)} />
+          )}
+
+          {planesNutricion.length === 0 ? (
+            <p className="text-ink-muted text-sm">Todavía no le asignaste ningún plan de comidas.</p>
+          ) : (
+            <div className="flex flex-col gap-3 mt-2">
+              {planesNutricion.map((p) =>
+                planNutriEditando === p.id ? (
+                  <FormPlanNutricion
+                    key={p.id}
+                    valoresIniciales={p}
+                    onGuardar={(datos) => actualizarPlanNutricion(p.id, datos)}
+                    onCancelar={() => setPlanNutriEditando(null)}
+                  />
+                ) : (
+                  <div key={p.id} className="card">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-sm">{p.nombre}</p>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setFormPlanNutriOpen(false); setPlanNutriEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                        <button onClick={() => borrarPlanNutricion(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 mt-2.5">
+                      {(p.comidas || []).map((c, i) => (
+                        <p key={i} className="text-ink-muted text-xs">
+                          <span className="text-ink font-medium">{c.momento}</span>{c.nombre ? ` — ${c.nombre}` : ''}
+                          {c.kcal_objetivo ? ` · ${c.kcal_objetivo} kcal` : ''}{c.proteinas_objetivo ? ` · ${c.proteinas_objetivo}g prot` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -755,6 +836,66 @@ function FormPerfilNutri({ onGuardar, onCancelar, valoresIniciales }) {
       <div className="col-span-2 flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
+      </div>
+    </form>
+  )
+}
+
+function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
+  const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
+  const [comidas, setComidas] = useState(
+    valoresIniciales?.comidas?.length ? valoresIniciales.comidas : [{ momento: 'Desayuno', nombre: '', kcal_objetivo: '', proteinas_objetivo: '' }]
+  )
+  function actualizarComida(i, campo, valor) { setComidas((cs) => cs.map((c, idx) => (idx === i ? { ...c, [campo]: valor } : c))) }
+  function agregarComida() { setComidas((cs) => [...cs, { momento: 'Desayuno', nombre: '', kcal_objetivo: '', proteinas_objetivo: '' }]) }
+  function quitarComida(i) { setComidas((cs) => cs.filter((_, idx) => idx !== i)) }
+
+  return (
+    <form
+      className="card flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const comidasLimpias = comidas.map((c) => ({
+          momento: c.momento, nombre: c.nombre,
+          kcal_objetivo: c.kcal_objetivo === '' ? null : Number(c.kcal_objetivo),
+          proteinas_objetivo: c.proteinas_objetivo === '' ? null : Number(c.proteinas_objetivo)
+        }))
+        onGuardar({ nombre, comidas: comidasLimpias })
+      }}
+    >
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Nombre del plan</span>
+        <input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          required
+          placeholder="Plan de volumen / Plan pre-competencia"
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink"
+        />
+      </label>
+
+      <div className="flex flex-col gap-2.5">
+        {comidas.map((c, i) => (
+          <div key={i} className="border border-asphalt-700 rounded-lg p-2.5 flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              <select value={c.momento} onChange={(e) => actualizarComida(i, 'momento', e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm">
+                {TIPOS_COMIDA.map((t) => <option key={t}>{t}</option>)}
+              </select>
+              <input value={c.nombre} onChange={(e) => actualizarComida(i, 'nombre', e.target.value)} placeholder="Avena con banana y whey" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 items-center">
+              <input type="number" value={c.kcal_objetivo} onChange={(e) => actualizarComida(i, 'kcal_objetivo', e.target.value)} placeholder="Kcal objetivo" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
+              <input type="number" value={c.proteinas_objetivo} onChange={(e) => actualizarComida(i, 'proteinas_objetivo', e.target.value)} placeholder="Prot objetivo (g)" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
+              <button type="button" onClick={() => quitarComida(i)} className="text-alert-red text-xs">Quitar</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={agregarComida} className="text-hiviz text-xs self-start">+ Agregar comida</button>
+
+      <div className="flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar plan</button>
       </div>
     </form>
   )
