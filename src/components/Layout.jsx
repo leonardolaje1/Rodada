@@ -79,11 +79,14 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8">
+      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t border-asphalt-700 bg-asphalt-900 flex overflow-x-auto">
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 border-t border-asphalt-700 bg-asphalt-900 flex overflow-x-auto"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         {NAV.map((item) => (
           <NavItem key={item.to} {...item} mobile badge={item.to === '/equipo' ? pendientes : 0} />
         ))}
