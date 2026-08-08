@@ -1,126 +1,325 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../lib/tss'
+import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
+import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
+import Skeleton, { SkeletonStatGrid, SkeletonList } from '../components/Skeleton'
 
-function StatCard({ label, value, unit, accent }) {
-  return (
-    <div className="bg-[#19191D] border border-[#242429] rounded-[16px] p-5">
-      <p className="text-[11px] tracking-[0.14em] text-[#8A8A93] uppercase">{label}</p>
-      <div className="flex items-baseline gap-2 mt-3">
-        <span className="text-[32px] font-bold leading-none tracking-tight" style={{ color: accent || 'white' }}>
-          {value}
-        </span>
-        {unit && <span className="text-[13px] text-[#8A8A93]">{unit}</span>}
-      </div>
-    </div>
-  )
+const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
+function direccionViento(grados) {
+  return DIRECCIONES[Math.round(grados / 45) % 8]
+}
+
+const DIAS_ADHERENCIA = 14
+const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
+
+function diaIdDe(fecha) {
+  return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()]
 }
 
 export default function Dashboard() {
   const [entrenamientos, setEntrenamientos] = useState([])
   const [bicicletas, setBicicletas] = useState([])
+  const [planesEntreno, setPlanesEntreno] = useState([])
+  const [planesGym, setPlanesGym] = useState([])
+  const [gimnasio, setGimnasio] = useState([])
   const [cargando, setCargando] = useState(true)
-  const [clima] = useState({ temp: 7, viento: 3, direccion: 'E' })
-
-  const hoyStr = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const desde90Str = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() - 90)
-    return d.toISOString().slice(0, 10)
-  }, [])
+  const [clima, setClima] = useState(null)
+  const [climaError, setClimaError] = useState(false)
+  const [proximaCompetencia, setProximaCompetencia] = useState(null)
+  const [componentes, setComponentes] = useState([])
+  const [desgaste, setDesgaste] = useState([])
+  const [mostrarExplicacion, setMostrarExplicacion] = useState(false)
 
   useEffect(() => {
     async function cargar() {
-      const [{ data: ents }, { data: bicis }] = await Promise.all([
-        supabase.from('entrenamientos').select('*').gte('fecha', desde90Str).order('fecha', { ascending: true }),
+      const desde90 = new Date()
+      desde90.setDate(desde90.getDate() - 90)
+      const desde14 = new Date()
+      desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
+
+      const hoyStr = new Date().toISOString().slice(0, 10)
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }] = await Promise.all([
+        supabase
+          .from('entrenamientos')
+          .select('*')
+          .gte('fecha', desde90.toISOString().slice(0, 10))
+          .order('fecha', { ascending: true }),
         supabase.from('bicicletas').select('*'),
+        supabase.from('planes_entrenamiento').select('*').eq('activo', true),
+        supabase.from('planes_gimnasio').select('*').eq('activo', true),
+        supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10)),
+        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1),
+        supabase.from('componentes').select('*'),
+        supabase.from('desgaste_componentes').select('*')
       ])
+
       setEntrenamientos(ents || [])
       setBicicletas(bicis || [])
+      setPlanesEntreno(plsE || [])
+      setPlanesGym(plsG || [])
+      setGimnasio(gym || [])
+      setProximaCompetencia((comps && comps[0]) || null)
+      setComponentes(componentesData || [])
+      setDesgaste(desgasteData || [])
       setCargando(false)
     }
     cargar()
-  }, [desde90Str])
-
-  const serie = useMemo(() => {
-    return calcularCargaDiaria(construirSerieDiaria(entrenamientos, desde90Str, hoyStr))
-  }, [entrenamientos, desde90Str, hoyStr])
-
-  const ultimo = serie[serie.length - 1] || { ctl: 0, atl: 0, tsb: 0 }
-  const forma = useMemo(() => interpretarTSB(ultimo.tsb), [ultimo.tsb])
-
-  const inicioSemana = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() - d.getDay())
-    return d.toISOString().slice(0,10)
   }, [])
 
-  const statsSemana = useMemo(() => {
-    const sem = entrenamientos.filter(e => (e.fecha?.slice(0,10) || '') >= inicioSemana)
-    const km = sem.reduce((a,e) => a + (e.km || 0), 0)
-    const horas = sem.reduce((a,e) => a + (e.duracion_min || 0), 0) / 60
-    return { km: km.toFixed(0), horas: horas.toFixed(1) }
-  }, [entrenamientos, inicioSemana])
+  useEffect(() => {
+    if (!navigator.geolocation) { setClimaError(true); return }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m`
+          )
+          const data = await res.json()
+          if (data.current) {
+            setClima({
+              temp: Math.round(data.current.temperature_2m),
+              viento: Math.round(data.current.wind_speed_10m),
+              direccion: direccionViento(data.current.wind_direction_10m)
+            })
+          } else {
+            setClimaError(true)
+          }
+        } catch {
+          setClimaError(true)
+        }
+      },
+      () => setClimaError(true)
+    )
+  }, [])
 
-  if (cargando) return <div className="p-8 bg-[#0A0A0C] min-h-screen text-white">Cargando...</div>
+  const hoy = new Date().toISOString().slice(0, 10)
+  const desde90 = new Date()
+  desde90.setDate(desde90.getDate() - 90)
+
+  const serie = calcularCargaDiaria(
+    construirSerieDiaria(entrenamientos, desde90.toISOString().slice(0, 10), hoy)
+  )
+  const ultimo = serie[serie.length - 1] || { ctl: 0, atl: 0, tsb: 0 }
+  const forma = interpretarTSB(ultimo.tsb)
+
+  const inicioSemana = new Date()
+  inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
+  const entrenosSemana = entrenamientos.filter((e) => e.fecha >= inicioSemana.toISOString().slice(0, 10))
+  const kmSemana = entrenosSemana.reduce((acc, e) => acc + (e.km || 0), 0)
+  const horasSemana = entrenosSemana.reduce((acc, e) => acc + (e.duracion_min || 0), 0) / 60
+
+  // --- Adherencia al plan (últimos 14 días) ---
+  const diasEvaluados = []
+  const cursor = new Date()
+  cursor.setDate(cursor.getDate() - (DIAS_ADHERENCIA - 1))
+  for (let i = 0; i < DIAS_ADHERENCIA; i++) {
+    diasEvaluados.push(cursor.toISOString().slice(0, 10))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  let diasEsperadosEntreno = 0
+  let diasCumplidosEntreno = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesEntreno.some((p) => (p.sesiones || []).some((s) => s.dia === diaId && s.tipo !== 'Descanso'))
+    if (!seEspera) continue
+    diasEsperadosEntreno++
+    const hecho = entrenamientos.some((e) => e.fecha === fecha && e.estado === 'realizado')
+    if (hecho) diasCumplidosEntreno++
+  }
+
+  let diasEsperadosGym = 0
+  let diasCumplidosGym = 0
+  for (const fecha of diasEvaluados) {
+    const diaId = diaIdDe(fecha)
+    const seEspera = planesGym.some((p) => (p.dias_semana || []).includes(diaId))
+    if (!seEspera) continue
+    diasEsperadosGym++
+    const hecho = gimnasio.some((g) => g.fecha === fecha)
+    if (hecho) diasCumplidosGym++
+  }
+
+  const diasEsperadosTotal = diasEsperadosEntreno + diasEsperadosGym
+  const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
+  const tieneAlgunPlan = planesEntreno.length > 0 || planesGym.length > 0
+  const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
+
+  const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
+
+  const nombreBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.nombre || 'Bici'
+  const kmBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.km_totales || 0
+
+  const alertasDesgaste = desgaste
+    .map((item) => {
+      const wt = WEAR_TYPES.find((w) => w.id === item.tipo)
+      if (!wt) return null
+      const est = estadoDesgaste(item, wt, kmBiciPorId(item.bicicleta_id))
+      if (est.nivel === 'ok') return null
+      return { bici: nombreBiciPorId(item.bicicleta_id), label: wt.label, pct: est.pct, nivel: est.nivel, biciId: item.bicicleta_id }
+    })
+    .filter(Boolean)
+
+  const alertasComponentes = componentes
+    .map((c) => {
+      if (!c.vida_util_km || c.km_instalacion == null) return null
+      const kmDesde = kmBiciPorId(c.bicicleta_id) - Number(c.km_instalacion)
+      const pct = Math.min(100, Math.round((kmDesde / Number(c.vida_util_km)) * 100))
+      if (pct < 80) return null
+      return { bici: nombreBiciPorId(c.bicicleta_id), label: c.tipo, pct, nivel: pct >= 100 ? 'critico' : 'atencion', biciId: c.bicicleta_id }
+    })
+    .filter(Boolean)
+
+  const alertasMantenimiento = [...alertasDesgaste, ...alertasComponentes].sort((a, b) => b.pct - a.pct)
+
+    if (cargando) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <Skeleton className="h-7 w-24 mb-2" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <SkeletonStatGrid count={4} />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-40 w-full" />
+        <SkeletonList rows={2} />
+      </div>
+    )
+  }
 
   return (
-    <>
-      <div className="flex items-start justify-between">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight">Panel</h1>
-          <p className="text-[#8A8A93] text-[14px] mt-1">Resumen de tu actividad</p>
+          <h1 className="text-2xl font-bold">Panel</h1>
+          <p className="text-ink-muted text-sm mt-1">Resumen de tu actividad</p>
         </div>
-        <div className="bg-[#19191D] border border-[#242429] rounded-[14px] px-4 py-2.5 flex items-center gap-3">
-          <span className="text-[#C4F135] text-[24px] font-bold leading-none">{clima.temp}°</span>
-          <div className="text-right leading-none">
-            <p className="text-[#8A8A93] text-[12px]">{clima.viento} km/h</p>
-            <p className="text-[#5A5A63] text-[10px] mt-1 uppercase">{clima.direccion}</p>
+        {clima && (
+          <div className="card py-2.5 px-3.5 flex items-center gap-3 flex-shrink-0">
+            <span className="readout text-2xl font-bold text-hiviz">{clima.temp}°</span>
+            <div className="text-right">
+              <p className="text-ink-muted text-xs">{clima.viento} km/h</p>
+              <p className="text-ink-faint text-[10px] uppercase">{clima.direccion}</p>
+            </div>
           </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Horas — semana" value={horasSemana.toFixed(1)} unit="h" />
+        <StatCard label="Km — semana" value={kmSemana.toFixed(0)} unit="km" />
+        <StatCard label="CTL (fitness)" value={ultimo.ctl} accent="hiviz" />
+        <StatCard label="ATL (fatiga)" value={ultimo.atl} accent="red" />
+      </div>
+
+      <div className="card">
+        <span className="label-eyebrow">Forma actual (TSB)</span>
+        <div className="flex items-baseline gap-3 mt-1">
+          <span className={`readout text-4xl font-bold text-${forma.color}`}>{ultimo.tsb}</span>
+          <span className="text-sm text-ink-muted">{forma.texto}</span>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-        <StatCard label="Horas — Semana" value={statsSemana.horas} unit="h" />
-        <StatCard label="Km — Semana" value={statsSemana.km} unit="km" />
-        <StatCard label="CTL (Fitness)" value={ultimo.ctl} accent="#C4F135" />
-        <StatCard label="ATL (Fatiga)" value={ultimo.atl} accent="#F45D5D" />
-      </div>
-
-      <div className="bg-[#19191D] border border-[#242429] rounded-[16px] p-5 mt-4">
-        <p className="text-[11px] tracking-[0.14em] text-[#8A8A93] uppercase">Forma Actual (TSB)</p>
-        <div className="flex items-center gap-3 mt-3">
-          <span className="text-[32px] font-bold leading-none text-[#C4F135]">{ultimo.tsb}</span>
-          <span className="text-[14px] text-[#8A8A93]">{forma.texto}</span>
-        </div>
-      </div>
-
-      <div className="bg-[#19191D] border border-[#242429] rounded-[16px] p-5 mt-4">
-        <div className="flex justify-between items-center mb-6">
-          <p className="text-[11px] tracking-[0.14em] text-[#8A8A93] uppercase">Carga — 90 días</p>
-          <div className="flex gap-4 text-[12px] text-[#8A8A93]">
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#C4F135]"/> CTL</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#F45D5D]"/> ATL</span>
-            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#5DA9FF]"/> TSB</span>
+        <button onClick={() => setMostrarExplicacion((v) => !v)} className="text-hiviz text-xs mt-2.5">
+          {mostrarExplicacion ? 'Ocultar explicación' : '¿Qué significan estos números?'}
+        </button>
+        {mostrarExplicacion && (
+          <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-asphalt-700">
+            <p className="text-ink-muted text-xs"><b className="text-ink">CTL — tu fondo de forma.</b> Cuánto entrenaste en las últimas 6 semanas. Sube y baja lento: hace falta constancia para moverlo.</p>
+            <p className="text-ink-muted text-xs"><b className="text-ink">ATL — tu cansancio reciente.</b> Cuánto entrenaste en la última semana. Sube y baja rápido: unos días duros y ya lo notás.</p>
+            <p className="text-ink-muted text-xs"><b className="text-ink">TSB — tu estado hoy.</b> Es CTL menos ATL. Positivo: estás descansado. Muy negativo: estás cargado, conviene bajar un cambio.</p>
           </div>
-        </div>
-        <PMCChart data={serie} />
+        )}
       </div>
 
-      <div className="mt-10">
-        <h2 className="text-[18px] font-semibold">Bicicletas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          {bicicletas.map(b => (
-            <Link key={b.id} to={`/bicicletas/${b.id}`} className="bg-[#19191D] border border-[#242429] rounded-[16px] p-5 flex justify-between items-center hover:border-[#C4F135]/50 transition">
-              <div>
-                <p className="font-semibold">{b.nombre}</p>
-                <p className="text-[#8A8A93] text-[12px] uppercase mt-1">{b.modelo || 'S-WORKS SL8'}</p>
+      {tieneAlgunPlan && (
+        <div className="card" style={{ borderColor: colorAdherencia }}>
+          <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
+          {adherenciaPct != null ? (
+            <>
+              <div className="flex items-baseline gap-3 mt-1">
+                <span className="readout text-4xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
+                <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
               </div>
-              <span className="text-[#8A8A93] text-[14px]">{b.km_totales || 0} km</span>
-            </Link>
-          ))}
+              <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
+                <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
+              </div>
+              <div className="flex gap-4 mt-2.5">
+                {diasEsperadosEntreno > 0 && (
+                  <span className="text-ink-muted text-xs">Entrenamiento: {diasCumplidosEntreno}/{diasEsperadosEntreno}</span>
+                )}
+                {diasEsperadosGym > 0 && (
+                  <span className="text-ink-muted text-xs">Gimnasio: {diasCumplidosGym}/{diasEsperadosGym}</span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
+          )}
         </div>
+      )}
+
+      {proximaCompetencia && (() => {
+        const dias = Math.round((new Date(proximaCompetencia.fecha + 'T00:00:00') - new Date().setHours(0, 0, 0, 0)) / 86400000)
+        return (
+          <div className="card">
+            <span className="label-eyebrow">Próxima competencia</span>
+            <div className="flex items-baseline justify-between mt-1">
+              <p className="text-sm font-semibold">{proximaCompetencia.nombre}</p>
+              <span className="readout text-2xl font-bold text-hiviz">{dias === 0 ? 'Hoy' : `${dias}d`}</span>
+            </div>
+            <p className="text-ink-faint text-xs mt-0.5">{proximaCompetencia.fecha}</p>
+          </div>
+        )
+      })()}
+
+      <PMCChart data={serie} />
+
+      {alertasMantenimiento.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Mantenimiento</h2>
+          <div className="flex flex-col gap-2">
+            {alertasMantenimiento.map((a, i) => (
+              <Link
+                key={i}
+                to={`/bicicletas/${a.biciId}`}
+                className="card flex items-center justify-between hover:border-hiviz"
+                style={{ borderColor: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}
+              >
+                <div>
+                  <p className="text-sm font-medium">{a.label}</p>
+                  <p className="text-ink-muted text-xs">{a.bici}</p>
+                </div>
+                <span className="readout text-sm font-bold" style={{ color: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}>{a.pct}%</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
+        {bicicletas.length === 0 ? (
+          <p className="text-ink-muted text-sm">
+            Todavía no cargaste ninguna bicicleta. Andá a la sección Bicis para agregar la primera.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {bicicletas.map((b) => (
+              <div key={b.id} className="card flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{b.nombre}</p>
+                  <p className="text-ink-muted text-xs">{b.marca} {b.modelo}</p>
+                </div>
+                <span className="readout text-sm text-ink-muted">
+                  {(b.km_totales || 0).toLocaleString('es-AR')} km
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </>
+    </div>
   )
 }
