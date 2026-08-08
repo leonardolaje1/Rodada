@@ -1,75 +1,117 @@
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import {
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid
+} from 'recharts'
 
-function CustomTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
+export default function PMCChart({ data, hoy }) {
+  const [abierto, setAbierto] = useState(false)
+  const hayAlgoHoy = hoy && (hoy.entrenamientoPendiente || hoy.gimnasioPendiente || hoy.faltaRecuperacion)
+
   return (
-    <div className="bg-[#1A1A1E] border border-[#242429] rounded-[10px] px-3 py-2 text-[12px]">
-      <p className="text-[#6B6B71] text-[10px] mb-1">{label}</p>
-      {payload.map(p => (
-        <p key={p.dataKey} className="flex items-center gap-2" style={{ color: p.stroke }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.stroke }} />
-          {p.dataKey.toUpperCase()}: {p.value}
-        </p>
-      ))}
+    <div className="card">
+      <div className="flex items-center justify-between mb-1">
+        <span className="label-eyebrow">Carga — 90 días</span>
+        <Legend />
+      </div>
+
+      {hayAlgoHoy && (
+        <div className="mb-2">
+          <button onClick={() => setAbierto((v) => !v)} className="flex items-center gap-1.5 text-xs text-hiviz font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-hiviz inline-block" />
+            Hoy
+            <span className="text-ink-faint">{abierto ? '▲' : '▼'}</span>
+          </button>
+          {abierto && (
+            <div className="flex flex-col gap-1.5 mt-2 pl-3 border-l border-asphalt-700">
+              {hoy.entrenamientoPendiente && (
+                <Link to="/entrenamientos" className="text-xs text-ink-muted hover:text-ink">
+                  🚴 Entrenamiento: {hoy.entrenamientoPendiente.tipo}{hoy.entrenamientoPendiente.es_clave ? ' ★' : ''} →
+                </Link>
+              )}
+              {hoy.gimnasioPendiente && (
+                <Link to="/gimnasio" className="text-xs text-ink-muted hover:text-ink">
+                  🏋️ Gimnasio pendiente →
+                </Link>
+              )}
+              {hoy.faltaRecuperacion && (
+                <Link to="/recuperacion" className="text-xs text-ink-muted hover:text-ink">
+                  🌙 Falta cargar recuperación →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+          <CartesianGrid stroke="#262A33" vertical={false} />
+          <XAxis
+            dataKey="fecha"
+            tick={{ fill: '#8A8F9C', fontSize: 11 }}
+            tickLine={false}
+            axisLine={{ stroke: '#262A33' }}
+            minTickGap={30}
+          />
+          <YAxis tick={{ fill: '#8A8F9C', fontSize: 11 }} tickLine={false} axisLine={false} />
+          <Tooltip
+            contentStyle={{
+              background: '#1C1F26',
+              border: '1px solid #262A33',
+              borderRadius: 8,
+              fontSize: 12
+            }}
+            labelStyle={{ color: '#8A8F9C' }}
+          />
+          <Area
+            type="monotone"
+            dataKey="tsb"
+            fill="#4A9EFF22"
+            stroke="none"
+            name="TSB (forma)"
+          />
+          <Line
+            type="monotone"
+            dataKey="ctl"
+            stroke="#C4F135"
+            strokeWidth={2}
+            dot={false}
+            name="CTL (fitness)"
+          />
+          <Line
+            type="monotone"
+            dataKey="atl"
+            stroke="#F14A4A"
+            strokeWidth={1.5}
+            dot={false}
+            name="ATL (fatiga)"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
-export default function PMCChart({ data = [] }) {
-  const chartData = data.length ? data : [
-    { fecha: '2026-05-20', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-05-31', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-06-11', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-06-22', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-07-03', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-07-14', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-07-25', ctl: 0, atl: 0, tsb: 0 },
-    { fecha: '2026-08-08', ctl: 0, atl: 0, tsb: 0 },
-  ]
-
+function Legend() {
   return (
-    <div className="h-[240px] w-full -ml-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="ctlGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#C4F135" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="#C4F135" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="atlGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#F45D5D" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#F45D5D" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="tsbGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#5DA9FF" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#5DA9FF" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-
-          <CartesianGrid vertical={false} stroke="#1A1A1E" strokeWidth={1} />
-          <XAxis
-            dataKey="fecha"
-            tick={{ fill: '#5A5A63', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            dy={10}
-            interval="preserveStartEnd"
-          />
-          <YAxis
-            domain={[0, 4]}
-            ticks={[0,1,2,3,4]}
-            tick={{ fill: '#5A5A63', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            width={24}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Area type="monotone" dataKey="atl" stroke="#FF7A45" fill="transparent" strokeWidth={1.5} dot={false} />
-          <Area type="monotone" dataKey="ctl" stroke="#C4F135" fill="url(#ctlGrad)" strokeWidth={2} dot={false} />
-          <Area type="monotone" dataKey="atl" stroke="#F45D5D" fill="url(#atlGrad)" strokeWidth={2} dot={false} />
-          <Area type="monotone" dataKey="tsb" stroke="#5DA9FF" fill="url(#tsbGrad)" strokeWidth={2} dot={false} />
-        </AreaChart>
-      </ResponsiveContainer>
+    <div className="flex gap-3 text-[11px] text-ink-muted font-body">
+      <span className="flex items-center gap-1">
+        <i className="w-2 h-2 rounded-full bg-hiviz inline-block" /> CTL
+      </span>
+      <span className="flex items-center gap-1">
+        <i className="w-2 h-2 rounded-full bg-alert-red inline-block" /> ATL
+      </span>
+      <span className="flex items-center gap-1">
+        <i className="w-2 h-2 rounded-full bg-route inline-block" /> TSB
+      </span>
     </div>
   )
 }
