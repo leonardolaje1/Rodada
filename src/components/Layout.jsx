@@ -19,6 +19,16 @@ const NAV = [
 
 export default function Layout() {
   const [pendientes, setPendientes] = useState(0)
+  const [tema, setTema] = useState(() => localStorage.getItem('tema') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', tema === 'light')
+    localStorage.setItem('tema', tema)
+  }, [tema])
+
+  function alternarTema() {
+    setTema((t) => (t === 'dark' ? 'light' : 'dark'))
+  }
 
   useEffect(() => {
     async function cargar() {
@@ -43,8 +53,15 @@ export default function Layout() {
           <NavItem key={item.to} {...item} badge={item.to === '/equipo' ? pendientes : 0} />
         ))}
         <button
+          onClick={alternarTema}
+          className="mt-6 text-ink-muted text-sm px-3 py-2 text-left hover:text-ink flex items-center gap-2"
+        >
+          <span aria-hidden>{tema === 'dark' ? '☀' : '☾'}</span>
+          {tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+        </button>
+        <button
           onClick={() => supabase.auth.signOut()}
-          className="mt-6 text-ink-muted text-sm px-3 py-2 text-left hover:text-ink"
+          className="text-ink-muted text-sm px-3 py-2 text-left hover:text-ink"
         >
           Cerrar sesión
         </button>
@@ -52,9 +69,14 @@ export default function Layout() {
 
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-asphalt-700">
         <span className="font-display font-bold text-lg text-hiviz">bikeiq</span>
-        <button onClick={() => supabase.auth.signOut()} className="text-ink-muted text-xs">
-          Salir
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={alternarTema} className="text-ink-muted text-xs" aria-label="Cambiar tema">
+            {tema === 'dark' ? '☀' : '☾'}
+          </button>
+          <button onClick={() => supabase.auth.signOut()} className="text-ink-muted text-xs">
+            Salir
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8">
