@@ -42,6 +42,7 @@ const ZONAS_FC = [
 
 function diaIdDeHoy() { return DIA_POR_INDICE[new Date().getDay()] }
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+function escaparXml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
@@ -115,6 +116,38 @@ export default function Entrenamientos() {
   }
   async function eliminar(id) {
     await supabase.from('entrenamientos').delete().eq('id', id); cargar()
+  }
+  function exportarGPX(e) {
+    const nombre = `${e.tipo}${e.ruta ? ' - ' + e.ruta : ''}`
+    const fechaISO = new Date(e.fecha + 'T00:00:00').toISOString()
+    const descripcionPartes = []
+    if (e.km) descripcionPartes.push(`${e.km} km`)
+    if (e.duracion_min) descripcionPartes.push(`${e.duracion_min} min`)
+    if (e.desnivel) descripcionPartes.push(`${e.desnivel} m desnivel`)
+    if (e.potencia_avg) descripcionPartes.push(`${e.potencia_avg} W media`)
+    if (e.potencia_normalizada) descripcionPartes.push(`${e.potencia_normalizada} W NP`)
+    if (e.fc_avg) descripcionPartes.push(`${e.fc_avg} bpm media`)
+    if (e.tss) descripcionPartes.push(`${e.tss} TSS`)
+    const descripcion = descripcionPartes.join(' · ') + (e.comentarios ? ` — ${e.comentarios}` : '')
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="BikeIQ" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${escaparXml(nombre)}</name>
+    <desc>${escaparXml(descripcion)}</desc>
+    <time>${fechaISO}</time>
+  </metadata>
+</gpx>`
+
+    const blob = new Blob([xml], { type: 'application/gpx+xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${e.fecha}-${e.tipo.toLowerCase()}.gpx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
   async function marcarRealizado(id) {
     await supabase.from('entrenamientos').update({ estado: 'realizado' }).eq('id', id); cargar()
@@ -279,6 +312,9 @@ export default function Entrenamientos() {
                               <div className="flex gap-1">
                                 {e.estado === 'pendiente' && (
                                   <button onClick={() => marcarRealizado(e.id)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Marcar hecho</button>
+                                )}
+                                {e.estado === 'realizado' && (
+                                  <button onClick={() => exportarGPX(e)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">GPX</button>
                                 )}
                                 <button onClick={() => { setMostrarForm(false); setEditandoId(e.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
                                 <button onClick={() => { if (confirm('¿Borrar este entrenamiento?')) eliminar(e.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
