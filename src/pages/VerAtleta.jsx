@@ -60,6 +60,9 @@ export default function VerAtleta() {
   const [planesNutricion, setPlanesNutricion] = useState([])
   const [formPlanNutriOpen, setFormPlanNutriOpen] = useState(false)
   const [planNutriEditando, setPlanNutriEditando] = useState(null)
+  const [documentosNutricion, setDocumentosNutricion] = useState([])
+  const [subiendoArchivoAtleta, setSubiendoArchivoAtleta] = useState(false)
+  const [errorArchivoAtleta, setErrorArchivoAtleta] = useState('')
   const [cargando, setCargando] = useState(true)
 
   async function cargar() {
@@ -105,6 +108,8 @@ export default function VerAtleta() {
       setPerfilNutri(perfil || { peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
       const { data: planesNutri } = await supabase.from('planes_nutricion').select('*').eq('user_id', atletaId).eq('activo', true).order('created_at', { ascending: true })
       setPlanesNutricion(planesNutri || [])
+      const { data: docsNutri } = await supabase.from('documentos_nutricion').select('*').eq('user_id', atletaId).order('created_at', { ascending: false })
+      setDocumentosNutricion(docsNutri || [])
     }
     setCargando(false)
   }
@@ -175,6 +180,39 @@ export default function VerAtleta() {
     cargar()
   }
 
+  async function subirDocumentoAtleta(file) {
+    if (!file) return
+    setErrorArchivoAtleta('')
+    setSubiendoArchivoAtleta(true)
+    try {
+      const rutaStorage = `${atletaId}/${Date.now()}-${file.name}`
+      const { error: errSubida } = await supabase.storage.from('documentos-nutricion').upload(rutaStorage, file)
+      if (errSubida) throw errSubida
+      const { error: errFila } = await supabase.from('documentos_nutricion').insert({
+        user_id: atletaId, nombre: file.name, ruta_storage: rutaStorage, tipo_archivo: file.type
+      })
+      if (errFila) throw errFila
+      cargar()
+    } catch (err) {
+      setErrorArchivoAtleta('No se pudo subir el archivo: ' + (err.message || ''))
+    } finally {
+      setSubiendoArchivoAtleta(false)
+    }
+  }
+
+  async function verDocumentoAtleta(doc) {
+    const { data, error } = await supabase.storage.from('documentos-nutricion').createSignedUrl(doc.ruta_storage, 60)
+    if (error) { alert('No se pudo abrir el archivo: ' + error.message); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function borrarDocumentoAtleta(doc) {
+    if (!confirm(`¿Borrar "${doc.nombre}"?`)) return
+    await supabase.storage.from('documentos-nutricion').remove([doc.ruta_storage])
+    await supabase.from('documentos_nutricion').delete().eq('id', doc.id)
+    cargar()
+  }
+
   async function borrarPlanGym(id) {
     if (!confirm('¿Borrar esta rutina?')) return
     await supabase.from('planes_gimnasio').update({ activo: false }).eq('id', id)
@@ -232,7 +270,7 @@ export default function VerAtleta() {
           {[
             ['resumen', 'Resumen'],
             ...(esEntrenador ? [['planes-entreno', 'Planes de entrenamiento'], ['planes-gym', 'Rutinas de gimnasio']] : []),
-            ...(esNutricionista ? [['planes-nutricion', 'Planes de nutrición']] : [])
+            ...(esNutricionista ? [['planes-nutricion', 'Planes de nutrición'], ['documentos-nutricion', 'Documentos']] : [])
           ].map(([id, label]) => (
             <button
               key={id}
@@ -583,6 +621,48 @@ export default function VerAtleta() {
                   </div>
                 )
               )}
+            </div>
+          )}
+        </div>
+      )}
+      {seccion === 'documentos-nutricion' && esNutricionista && (
+        <div>
+          <div className="card">
+            <span className="label-eyebrow">Subir plan de comidas (PDF o foto)</span>
+            <p className="text-ink-muted text-xs mt-1.5">
+              Subí el plan de comidas de tu atleta en PDF o como foto, para que lo tenga siempre a mano dentro de la app.
+            </p>
+            <label className="inline-block mt-3">
+              <span className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-4 py-2.5 rounded-lg inline-block cursor-pointer hover:text-ink hover:border-hiviz">
+                {subiendoArchivoAtleta ? 'Subiendo…' : 'Elegir archivo'}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                disabled={subiendoArchivoAtleta}
+                onChange={(e) => { subirDocumentoAtleta(e.target.files[0]); e.target.value = '' }}
+              />
+            </label>
+            {errorArchivoAtleta && <p className="text-alert-red text-xs mt-3">{errorArchivoAtleta}</p>}
+          </div>
+
+          {documentosNutricion.length === 0 ? (
+            <p className="text-ink-muted text-sm mt-3">Sin documentos subidos todavía.</p>
+          ) : (
+            <div className="flex flex-col gap-2 mt-3">
+              {documentosNutricion.map((doc) => (
+                <div key={doc.id} className="card flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{doc.nombre}</p>
+                    <p className="text-ink-muted text-xs">{new Date(doc.created_at).toLocaleDateString('es-AR')}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => verDocumentoAtleta(doc)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Ver</button>
+                    <button onClick={() => borrarDocumentoAtleta(doc)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
