@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../lib/tss'
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
+import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 function direccionViento(grados) {
@@ -26,6 +28,8 @@ export default function Dashboard() {
   const [clima, setClima] = useState(null)
   const [climaError, setClimaError] = useState(false)
   const [proximaCompetencia, setProximaCompetencia] = useState(null)
+  const [componentes, setComponentes] = useState([])
+  const [desgaste, setDesgaste] = useState([])
 
   useEffect(() => {
     async function cargar() {
@@ -35,7 +39,7 @@ export default function Dashboard() {
       desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
 
       const hoyStr = new Date().toISOString().slice(0, 10)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }] = await Promise.all([
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -45,7 +49,9 @@ export default function Dashboard() {
         supabase.from('planes_entrenamiento').select('*').eq('activo', true),
         supabase.from('planes_gimnasio').select('*').eq('activo', true),
         supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10)),
-        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1)
+        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1),
+        supabase.from('componentes').select('*'),
+        supabase.from('desgaste_componentes').select('*')
       ])
 
       setEntrenamientos(ents || [])
@@ -54,6 +60,8 @@ export default function Dashboard() {
       setPlanesGym(plsG || [])
       setGimnasio(gym || [])
       setProximaCompetencia((comps && comps[0]) || null)
+      setComponentes(componentesData || [])
+      setDesgaste(desgasteData || [])
       setCargando(false)
     }
     cargar()
@@ -140,6 +148,31 @@ export default function Dashboard() {
 
   const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
 
+  const nombreBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.nombre || 'Bici'
+  const kmBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.km_totales || 0
+
+  const alertasDesgaste = desgaste
+    .map((item) => {
+      const wt = WEAR_TYPES.find((w) => w.id === item.tipo)
+      if (!wt) return null
+      const est = estadoDesgaste(item, wt, kmBiciPorId(item.bicicleta_id))
+      if (est.nivel === 'ok') return null
+      return { bici: nombreBiciPorId(item.bicicleta_id), label: wt.label, pct: est.pct, nivel: est.nivel, biciId: item.bicicleta_id }
+    })
+    .filter(Boolean)
+
+  const alertasComponentes = componentes
+    .map((c) => {
+      if (!c.vida_util_km || c.km_instalacion == null) return null
+      const kmDesde = kmBiciPorId(c.bicicleta_id) - Number(c.km_instalacion)
+      const pct = Math.min(100, Math.round((kmDesde / Number(c.vida_util_km)) * 100))
+      if (pct < 80) return null
+      return { bici: nombreBiciPorId(c.bicicleta_id), label: c.tipo, pct, nivel: pct >= 100 ? 'critico' : 'atencion', biciId: c.bicicleta_id }
+    })
+    .filter(Boolean)
+
+  const alertasMantenimiento = [...alertasDesgaste, ...alertasComponentes].sort((a, b) => b.pct - a.pct)
+
   if (cargando) {
     return <p className="text-ink-muted text-sm">Cargando panel…</p>
   }
@@ -219,6 +252,28 @@ export default function Dashboard() {
       })()}
 
       <PMCChart data={serie} />
+
+      {alertasMantenimiento.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Mantenimiento</h2>
+          <div className="flex flex-col gap-2">
+            {alertasMantenimiento.map((a, i) => (
+              <Link
+                key={i}
+                to={`/bicicletas/${a.biciId}`}
+                className="card flex items-center justify-between hover:border-hiviz"
+                style={{ borderColor: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}
+              >
+                <div>
+                  <p className="text-sm font-medium">{a.label}</p>
+                  <p className="text-ink-muted text-xs">{a.bici}</p>
+                </div>
+                <span className="readout text-sm font-bold" style={{ color: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}>{a.pct}%</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
