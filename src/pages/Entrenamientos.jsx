@@ -50,6 +50,13 @@ const ZONAS_FC = [
 
 function diaIdDeHoy() { return DIA_POR_INDICE[new Date().getDay()] }
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+function lunesDeSemana(fechaStr) {
+  const d = new Date(fechaStr + 'T12:00:00')
+  const dow = d.getDay()
+  const offset = dow === 0 ? -6 : 1 - dow
+  d.setDate(d.getDate() + offset)
+  return d
+}
 function escaparXml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 function agruparPorFecha(items) {
   const grupos = {}
@@ -58,7 +65,7 @@ function agruparPorFecha(items) {
 }
 
 export default function Entrenamientos() {
-  const [vista, setVista] = useState('registro')
+  const [vista, setVista] = useState('temporada')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
   const [planes, setPlanes] = useState([])
@@ -199,18 +206,44 @@ export default function Entrenamientos() {
   async function eliminarFtp(id) { if (!confirm('¿Borrar este registro de FTP?')) return; await supabase.from('ftp_historial').delete().eq('id', id); cargar() }
 
   async function crearMesociclo(form) {
-    const { error } = await supabase.from('mesociclos').insert(form)
+    const { semanas, ...meta } = form
+    const { error, data: nuevo } = await supabase.from('mesociclos').insert({ ...meta, semanas }).select().single()
     if (error) { alert('No se pudo guardar: ' + error.message); return }
+
+    const lunesBase = lunesDeSemana(meta.fecha_inicio)
+    const sesionesNuevas = []
+    semanas.forEach((semana, si) => {
+      DIAS_SEMANA.forEach((diaInfo, oi) => {
+        const d = (semana.dias || []).find((x) => x.dia === diaInfo.id)
+        if (!d || !d.activo) return
+        const fecha = new Date(lunesBase)
+        fecha.setDate(fecha.getDate() + si * 7 + oi)
+        sesionesNuevas.push({
+          fecha: fecha.toISOString().slice(0, 10),
+          tipo: d.tipo,
+          duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
+          comentarios: d.descripcion || null,
+          estado: 'pendiente',
+          es_clave: !!d.es_clave,
+          mesociclo_id: nuevo.id
+        })
+      })
+    })
+    if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
+
     setFormMesoOpen(false); cargar()
   }
   async function actualizarMesociclo(id, form) {
-    const { error } = await supabase.from('mesociclos').update(form).eq('id', id)
+    const { semanas, ...meta } = form
+    const { error } = await supabase.from('mesociclos').update(meta).eq('id', id)
     if (error) { alert('No se pudo guardar: ' + error.message); return }
     setMesoEditando(null); cargar()
   }
   async function eliminarMesociclo(id) {
-    if (!confirm('¿Borrar este mesociclo?')) return
-    await supabase.from('mesociclos').delete().eq('id', id); cargar()
+    if (!confirm('¿Borrar este mesociclo? Las sesiones pendientes generadas por él también se van a borrar (las ya realizadas quedan como historial).')) return
+    await supabase.from('entrenamientos').delete().eq('mesociclo_id', id).eq('estado', 'pendiente')
+    await supabase.from('mesociclos').delete().eq('id', id)
+    cargar()
   }
 
   const nombreBici = (id) => bicicletas.find((b) => b.id === id)?.nombre || null
@@ -249,7 +282,7 @@ export default function Entrenamientos() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['registro', 'Registro'], ['planes', 'Planes'], ['objetivos', 'Objetivos'], ['ftp', 'FTP y zonas'], ['temporada', 'Temporada'], ['records', 'Récords']].map(([id, label]) => (
+        {[['temporada', 'Mesociclo'], ['planes', 'Planes'], ['registro', 'Registro'], ['ftp', 'FTP y zonas'], ['records', 'Récords']].map(([id, label]) => (
           <button key={id} onClick={() => setVista(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${vista === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
             {label}
           </button>
@@ -291,7 +324,7 @@ export default function Entrenamientos() {
             <FormEntrenamiento bicicletas={bicicletas} planes={planes} valoresIniciales={valoresImportados} onGuardar={crear} onCancelar={() => { setMostrarForm(false); setValoresImportados(null) }} />
           )}
 
-                    {cargando ? (
+          {cargando ? (
             <SkeletonList rows={4} />
           ) : porDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin entrenamientos registrados.</p>
@@ -402,56 +435,6 @@ export default function Entrenamientos() {
                   </div>
                 )
               )}
-            </div>
-          )}
-        </>
-      )}
-
-      {vista === 'objetivos' && (
-        <>
-          <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormObjetivoOpen((v) => !v)}>+ Objetivo</button>
-          </div>
-          {formObjetivoOpen && <FormObjetivo onGuardar={crearObjetivo} onCancelar={() => setFormObjetivoOpen(false)} />}
-          {objetivos.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin objetivos de entrenamiento cargados.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {objetivos.map((o) => {
-                const meta = TIPOS_OBJETIVO.find((t) => t.id === o.tipo) || TIPOS_OBJETIVO[3]
-                const actual = o.tipo === 'km_anuales' ? kmAnualesActual : (o.tipo === 'ftp' && ftpActual ? ftpActual.ftp_watts : Number(o.valor_actual) || 0)
-                const objetivo = Number(o.valor_objetivo) || 0
-                const pct = objetivo ? Math.min(100, Math.round((actual / objetivo) * 100)) : 0
-                const cumplido = o.estado === 'cumplido'
-                const auto = o.tipo === 'km_anuales' || (o.tipo === 'ftp' && ftpActual)
-                return (
-                  <div key={o.id} className={`card ${cumplido ? 'opacity-60' : ''}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className={`font-semibold text-sm ${cumplido ? 'line-through' : ''}`}>{o.titulo}</p>
-                        <p className="text-ink-muted text-xs mt-0.5">{meta.label}{o.fecha_limite ? ` · hasta ${o.fecha_limite}` : ''}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        <button className="text-xs border border-asphalt-700 rounded-lg px-2.5 py-1 text-ink-muted" onClick={() => marcarCumplidoObjetivo(o)}>{cumplido ? 'Reabrir' : 'Cumplido'}</button>
-                        <button className="text-xs border border-asphalt-700 rounded-lg px-2.5 py-1 text-alert-red" onClick={() => borrarObjetivo(o.id)}>Borrar</button>
-                      </div>
-                    </div>
-                    {o.tipo !== 'evento' && (
-                      <>
-                        <div className="flex justify-between items-baseline mt-2.5">
-                          <span className="readout text-lg font-bold text-hiviz">{actual}{meta.unidad}</span>
-                          <span className="text-ink-muted text-xs">meta: {objetivo}{meta.unidad}</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-2 overflow-hidden"><div className="h-full bg-hiviz" style={{ width: `${pct}%` }} /></div>
-                        {!auto && !cumplido && (
-                          <input type="number" placeholder={`Valor actual (${meta.unidad})`} onBlur={(e) => { if (e.target.value !== '') actualizarValorObjetivo(o.id, e.target.value) }} className="w-full bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm mt-2.5" />
-                        )}
-                        {auto && <p className="text-ink-faint text-xs mt-2">Se actualiza solo con tus datos cargados</p>}
-                      </>
-                    )}
-                  </div>
-                )
-              })}
             </div>
           )}
         </>
@@ -571,7 +554,8 @@ export default function Entrenamientos() {
           </div>
 
           {mesociclos.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu temporada en bloques: base, construcción, específico, pico y transición.</p>
+            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu bloque de 4 semanas: base, construcción, específico, pico o transición.</p>
+          ) : (
           ) : (
             <div className="flex flex-col gap-2">
               {mesociclos.map((m) =>
@@ -584,6 +568,7 @@ export default function Entrenamientos() {
                     const totalDias = (new Date(m.fecha_fin) - new Date(m.fecha_inicio)) / 86400000 + 1
                     const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
                     const pctTiempo = Math.round((diasPasados / totalDias) * 100)
+                    const sesionesMeso = lista.filter((e) => e.mesociclo_id === m.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
                     return (
                       <div key={m.id} className="card" style={enCurso ? { borderColor: tipoInfo.color } : undefined}>
                         <div className="flex items-start justify-between">
@@ -615,11 +600,81 @@ export default function Entrenamientos() {
                           </p>
                         )}
                         {m.notas && <p className="text-ink-faint text-xs mt-1.5">{m.notas}</p>}
+
+                        {sesionesMeso.length > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
+                            {sesionesMeso.map((s) =>
+                              editandoId === s.id ? (
+                                <FormEntrenamiento
+                                  key={s.id}
+                                  bicicletas={bicicletas}
+                                  planes={planes}
+                                  valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
+                                  onGuardar={(datos) => actualizar(s.id, datos)}
+                                  onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }}
+                                />
+                              ) : (
+                                <SesionMesocicloRow
+                                  key={s.id}
+                                  s={s}
+                                  onCargarDatos={() => { setMostrarForm(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                />
+                              )
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })()
                 )
               )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-2">
+            <h2 className="text-sm font-semibold">Objetivos</h2>
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg" onClick={() => setFormObjetivoOpen((v) => !v)}>+ Objetivo</button>
+          </div>
+          {formObjetivoOpen && <FormObjetivo onGuardar={crearObjetivo} onCancelar={() => setFormObjetivoOpen(false)} />}
+          {objetivos.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin objetivos de entrenamiento cargados.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {objetivos.map((o) => {
+                const meta = TIPOS_OBJETIVO.find((t) => t.id === o.tipo) || TIPOS_OBJETIVO[3]
+                const actual = o.tipo === 'km_anuales' ? kmAnualesActual : (o.tipo === 'ftp' && ftpActual ? ftpActual.ftp_watts : Number(o.valor_actual) || 0)
+                const objetivo = Number(o.valor_objetivo) || 0
+                const pct = objetivo ? Math.min(100, Math.round((actual / objetivo) * 100)) : 0
+                const cumplido = o.estado === 'cumplido'
+                const auto = o.tipo === 'km_anuales' || (o.tipo === 'ftp' && ftpActual)
+                return (
+                  <div key={o.id} className={`card ${cumplido ? 'opacity-60' : ''}`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className={`font-semibold text-sm ${cumplido ? 'line-through' : ''}`}>{o.titulo}</p>
+                        <p className="text-ink-muted text-xs mt-0.5">{meta.label}{o.fecha_limite ? ` · hasta ${o.fecha_limite}` : ''}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button className="text-xs border border-asphalt-700 rounded-lg px-2.5 py-1 text-ink-muted" onClick={() => marcarCumplidoObjetivo(o)}>{cumplido ? 'Reabrir' : 'Cumplido'}</button>
+                        <button className="text-xs border border-asphalt-700 rounded-lg px-2.5 py-1 text-alert-red" onClick={() => borrarObjetivo(o.id)}>Borrar</button>
+                      </div>
+                    </div>
+                    {o.tipo !== 'evento' && (
+                      <>
+                        <div className="flex justify-between items-baseline mt-2.5">
+                          <span className="readout text-lg font-bold text-hiviz">{actual}{meta.unidad}</span>
+                          <span className="text-ink-muted text-xs">meta: {objetivo}{meta.unidad}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-2 overflow-hidden"><div className="h-full bg-hiviz" style={{ width: `${pct}%` }} /></div>
+                        {!auto && !cumplido && (
+                          <input type="number" placeholder={`Valor actual (${meta.unidad})`} onBlur={(e) => { if (e.target.value !== '') actualizarValorObjetivo(o.id, e.target.value) }} className="w-full bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm mt-2.5" />
+                        )}
+                        {auto && <p className="text-ink-faint text-xs mt-2">Se actualiza solo con tus datos cargados</p>}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -829,31 +884,54 @@ function FormObjetivo({ onGuardar, onCancelar }) {
   )
 }
 
+function crearSemanaVacia(numero) {
+  return {
+    semana: numero,
+    dias: DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '', es_clave: false }))
+  }
+}
+
 function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias = [] }) {
+  const esEdicion = !!valoresIniciales
   const [form, setForm] = useState({
-    nombre: '', tipo: 'base', fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '',
+    nombre: '', tipo: 'base', fecha_inicio: new Date().toISOString().slice(0, 10),
     competencia_id: '', ctl_objetivo: '', notas: '', ...valoresIniciales
   })
+  const [semanas, setSemanas] = useState(
+    valoresIniciales?.semanas?.length ? valoresIniciales.semanas : [1, 2, 3, 4].map(crearSemanaVacia)
+  )
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+
+  function actualizarDia(semanaIdx, diaId, cambios) {
+    setSemanas((prev) => prev.map((s, i) => (
+      i !== semanaIdx ? s : { ...s, dias: s.dias.map((d) => (d.dia === diaId ? { ...d, ...cambios } : d)) }
+    )))
+  }
+
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => {
+    <form className="card flex flex-col gap-3" onSubmit={(e) => {
       e.preventDefault()
+      const lunes = lunesDeSemana(form.fecha_inicio)
+      const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + 27)
       onGuardar({
         ...form,
+        fecha_inicio: lunes.toISOString().slice(0, 10),
+        fecha_fin: fechaFin.toISOString().slice(0, 10),
         competencia_id: form.competencia_id || null,
-        ctl_objetivo: form.ctl_objetivo === '' ? null : Number(form.ctl_objetivo)
+        ctl_objetivo: form.ctl_objetivo === '' ? null : Number(form.ctl_objetivo),
+        semanas
       })
     }}>
-      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Nombre</span>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre</span>
         <input {...campo('nombre')} required placeholder="Base invierno / Pico pre-fondo" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Tipo</span>
-        <select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-          {TIPOS_MESOCICLO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de inicio</span>
-        <input type="date" {...campo('fecha_inicio')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de fin</span>
-        <input type="date" {...campo('fecha_fin')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Tipo</span>
+          <select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+            {TIPOS_MESOCICLO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Semana 1 empieza (lunes más cercano)</span>
+          <input type="date" {...campo('fecha_inicio')} required disabled={esEdicion} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink disabled:opacity-50" /></label>
+      </div>
       {competencias.length > 0 && (
         <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Competencia objetivo (opcional)</span>
           <select {...campo('competencia_id')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
@@ -861,15 +939,80 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
             {competencias.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({c.fecha})</option>)}
           </select></label>
       )}
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">CTL objetivo (opcional)</span>
-        <input type="number" {...campo('ctl_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Notas</span>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">CTL objetivo (opcional)</span>
+          <input type="number" {...campo('ctl_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      </div>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Notas</span>
         <input {...campo('notas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <div className="col-span-2 flex justify-end gap-2 mt-1">
+
+      {esEdicion ? (
+        <p className="text-ink-faint text-xs">Para cambiar el cronograma de sesiones, borrá este mesociclo y creá uno nuevo.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <span className="label-eyebrow">Cronograma — 4 semanas</span>
+          {semanas.map((semana, si) => (
+            <div key={si} className="border border-asphalt-700 rounded-lg p-2.5">
+              <p className="text-sm font-semibold mb-2">Semana {semana.semana}</p>
+              <div className="flex flex-col gap-2">
+                {DIAS_SEMANA.map((diaInfo) => {
+                  const d = semana.dias.find((x) => x.dia === diaInfo.id)
+                  return (
+                    <div key={diaInfo.id} className="flex flex-col gap-1.5">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={!!d.activo} onChange={(e) => actualizarDia(si, diaInfo.id, { activo: e.target.checked })} />
+                        <span className="font-medium w-8">{diaInfo.label}</span>
+                        {d.activo && (
+                          <select value={d.tipo} onChange={(e) => actualizarDia(si, diaInfo.id, { tipo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
+                            {TIPOS.map((t) => <option key={t}>{t}</option>)}
+                          </select>
+                        )}
+                      </label>
+                      {d.activo && (
+                        <div className="flex gap-1.5 pl-9">
+                          <input type="number" value={d.duracion_min} onChange={(e) => actualizarDia(si, diaInfo.id, { duracion_min: e.target.value })} placeholder="Min" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-16" />
+                          <input value={d.descripcion} onChange={(e) => actualizarDia(si, diaInfo.id, { descripcion: e.target.value })} placeholder="Detalle" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1" />
+                          <label className="flex items-center gap-1 text-xs text-ink-muted whitespace-nowrap">
+                            <input type="checkbox" checked={!!d.es_clave} onChange={(e) => actualizarDia(si, diaInfo.id, { es_clave: e.target.checked })} />
+                            ★ clave
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
       </div>
     </form>
+  )
+}
+
+function SesionMesocicloRow({ s, onCargarDatos }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        {s.es_clave && <span className="text-hiviz text-xs" title="Sesión clave">★</span>}
+        <div>
+          <p className="text-xs font-medium">{s.fecha} · {s.tipo}{s.comentarios ? ` — ${s.comentarios}` : ''}</p>
+          {s.estado === 'realizado' && (
+            <p className="text-ink-faint text-[11px]">{s.km ? `${s.km} km · ` : ''}{s.duracion_min ? `${s.duracion_min} min · ` : ''}{s.tss ? `${s.tss} TSS` : ''}</p>
+          )}
+        </div>
+      </div>
+      {s.estado === 'pendiente' ? (
+        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar datos</button>
+      ) : (
+        <span className="text-hiviz text-[11px]">✓ hecha</span>
+      )}
+    </div>
   )
 }
 
