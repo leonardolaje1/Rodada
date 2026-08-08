@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 export default function Competencias() {
   const [competencias, setCompetencias] = useState([])
   const [formOpen, setFormOpen] = useState(false)
+  const [error, setError] = useState('')
 
   async function cargar() {
     const { data } = await supabase.from('competencias').select('*').order('fecha', { ascending: false })
@@ -11,6 +12,21 @@ export default function Competencias() {
   }
 
   useEffect(() => { cargar() }, [])
+
+  async function crear(n) {
+    setError('')
+    const { error: err } = await supabase.from('competencias').insert(n)
+    if (err) { setError('No se pudo guardar: ' + err.message); return }
+    setFormOpen(false)
+    cargar()
+  }
+
+  async function eliminar(id) {
+    if (!confirm('¿Borrar esta competencia?')) return
+    const { error: err } = await supabase.from('competencias').delete().eq('id', id)
+    if (err) { alert('No se pudo borrar: ' + err.message); return }
+    cargar()
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -22,13 +38,7 @@ export default function Competencias() {
         <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormOpen((v) => !v)}>+ Nueva</button>
       </div>
 
-      {formOpen && (
-        <FormCompetencia onGuardar={async (n) => {
-          await supabase.from('competencias').insert(n)
-          setFormOpen(false)
-          cargar()
-        }} onCancelar={() => setFormOpen(false)} />
-      )}
+      {formOpen && <FormCompetencia onGuardar={crear} onCancelar={() => setFormOpen(false)} error={error} />}
 
       {competencias.length === 0 ? (
         <p className="text-ink-muted text-sm">Sin competencias registradas todavía.</p>
@@ -36,12 +46,15 @@ export default function Competencias() {
         <div className="flex flex-col gap-3">
           {competencias.map((c) => (
             <div key={c.id} className="card">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-start">
                 <div>
                   <p className="font-semibold text-sm">{c.nombre}</p>
                   <p className="text-ink-muted text-xs">{c.fecha}{c.posicion ? ` · Puesto ${c.posicion}` : ''}</p>
                 </div>
-                {c.tiempo && <span className="readout text-sm text-hiviz font-semibold">{c.tiempo}</span>}
+                <div className="flex items-center gap-2">
+                  {c.tiempo && <span className="readout text-sm text-hiviz font-semibold">{c.tiempo}</span>}
+                  <button onClick={() => eliminar(c.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                </div>
               </div>
               {c.objetivo && <p className="text-ink-muted text-xs mt-2"><b className="text-ink">Objetivo:</b> {c.objetivo}</p>}
               {c.resultado && <p className="text-ink-muted text-xs mt-1"><b className="text-ink">Resultado:</b> {c.resultado}</p>}
@@ -68,7 +81,7 @@ function MiniDato({ label, value }) {
   )
 }
 
-function FormCompetencia({ onGuardar, onCancelar }) {
+function FormCompetencia({ onGuardar, onCancelar, error }) {
   const [form, setForm] = useState({
     nombre: '', fecha: new Date().toISOString().slice(0, 10), objetivo: '', resultado: '',
     posicion: '', tiempo: '', potencia_avg: '', fc_avg: ''
@@ -93,6 +106,7 @@ function FormCompetencia({ onGuardar, onCancelar }) {
         <input type="number" {...campo('potencia_avg')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">FC media</span>
         <input type="number" {...campo('fc_avg')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      {error && <p className="text-alert-red text-xs col-span-2">{error}</p>}
       <div className="col-span-2 flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
