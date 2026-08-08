@@ -3,19 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --color-asphalt-900: 20 22 26;
-  --color-asphalt-800: 28 31 38;
-  --color-asphalt-700: 38 42 51;
-  --color-asphalt-600: 52 57 70;
-  --color-hiviz: 196 241 53;
-  --color-hiviz-dim: 143 174 42;
+  --color-asphalt-900: 26 26 26;
+  --color-asphalt-800: 34 34 34;
+  --color-asphalt-700: 44 44 44;
+  --color-asphalt-600: 76 76 76;
+  --color-hiviz: 235 100 42;
+  --color-hiviz-dim: 180 76 32;
   --color-route: 74 158 255;
   --color-route-dim: 46 107 179;
   --color-alert-amber: 245 166 35;
   --color-alert-red: 241 74 74;
-  --color-ink: 232 233 237;
-  --color-ink-muted: 138 143 156;
-  --color-ink-faint: 86 91 104;
+  --color-ink: 235 235 235;
+  --color-ink-muted: 165 165 165;
+  --color-ink-faint: 110 110 110;
 }
 
 .light {
@@ -23,8 +23,8 @@
   --color-asphalt-800: 255 255 255;
   --color-asphalt-700: 225 228 233;
   --color-asphalt-600: 203 208 216;
-  --color-hiviz: 92 120 24;
-  --color-hiviz-dim: 74 96 19;
+  --color-hiviz: 200 84 30;
+  --color-hiviz-dim: 160 66 22;
   --color-route: 46 107 179;
   --color-route-dim: 31 74 125;
   --color-alert-amber: 181 120 15;
@@ -48,7 +48,7 @@
     @apply bg-hiviz text-asphalt-950;
   }
   :focus-visible {
-    outline: 2px solid #C4F135;
+    outline: 2px solid #EB642A;
     outline-offset: 2px;
   }
 }
