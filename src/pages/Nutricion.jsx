@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
+import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE } from '../lib/tdee'
+import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -16,19 +18,6 @@ const METRICAS_ANTROPOMETRIA = [
   { id: 'perimetro_brazo', label: 'Brazo (cm)', color: '#C34AF1' },
   { id: 'perimetro_pierna', label: 'Pierna (cm)', color: '#7A4AF1' }
 ]
-const NIVELES_ACTIVIDAD = [
-  { id: 'sedentario', label: 'Sedentario', factor: 1.2 },
-  { id: 'ligero', label: 'Entreno ligero (1-3 d/sem)', factor: 1.375 },
-  { id: 'moderado', label: 'Entreno moderado (3-5 d/sem)', factor: 1.55 },
-  { id: 'alto', label: 'Entreno intenso (6-7 d/sem)', factor: 1.725 },
-  { id: 'muy_alto', label: 'Doble sesión / muy intenso', factor: 1.9 }
-]
-
-function calcularBMR({ peso, altura, edad, sexo }) {
-  const p = Number(peso), a = Number(altura), e = Number(edad)
-  if (!p || !a || !e) return null
-  return sexo === 'F' ? 10 * p + 6.25 * a - 5 * e - 161 : 10 * p + 6.25 * a - 5 * e + 5
-}
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
@@ -198,11 +187,11 @@ export default function Nutricion() {
   const hidratacionPorDia = agruparPorFecha(hidratacion)
 
   const bmr = calcularBMR(perfil)
-  const nivel = NIVELES_ACTIVIDAD.find((n) => n.id === perfil.nivel_actividad) || NIVELES_ACTIVIDAD[2]
-  const tdee = bmr ? Math.round(bmr * nivel.factor) : null
+  const tdee = calcularTDEE(perfil)
   const comidasPorDia = agruparPorFecha(comidas)
 
   const pesoActual = pesoHistorial[pesoHistorial.length - 1] || null
+  const alertasNutricion = evaluarDeficitNutricional({ comidas, tdee, pesoKg: pesoActual?.peso || perfil?.peso })
   const pesoInicial = pesoHistorial[0] || null
   const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1 ? (pesoActual.peso - pesoInicial.peso) : null
   const graficoPeso = pesoHistorial.map((p) => ({ fecha: p.fecha, peso: p.peso }))
@@ -255,6 +244,13 @@ export default function Nutricion() {
             <StatMini label="Proteínas" value={proteinasHoy.toFixed(0)} unit="g" />
             <StatMini label="Carbos / Grasas" value={`${carbosHoy.toFixed(0)}/${grasasHoy.toFixed(0)}`} unit="g" />
           </div>
+
+          {alertasNutricion.map((a) => (
+            <div key={a.tipo} className="card border-alert-amber">
+              <span className="label-eyebrow text-alert-amber">{a.titulo}</span>
+              <p className="text-ink-muted text-sm mt-1.5">{a.mensaje}</p>
+            </div>
+          ))}
         </>
       )}
 
