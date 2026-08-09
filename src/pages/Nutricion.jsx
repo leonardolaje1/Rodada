@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
+import { SkeletonList } from '../components/Skeleton'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -50,6 +51,8 @@ export default function Nutricion() {
   const [formAntropo, setFormAntropo] = useState(false)
   const [antropoEditando, setAntropoEditando] = useState(null)
   const [formBebidaOpen, setFormBebidaOpen] = useState(false)
+  const [fechaHidratacion, setFechaHidratacion] = useState(new Date().toISOString().slice(0, 10))
+  const [editandoHidratacionId, setEditandoHidratacionId] = useState(null)
   const [metricaGrafico, setMetricaGrafico] = useState('grasa_corporal_pct')
   const [formPlanOpen, setFormPlanOpen] = useState(false)
   const [planEditando, setPlanEditando] = useState(null)
@@ -57,6 +60,7 @@ export default function Nutricion() {
   const [documentos, setDocumentos] = useState([])
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const [errorArchivo, setErrorArchivo] = useState('')
+  const [cargando, setCargando] = useState(true)
 
   async function cargar() {
     const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }] = await Promise.all([
@@ -77,6 +81,7 @@ export default function Nutricion() {
     setAntropometria(antro || [])
     setPlanes(pl || [])
     setDocumentos(docs || [])
+    setCargando(false)
   }
   useEffect(() => { cargar() }, [])
 
@@ -102,9 +107,17 @@ export default function Nutricion() {
   async function eliminarAntropo(id) { if (!confirm('¿Borrar este registro?')) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
   async function eliminarSuplemento(id) { if (!confirm('¿Borrar este suplemento?')) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
 
-  async function cargarBebida(bebida, ml) {
-    await supabase.from('hidratacion').insert({ fecha: hoy, ml, bebida, hora: new Date().toTimeString().slice(0, 5) })
+  async function cargarBebida(bebida, ml, fecha) {
+    await supabase.from('hidratacion').insert({ fecha: fecha || fechaHidratacion, ml, bebida, hora: new Date().toTimeString().slice(0, 5) })
     setFormBebidaOpen(false); cargar()
+  }
+  async function actualizarHidratacion(id, datos) {
+    await supabase.from('hidratacion').update(datos).eq('id', id)
+    setEditandoHidratacionId(null); cargar()
+  }
+  async function eliminarHidratacion(id) {
+    if (!confirm('¿Borrar este registro de hidratación?')) return
+    await supabase.from('hidratacion').delete().eq('id', id); cargar()
   }
 
   async function crearPlan(form) {
@@ -175,10 +188,12 @@ export default function Nutricion() {
 
   const hidratacionHoy = hidratacion.filter((h) => h.fecha === hoy)
   const mlHoyAgua = hidratacionHoy.filter((h) => (h.bebida || 'Agua') === 'Agua').reduce((a, h) => a + (Number(h.ml) || 0), 0)
-  const porBebidaHoy = BEBIDAS.map((b) => ({
+  const hidratacionFechaSeleccionada = hidratacion.filter((h) => h.fecha === fechaHidratacion)
+  const porBebidaFecha = BEBIDAS.map((b) => ({
     bebida: b,
-    ml: hidratacionHoy.filter((h) => (h.bebida || 'Agua') === b).reduce((a, h) => a + (Number(h.ml) || 0), 0)
+    ml: hidratacionFechaSeleccionada.filter((h) => (h.bebida || 'Agua') === b).reduce((a, h) => a + (Number(h.ml) || 0), 0)
   })).filter((b) => b.ml > 0)
+  const hidratacionPorDia = agruparPorFecha(hidratacion)
 
   const bmr = calcularBMR(perfil)
   const nivel = NIVELES_ACTIVIDAD.find((n) => n.id === perfil.nivel_actividad) || NIVELES_ACTIVIDAD[2]
@@ -349,7 +364,9 @@ export default function Nutricion() {
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setComidaEditando(null); setFormComida((v) => !v) }}>+ Comida</button>
           </div>
           {formComida && <FormComida onGuardar={crearComida} onCancelar={() => setFormComida(false)} />}
-          {comidasPorDia.length === 0 ? (
+          {cargando ? (
+            <SkeletonList rows={4} />
+          ) : comidasPorDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin comidas registradas todavía.</p>
           ) : (
             <div className="flex flex-col gap-5">
@@ -516,10 +533,21 @@ export default function Nutricion() {
       {sub === 'hidratacion' && (
         <>
           <div className="card">
-            <span className="label-eyebrow">Agua — carga rápida</span>
+            <span className="label-eyebrow">Fecha</span>
+            <input
+              type="date"
+              value={fechaHidratacion}
+              max={hoy}
+              onChange={(e) => setFechaHidratacion(e.target.value)}
+              className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm mt-1.5"
+            />
+          </div>
+
+          <div className="card">
+            <span className="label-eyebrow">Agua — carga rápida ({fechaHidratacion === hoy ? 'hoy' : fechaHidratacion})</span>
             <div className="flex gap-2 mt-2.5 flex-wrap">
               {[250, 500, 750].map((ml) => (
-                <button key={ml} className="border border-asphalt-700 rounded-lg px-3 py-1.5 text-sm text-ink-muted" onClick={() => cargarBebida('Agua', ml)}>+ {ml} ml</button>
+                <button key={ml} className="border border-asphalt-700 rounded-lg px-3 py-1.5 text-sm text-ink-muted" onClick={() => cargarBebida('Agua', ml, fechaHidratacion)}>+ {ml} ml</button>
               ))}
             </div>
           </div>
@@ -527,29 +555,62 @@ export default function Nutricion() {
           <div className="flex justify-end">
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormBebidaOpen((v) => !v)}>+ Otra bebida</button>
           </div>
-          {formBebidaOpen && <FormBebida onGuardar={cargarBebida} onCancelar={() => setFormBebidaOpen(false)} />}
+          {formBebidaOpen && (
+            <FormBebida
+              fechaPorDefecto={fechaHidratacion}
+              onGuardar={(bebida, ml, fecha) => cargarBebida(bebida, ml, fecha)}
+              onCancelar={() => setFormBebidaOpen(false)}
+            />
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             {BEBIDAS.map((b) => {
-              const item = porBebidaHoy.find((x) => x.bebida === b)
+              const item = porBebidaFecha.find((x) => x.bebida === b)
               if (!item && b !== 'Agua') return null
               return (
                 <div key={b} className="card">
-                  <span className="label-eyebrow">{b} — hoy</span>
+                  <span className="label-eyebrow">{b}</span>
                   <p className={`readout text-2xl font-bold mt-1 ${b === 'Agua' ? 'text-route' : 'text-hiviz'}`}>{((item?.ml || 0) / 1000).toFixed(2)} L</p>
                 </div>
               )
             })}
           </div>
 
-          <div className="flex flex-col gap-2">
-            {hidratacion.slice(0, 20).map((h) => (
-              <div key={h.id} className="card flex justify-between py-2.5">
-                <span className="text-ink-muted text-sm">{h.fecha} · {h.hora} · {h.bebida || 'Agua'}</span>
-                <span className="readout text-sm font-semibold">{h.ml} ml</span>
-              </div>
-            ))}
-          </div>
+          {hidratacionPorDia.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin registros de hidratación todavía.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {hidratacionPorDia.slice(0, 10).map(([fecha, items]) => (
+                <div key={fecha}>
+                  <p className="text-sm font-semibold mb-2">{fecha}</p>
+                  <div className="flex flex-col gap-2">
+                    {items.map((h) =>
+                      editandoHidratacionId === h.id ? (
+                        <FormBebida
+                          key={h.id}
+                          valoresIniciales={h}
+                          fechaPorDefecto={h.fecha}
+                          onGuardar={(bebida, ml, fecha, hora) => actualizarHidratacion(h.id, { bebida, ml, fecha, hora })}
+                          onCancelar={() => setEditandoHidratacionId(null)}
+                        />
+                      ) : (
+                        <div key={h.id} className="card flex justify-between items-center py-2.5">
+                          <span className="text-ink-muted text-sm">{h.hora} · {h.bebida || 'Agua'}</span>
+                          <div className="flex items-center gap-2.5">
+                            <span className="readout text-sm font-semibold">{h.ml} ml</span>
+                            <div className="flex gap-1">
+                              <button onClick={() => setEditandoHidratacionId(h.id)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                              <button onClick={() => eliminarHidratacion(h.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -724,14 +785,20 @@ function Campo2({ label, ...props }) {
   return <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">{label}</span><input type="number" step="0.1" {...props} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
 }
 
-function FormBebida({ onGuardar, onCancelar }) {
-  const [bebida, setBebida] = useState('Isotónica')
-  const [ml, setMl] = useState('')
+function FormBebida({ onGuardar, onCancelar, valoresIniciales, fechaPorDefecto }) {
+  const [bebida, setBebida] = useState(valoresIniciales?.bebida || 'Isotónica')
+  const [ml, setMl] = useState(valoresIniciales?.ml ?? '')
+  const [fecha, setFecha] = useState(valoresIniciales?.fecha || fechaPorDefecto || new Date().toISOString().slice(0, 10))
+  const [hora, setHora] = useState(valoresIniciales?.hora || new Date().toTimeString().slice(0, 5))
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); if (ml) onGuardar(bebida, Number(ml)) }}>
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); if (ml) onGuardar(bebida, Number(ml), fecha, hora) }}>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
+        <input type="date" value={fecha} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setFecha(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Hora</span>
+        <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Bebida</span>
         <select value={bebida} onChange={(e) => setBebida(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-          {BEBIDAS.filter((b) => b !== 'Agua').map((b) => <option key={b}>{b}</option>)}
+          {BEBIDAS.map((b) => <option key={b}>{b}</option>)}
         </select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Cantidad (ml)</span>
         <input type="number" value={ml} onChange={(e) => setMl(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
