@@ -5,6 +5,7 @@ import {
   LineChart, Users, FileText, Settings, MoreHorizontal, X
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
+import Avatar from './Avatar'
 
 const NAV = [
   { to: '/', label: 'Panel', Icon: Gauge, end: true },
@@ -37,9 +38,12 @@ export default function Layout() {
     setTema((t) => (t === 'dark' ? 'light' : 'dark'))
   }
 
+  const [usuario, setUsuario] = useState(null)
+
   useEffect(() => {
     async function cargar() {
       const { data: userData } = await supabase.auth.getUser()
+      setUsuario(userData.user)
       const { data } = await supabase
         .from('vinculos')
         .select('id, iniciado_por')
@@ -57,7 +61,8 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col w-56 border-r border-asphalt-700 p-5 gap-1 overflow-y-auto">
-        <div className="mb-8">
+        <div className="mb-8 flex items-center gap-2.5">
+          <Avatar url={usuario?.user_metadata?.avatar_url} nombre={usuario?.user_metadata?.nombre || usuario?.email} size={30} />
           <span className="font-display font-bold text-xl text-hiviz">HELU</span>
         </div>
         {NAV.map((item) => (
@@ -79,7 +84,10 @@ export default function Layout() {
       </aside>
 
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-asphalt-700">
-        <span className="font-display font-bold text-lg text-hiviz">HELU</span>
+        <div className="flex items-center gap-2">
+          <Avatar url={usuario?.user_metadata?.avatar_url} nombre={usuario?.user_metadata?.nombre || usuario?.email} size={26} />
+          <span className="font-display font-bold text-lg text-hiviz">HELU</span>
+        </div>
         <div className="flex items-center gap-3">
           <button onClick={alternarTema} className="text-ink-muted text-xs" aria-label="Cambiar tema">
             {tema === 'dark' ? '◐' : '◑'}
