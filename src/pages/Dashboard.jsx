@@ -7,6 +7,9 @@ import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
 import Skeleton, { SkeletonList } from '../components/Skeleton'
+import { calcularTDEE } from '../lib/tdee'
+import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
+import { Apple } from 'lucide-react'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 function direccionViento(grados) {
@@ -41,6 +44,9 @@ export default function Dashboard() {
   const [gimnasioPendienteHoy, setGimnasioPendienteHoy] = useState(false)
   const [faltaRecuperacionHoy, setFaltaRecuperacionHoy] = useState(false)
   const [verMas, setVerMas] = useState(false)
+  const [perfilNutricional, setPerfilNutricional] = useState(null)
+  const [comidasRecientes, setComidasRecientes] = useState([])
+  const [pesoActual, setPesoActual] = useState(null)
 
   useEffect(() => {
     async function cargar() {
@@ -50,7 +56,9 @@ export default function Dashboard() {
       desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
 
       const hoyStr = new Date().toISOString().slice(0, 10)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }] = await Promise.all([
+      const desde7 = new Date()
+      desde7.setDate(desde7.getDate() - 7)
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -64,7 +72,10 @@ export default function Dashboard() {
         supabase.from('componentes').select('*'),
         supabase.from('desgaste_componentes').select('*'),
         supabase.from('gimnasio').select('id').eq('fecha', hoyStr).eq('estado', 'pendiente').limit(1),
-        supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle()
+        supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle(),
+        supabase.from('perfil_nutricional').select('*').maybeSingle(),
+        supabase.from('comidas').select('fecha, kcal, proteinas').gte('fecha', desde7.toISOString().slice(0, 10)),
+        supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1)
       ])
 
       setEntrenamientos(ents || [])
@@ -77,6 +88,9 @@ export default function Dashboard() {
       setDesgaste(desgasteData || [])
       setGimnasioPendienteHoy((gymHoy || []).length > 0)
       setFaltaRecuperacionHoy(!recupHoy)
+      setPerfilNutricional(perfilNutri || null)
+      setComidasRecientes(comidasNutri || [])
+      setPesoActual((pesosNutri && pesosNutri[0]?.peso) || perfilNutri?.peso || null)
       setCargando(false)
     }
     cargar()
@@ -187,6 +201,9 @@ export default function Dashboard() {
 
   const alertasMantenimiento = [...alertasDesgaste, ...alertasComponentes].sort((a, b) => b.pct - a.pct)
 
+  const tdeeUsuario = calcularTDEE(perfilNutricional || {})
+  const alertasNutricion = evaluarDeficitNutricional({ comidas: comidasRecientes, tdee: tdeeUsuario, pesoKg: pesoActual })
+
   const entrenamientoPendienteHoy = entrenamientos.find((e) => e.fecha === hoy && e.estado === 'pendiente') || null
   const entrenamientoHechoHoy = entrenamientos.some((e) => e.fecha === hoy && e.estado === 'realizado')
   const diasCompetencia = proximaCompetencia
@@ -255,8 +272,20 @@ export default function Dashboard() {
       </div>
 
       {/* Zona 3 — Alertas urgentes */}
-      {(alertasMantenimiento.length > 0 || (diasCompetencia != null && diasCompetencia <= 7)) && (
+      {(alertasMantenimiento.length > 0 || alertasNutricion.length > 0 || (diasCompetencia != null && diasCompetencia <= 7)) && (
         <div className="flex flex-col gap-2">
+          {alertasNutricion.map((a) => (
+            <Link key={a.tipo} to="/nutricion" className="card flex items-center justify-between hover:border-alert-amber" style={{ borderColor: '#F5A62355' }}>
+              <div className="flex items-center gap-2.5">
+                <IconoInsignia Icono={Apple} color="#F5A623" />
+                <div>
+                  <p className="text-xs font-semibold text-alert-amber">{a.titulo}</p>
+                  <p className="text-ink-muted text-[11px]">{a.mensaje}</p>
+                </div>
+              </div>
+              <span className="text-ink-faint text-xs">→</span>
+            </Link>
+          ))}
           {diasCompetencia != null && diasCompetencia <= 7 && (
             <Link to="/competencias" className="card flex items-center justify-between hover:border-hiviz" style={{ borderColor: '#EB642A55' }}>
               <div className="flex items-center gap-2.5">
