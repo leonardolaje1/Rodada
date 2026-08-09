@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
+import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
+import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -716,9 +718,26 @@ function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
 
 function FormComida({ onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), hora: new Date().toTimeString().slice(0, 5), tipo: 'Desayuno', descripcion: '', kcal: '', proteinas: '', carbohidratos: '', grasas: '', ...valoresIniciales })
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false)
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+
+  function aplicarAlimento({ descripcion, kcal, proteinas, carbohidratos, grasas }) {
+    setForm((f) => ({ ...f, descripcion: descripcion || f.descripcion, kcal, proteinas, carbohidratos, grasas }))
+    setBuscadorAbierto(false)
+  }
+
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
+      <div className="col-span-2">
+        <button type="button" onClick={() => setBuscadorAbierto((v) => !v)} className="border border-asphalt-700 text-hiviz font-semibold text-sm px-3 py-2 rounded-lg w-full">
+          {buscadorAbierto ? 'Cerrar buscador' : '🔍 Buscar alimento (autocompleta macros)'}
+        </button>
+      </div>
+      {buscadorAbierto && (
+        <div className="col-span-2">
+          <BuscadorAlimento onSeleccionar={aplicarAlimento} />
+        </div>
+      )}
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Hora</span><input type="time" {...campo('hora')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Tipo</span><select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{TIPOS_COMIDA.map((t) => <option key={t}>{t}</option>)}</select></label>
@@ -729,6 +748,123 @@ function FormComida({ onGuardar, onCancelar, valoresIniciales }) {
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Grasas (g)</span><input type="number" {...campo('grasas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
     </form>
+  )
+}
+
+function BuscadorAlimento({ onSeleccionar }) {
+  const [texto, setTexto] = useState('')
+  const [resultados, setResultados] = useState([])
+  const [buscando, setBuscando] = useState(false)
+  const [error, setError] = useState('')
+  const [escaneando, setEscaneando] = useState(false)
+  const [productoElegido, setProductoElegido] = useState(null)
+  const [cantidad, setCantidad] = useState('100')
+
+  async function buscar() {
+    setError(''); setBuscando(true); setResultados([])
+    try {
+      const r = await buscarAlimentosPorTexto(texto)
+      if (r.length === 0) setError('Sin resultados. Probá con otro nombre o cargá los macros a mano.')
+      setResultados(r)
+    } catch (err) {
+      setError('No se pudo buscar. Revisá tu conexión.')
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  async function manejarCodigoDetectado(codigo) {
+    setEscaneando(false)
+    setError(''); setBuscando(true)
+    try {
+      const producto = await buscarAlimentoPorCodigoBarras(codigo)
+      if (!producto) { setError('No encontramos ese producto en la base. Probá buscarlo por nombre.'); return }
+      setProductoElegido(producto)
+    } catch (err) {
+      setError('No se pudo consultar el producto.')
+    } finally {
+      setBuscando(false)
+    }
+  }
+
+  function confirmarCantidad() {
+    const g = Number(cantidad) || 0
+    const escala = g / 100
+    onSeleccionar({
+      descripcion: `${productoElegido.nombre}${productoElegido.marca ? ` (${productoElegido.marca})` : ''} — ${g}g`,
+      kcal: productoElegido.kcal100g != null ? Math.round(productoElegido.kcal100g * escala) : '',
+      proteinas: productoElegido.proteinas100g != null ? Math.round(productoElegido.proteinas100g * escala * 10) / 10 : '',
+      carbohidratos: productoElegido.carbohidratos100g != null ? Math.round(productoElegido.carbohidratos100g * escala * 10) / 10 : '',
+      grasas: productoElegido.grasas100g != null ? Math.round(productoElegido.grasas100g * escala * 10) / 10 : ''
+    })
+  }
+
+  if (escaneando) {
+    return (
+      <EscanerCodigoBarras
+        onDetectado={manejarCodigoDetectado}
+        onError={(msg) => { setEscaneando(false); setError(msg) }}
+        onCerrar={() => setEscaneando(false)}
+      />
+    )
+  }
+
+  if (productoElegido) {
+    return (
+      <div className="border border-asphalt-700 rounded-lg p-3 flex flex-col gap-2.5 bg-asphalt-900">
+        <div>
+          <p className="text-sm font-semibold">{productoElegido.nombre}</p>
+          {productoElegido.marca && <p className="text-ink-muted text-xs">{productoElegido.marca}</p>}
+          <p className="text-ink-faint text-xs mt-1">
+            Por 100g: {productoElegido.kcal100g ?? '—'} kcal · P {productoElegido.proteinas100g ?? '—'} · C {productoElegido.carbohidratos100g ?? '—'} · G {productoElegido.grasas100g ?? '—'}
+          </p>
+        </div>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-ink-muted text-xs">¿Cuántos gramos comiste?</span>
+          <input type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+        </label>
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={() => setProductoElegido(null)} className="text-ink-muted text-xs px-3 py-1.5">Elegir otro</button>
+          <button type="button" onClick={confirmarCantidad} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Usar estos valores</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="border border-asphalt-700 rounded-lg p-3 flex flex-col gap-2.5 bg-asphalt-900">
+      <div className="flex gap-2">
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscar() } }}
+          placeholder="Ej: yogur natural, banana..."
+          className="flex-1 bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm"
+        />
+        <button type="button" onClick={buscar} disabled={buscando} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-2 rounded-lg disabled:opacity-60">
+          {buscando ? '...' : 'Buscar'}
+        </button>
+      </div>
+      <button type="button" onClick={() => setEscaneando(true)} className="text-hiviz text-xs font-semibold self-start">
+        📷 Escanear código de barras
+      </button>
+      {error && <p className="text-alert-red text-xs">{error}</p>}
+      {resultados.length > 0 && (
+        <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+          {resultados.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setProductoElegido(r)}
+              className="text-left border border-asphalt-700 rounded-lg px-2.5 py-2 hover:border-hiviz"
+            >
+              <p className="text-xs font-medium">{r.nombre}{r.marca ? ` — ${r.marca}` : ''}</p>
+              <p className="text-ink-faint text-[10px]">{r.kcal100g} kcal / 100g</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
