@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { usePremium } from '../lib/usePremium'
+import Avatar from '../components/Avatar'
 
 const TABLAS = [
   'bicicletas',
@@ -44,6 +45,55 @@ const ORDEN_RESTAURAR = [
 
 export default function Configuracion() {
   const { plan, esPremium, cargando: cargandoPlan } = usePremium()
+  const [usuario, setUsuario] = useState(null)
+  const [subiendoAvatar, setSubiendoAvatar] = useState(false)
+  const [errorAvatar, setErrorAvatar] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUsuario(data.user))
+  }, [])
+
+  async function subirAvatar(file) {
+    if (!file || !usuario) return
+    setErrorAvatar('')
+    setSubiendoAvatar(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${usuario.id}/avatar-${Date.now()}.${ext}`
+      const { error: errSubida } = await supabase.storage.from('avatares').upload(path, file)
+      if (errSubida) throw errSubida
+
+      const { data: urlData } = supabase.storage.from('avatares').getPublicUrl(path)
+      const urlVieja = usuario.user_metadata?.avatar_url
+
+      const { error: errUpdate } = await supabase.auth.updateUser({ data: { avatar_url: urlData.publicUrl } })
+      if (errUpdate) throw errUpdate
+
+      if (urlVieja) {
+        const rutaVieja = urlVieja.split('/avatares/')[1]
+        if (rutaVieja) await supabase.storage.from('avatares').remove([rutaVieja])
+      }
+
+      const { data: userData } = await supabase.auth.getUser()
+      setUsuario(userData.user)
+    } catch (err) {
+      setErrorAvatar('No se pudo subir la foto: ' + (err.message || ''))
+    } finally {
+      setSubiendoAvatar(false)
+    }
+  }
+
+  async function quitarAvatar() {
+    if (!usuario) return
+    const urlVieja = usuario.user_metadata?.avatar_url
+    await supabase.auth.updateUser({ data: { avatar_url: null } })
+    if (urlVieja) {
+      const rutaVieja = urlVieja.split('/avatares/')[1]
+      if (rutaVieja) await supabase.storage.from('avatares').remove([rutaVieja])
+    }
+    const { data: userData } = await supabase.auth.getUser()
+    setUsuario(userData.user)
+  }
   const [exportando, setExportando] = useState(false)
   const [error, setError] = useState('')
   const [ultimaExportacion, setUltimaExportacion] = useState(null)
@@ -190,6 +240,26 @@ export default function Configuracion() {
       <div>
         <h1 className="text-2xl font-bold">Configuración</h1>
         <p className="text-ink-muted text-sm mt-1">Cuenta y datos</p>
+      </div>
+
+      <div className="card">
+        <span className="label-eyebrow">Foto de perfil</span>
+        <p className="text-ink-muted text-xs mt-1.5">Opcional — se muestra en el menú y a tus entrenadores/nutricionistas.</p>
+        <div className="flex items-center gap-4 mt-3">
+          <Avatar url={usuario?.user_metadata?.avatar_url} nombre={usuario?.user_metadata?.nombre || usuario?.email} size={56} />
+          <div className="flex gap-2">
+            <label>
+              <span className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-3.5 py-2 rounded-lg inline-block cursor-pointer hover:text-ink hover:border-hiviz">
+                {subiendoAvatar ? 'Subiendo…' : 'Cambiar foto'}
+              </span>
+              <input type="file" accept="image/*" className="hidden" disabled={subiendoAvatar} onChange={(e) => { subirAvatar(e.target.files[0]); e.target.value = '' }} />
+            </label>
+            {usuario?.user_metadata?.avatar_url && (
+              <button onClick={quitarAvatar} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-3 py-2">Quitar</button>
+            )}
+          </div>
+        </div>
+        {errorAvatar && <p className="text-alert-red text-xs mt-2.5">{errorAvatar}</p>}
       </div>
 
       <div className="card">
