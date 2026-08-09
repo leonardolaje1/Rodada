@@ -7,6 +7,20 @@ const ROLES = [
   { id: 'nutricionista', label: 'Nutricionista' }
 ]
 
+const DATOS_POR_ROL = {
+  entrenador: [
+    'Tus entrenamientos y su historial completo (potencia, FC, TSS, comentarios)',
+    'Tus rutinas y mesociclos de gimnasio, con resultados',
+    'Tus objetivos y tu adherencia al plan'
+  ],
+  nutricionista: [
+    'Tu perfil (peso, altura, edad) y tus necesidades calóricas',
+    'Tus comidas, hidratación y suplementos registrados',
+    'Tu peso histórico y tu antropometría',
+    'Los documentos de nutrición que subas'
+  ]
+}
+
 function diasDesde(fecha) {
   if (!fecha) return null
   const ms = new Date().setHours(0, 0, 0, 0) - new Date(fecha + 'T00:00:00').getTime()
@@ -21,6 +35,7 @@ export default function Equipo() {
   const [formOpen, setFormOpen] = useState(false)
   const [compartirCopiado, setCompartirCopiado] = useState(false)
   const [error, setError] = useState('')
+  const [vinculoConfirmando, setVinculoConfirmando] = useState(null)
 
   async function cargar() {
     const { data: userData } = await supabase.auth.getUser()
@@ -179,7 +194,12 @@ export default function Equipo() {
                     {soyElProfesional ? 'Vos serías el profesional de esta persona.' : 'Esta persona sería tu profesional.'}
                   </p>
                   <div className="flex gap-2 mt-3">
-                    <button onClick={() => responder(v.id, 'aceptado')} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Aceptar</button>
+                    <button
+                      onClick={() => (soyElProfesional ? responder(v.id, 'aceptado') : setVinculoConfirmando(v))}
+                      className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg"
+                    >
+                      Aceptar
+                    </button>
                     <button onClick={() => responder(v.id, 'rechazado')} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Rechazar</button>
                   </div>
                 </div>
@@ -276,6 +296,29 @@ export default function Equipo() {
           </div>
         )}
       </div>
+
+      {vinculoConfirmando && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setVinculoConfirmando(null)}>
+          <div className="card max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <span className="label-eyebrow">Antes de aceptar</span>
+            <p className="text-sm font-semibold mt-1.5">
+              {emails[vinculoConfirmando.profesional_id === miId ? vinculoConfirmando.atleta_id : vinculoConfirmando.profesional_id] || 'Esta persona'} va a poder ver:
+            </p>
+            <ul className="text-ink-muted text-xs mt-2.5 flex flex-col gap-1.5 list-disc pl-4">
+              {(DATOS_POR_ROL[vinculoConfirmando.rol] || []).map((d, i) => <li key={i}>{d}</li>)}
+            </ul>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setVinculoConfirmando(null)} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+              <button
+                onClick={() => { responder(vinculoConfirmando.id, 'aceptado'); setVinculoConfirmando(null) }}
+                className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg"
+              >
+                Aceptar y dar acceso
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
