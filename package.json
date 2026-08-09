@@ -16,7 +16,8 @@
     "react-router-dom": "^6.26.0",
     "recharts": "^2.12.7",
     "jspdf": "^2.5.2",
-    "jspdf-autotable": "^3.8.4"
+    "jspdf-autotable": "^3.8.4",
+    "html5-qrcode": "^2.3.8"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
