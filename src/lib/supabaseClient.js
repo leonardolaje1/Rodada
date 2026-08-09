@@ -4,7 +4,26 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[rodada] Faltan VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.')
+  throw new Error(
+    'Configuración incompleta de Supabase. ' +
+    'Verifica VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el archivo .env.local.'
+  )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl.startsWith('https://')) {
+  throw new Error(
+    'VITE_SUPABASE_URL no parece ser una URL válida de Supabase.'
+  )
+}
+
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+)
