@@ -8,6 +8,7 @@ const DIAS_SEMANA = [
   { id: 'jue', label: 'Jue' }, { id: 'vie', label: 'Vie' }, { id: 'sab', label: 'Sáb' }, { id: 'dom', label: 'Dom' }
 ]
 const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
+const METODOS_PRESCRIPCION = ['RPE', 'RIR', 'Peso fijo', '% de 1RM', 'Otro']
 
 function agruparPorFecha(items) {
   const grupos = {}
@@ -35,7 +36,7 @@ function lunesDeSemana(fechaStr) {
 function crearSemanaVacia(numero) {
   return {
     semana: numero,
-    dias: DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, es_clave: false, ejercicios: [{ ejercicio: 'Sentadilla', series: '', reps: '' }] }))
+    dias: DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, es_clave: false, ejercicios: [{ ejercicio: 'Sentadilla', series: '', reps: '', metodo: '', valor: '' }] }))
   }
 }
 
@@ -120,6 +121,8 @@ export default function Gimnasio() {
             series: ej.series ? Number(ej.series) : null,
             reps: ej.reps ? Number(ej.reps) : null,
             peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
+            metodo_prescrito: ej.metodo || null,
+            valor_prescrito: ej.valor || null,
             mesociclo_gimnasio_id: nuevo.id
           })
         }
@@ -395,7 +398,12 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-1.5">
         {s.es_clave && <span className="text-hiviz text-xs" title="Sesión clave">★</span>}
-        <p className="text-xs font-medium">{s.ejercicio}{s.estado === 'realizado' ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : ''}</p>
+        <div>
+          <p className="text-xs font-medium">{s.ejercicio}{s.estado === 'realizado' ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : s.series || s.reps ? ` — ${s.series || '—'}x${s.reps || '—'}` : ''}</p>
+          {s.estado === 'pendiente' && s.metodo_prescrito && (
+            <p className="text-ink-faint text-[10px]">{s.metodo_prescrito}: {s.valor_prescrito || '—'}</p>
+          )}
+        </div>
       </div>
       {s.estado === 'pendiente' ? (
         <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar resultado</button>
@@ -411,6 +419,11 @@ function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
+      {form.metodo_prescrito && (
+        <div className="col-span-2 bg-asphalt-900 border border-hiviz-dim rounded-lg px-3 py-2 text-xs text-ink-muted">
+          Prescrito por tu entrenador: <span className="text-hiviz font-semibold">{form.metodo_prescrito} {form.valor_prescrito}</span>
+        </div>
+      )}
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Estado</span>
         <select {...campo('estado')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
@@ -478,7 +491,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
     setSemanas((prev) => prev.map((s, i) => (
       i !== semanaIdx ? s : {
         ...s,
-        dias: s.dias.map((d) => (d.dia !== diaId ? d : { ...d, ejercicios: [...d.ejercicios, { ejercicio: 'Sentadilla', series: '', reps: '' }] }))
+        dias: s.dias.map((d) => (d.dia !== diaId ? d : { ...d, ejercicios: [...d.ejercicios, { ejercicio: 'Sentadilla', series: '', reps: '', metodo: '', valor: '' }] }))
       }
     )))
   }
@@ -537,13 +550,24 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
                       {d.activo && (
                         <div className="pl-9 flex flex-col gap-1.5">
                           {d.ejercicios.map((ej, ejIdx) => (
-                            <div key={ejIdx} className="flex gap-1.5 items-center">
-                              <select value={ej.ejercicio} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { ejercicio: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
-                                {EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}
-                              </select>
-                              <input type="number" value={ej.series} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { series: e.target.value })} placeholder="Series" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-16" />
-                              <input type="number" value={ej.reps} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { reps: e.target.value })} placeholder="Reps" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-16" />
-                              <button type="button" onClick={() => quitarEjercicio(si, diaInfo.id, ejIdx)} className="text-alert-red text-xs px-1">✕</button>
+                            <div key={ejIdx} className="flex flex-col gap-1.5 pb-1.5 border-b border-asphalt-800 last:border-0">
+                              <div className="flex gap-1.5 items-center">
+                                <select value={ej.ejercicio} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { ejercicio: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
+                                  {EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}
+                                </select>
+                                <input type="number" value={ej.series} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { series: e.target.value })} placeholder="Series" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-14" />
+                                <input type="number" value={ej.reps} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { reps: e.target.value })} placeholder="Reps" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-14" />
+                                <button type="button" onClick={() => quitarEjercicio(si, diaInfo.id, ejIdx)} className="text-alert-red text-xs px-1">✕</button>
+                              </div>
+                              <div className="flex gap-1.5 items-center">
+                                <select value={ej.metodo} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { metodo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
+                                  <option value="">Sin método prescrito</option>
+                                  {METODOS_PRESCRIPCION.map((m) => <option key={m}>{m}</option>)}
+                                </select>
+                                {ej.metodo && (
+                                  <input value={ej.valor} onChange={(e) => actualizarEjercicio(si, diaInfo.id, ejIdx, { valor: e.target.value })} placeholder="Valor (ej: 8, 2, 70kg)" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-32" />
+                                )}
+                              </div>
                             </div>
                           ))}
                           <button type="button" onClick={() => agregarEjercicio(si, diaInfo.id)} className="text-hiviz text-xs self-start">+ Ejercicio</button>
