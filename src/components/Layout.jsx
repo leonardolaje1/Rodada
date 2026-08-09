@@ -10,14 +10,14 @@ const NAV = [
   { to: '/', label: 'Panel', Icon: Gauge, end: true },
   { to: '/calendario', label: 'Calendario', Icon: Calendar },
   { to: '/entrenamientos', label: 'Entrenamientos', Icon: Activity },
-  { to: '/bicicletas', label: 'Bicicletas', Icon: Bike },
-  { to: '/nutricion', label: 'Nutrición', Icon: Apple },
-  { to: '/recuperacion', label: 'Recuperación', Icon: Moon },
-  { to: '/competencias', label: 'Competencias', Icon: Trophy },
   { to: '/gimnasio', label: 'Gimnasio', Icon: Dumbbell },
+  { to: '/recuperacion', label: 'Recuperación', Icon: Moon },
+  { to: '/nutricion', label: 'Nutrición', Icon: Apple },
+  { to: '/competencias', label: 'Competencias', Icon: Trophy },
+  { to: '/bicicletas', label: 'Bicicletas', Icon: Bike },
   { to: '/analitica', label: 'Análisis', Icon: LineChart },
-  { to: '/equipo', label: 'Equipo', Icon: Users },
   { to: '/reportes', label: 'Reportes', Icon: FileText },
+  { to: '/equipo', label: 'Equipo', Icon: Users },
   { to: '/configuracion', label: 'Configuración', Icon: Settings }
 ]
 
