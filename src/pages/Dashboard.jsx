@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Activity, Dumbbell, Moon, Wrench, Trophy, Check } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
-import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../lib/tss'
+import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
-import Skeleton, { SkeletonStatGrid, SkeletonList } from '../components/Skeleton'
+import Skeleton, { SkeletonList } from '../components/Skeleton'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 function direccionViento(grados) {
@@ -17,6 +18,12 @@ const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function diaIdDe(fecha) {
   return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()]
+}
+
+function calcularEstadoDia(tsb) {
+  if (tsb < -25) return { titulo: 'Descansá', frase: 'Fatiga acumulada alta — priorizá recuperar hoy.', color: '#F14A4A' }
+  if (tsb < -10) return { titulo: 'Con cuidado', frase: 'TSB bajo — bajá un cambio de intensidad hoy.', color: '#F5A623' }
+  return { titulo: 'Entrená fuerte', frase: 'Estás recuperado, buen día para exigir.', color: '#4ADE80' }
 }
 
 export default function Dashboard() {
@@ -31,7 +38,9 @@ export default function Dashboard() {
   const [proximaCompetencia, setProximaCompetencia] = useState(null)
   const [componentes, setComponentes] = useState([])
   const [desgaste, setDesgaste] = useState([])
-  const [mostrarExplicacion, setMostrarExplicacion] = useState(false)
+  const [gimnasioPendienteHoy, setGimnasioPendienteHoy] = useState(false)
+  const [faltaRecuperacionHoy, setFaltaRecuperacionHoy] = useState(false)
+  const [verMas, setVerMas] = useState(false)
 
   useEffect(() => {
     async function cargar() {
@@ -41,7 +50,7 @@ export default function Dashboard() {
       desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
 
       const hoyStr = new Date().toISOString().slice(0, 10)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }] = await Promise.all([
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -53,7 +62,9 @@ export default function Dashboard() {
         supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10)),
         supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1),
         supabase.from('componentes').select('*'),
-        supabase.from('desgaste_componentes').select('*')
+        supabase.from('desgaste_componentes').select('*'),
+        supabase.from('gimnasio').select('id').eq('fecha', hoyStr).eq('estado', 'pendiente').limit(1),
+        supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle()
       ])
 
       setEntrenamientos(ents || [])
@@ -64,6 +75,8 @@ export default function Dashboard() {
       setProximaCompetencia((comps && comps[0]) || null)
       setComponentes(componentesData || [])
       setDesgaste(desgasteData || [])
+      setGimnasioPendienteHoy((gymHoy || []).length > 0)
+      setFaltaRecuperacionHoy(!recupHoy)
       setCargando(false)
     }
     cargar()
@@ -104,7 +117,7 @@ export default function Dashboard() {
     construirSerieDiaria(entrenamientos, desde90.toISOString().slice(0, 10), hoy)
   )
   const ultimo = serie[serie.length - 1] || { ctl: 0, atl: 0, tsb: 0 }
-  const forma = interpretarTSB(ultimo.tsb)
+  const estadoDia = calcularEstadoDia(ultimo.tsb)
 
   const inicioSemana = new Date()
   inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
@@ -147,7 +160,6 @@ export default function Dashboard() {
   const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
   const tieneAlgunPlan = planesEntreno.length > 0 || planesGym.length > 0
   const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
-
   const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
 
   const nombreBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.nombre || 'Bici'
@@ -175,151 +187,204 @@ export default function Dashboard() {
 
   const alertasMantenimiento = [...alertasDesgaste, ...alertasComponentes].sort((a, b) => b.pct - a.pct)
 
-    if (cargando) {
+  const entrenamientoPendienteHoy = entrenamientos.find((e) => e.fecha === hoy && e.estado === 'pendiente') || null
+  const entrenamientoHechoHoy = entrenamientos.some((e) => e.fecha === hoy && e.estado === 'realizado')
+  const diasCompetencia = proximaCompetencia
+    ? Math.round((new Date(proximaCompetencia.fecha + 'T00:00:00') - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    : null
+
+  if (cargando) {
     return (
       <div className="flex flex-col gap-6">
         <div>
           <Skeleton className="h-7 w-24 mb-2" />
           <Skeleton className="h-4 w-40" />
         </div>
-        <SkeletonStatGrid count={4} />
-        <Skeleton className="h-20 w-full" />
-        <Skeleton className="h-40 w-full" />
-        <SkeletonList rows={2} />
+        <Skeleton className="h-28 w-full" />
+        <SkeletonList rows={3} />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Panel</h1>
-          <p className="text-ink-muted text-sm mt-1">Resumen de tu actividad</p>
         </div>
         {clima && (
-          <div className="card py-2.5 px-3.5 flex items-center gap-3 flex-shrink-0">
-            <span className="readout text-2xl font-bold text-hiviz">{clima.temp}°</span>
+          <div className="card py-2 px-3 flex items-center gap-2.5 flex-shrink-0">
+            <span className="readout text-lg font-bold text-hiviz">{clima.temp}°</span>
             <div className="text-right">
-              <p className="text-ink-muted text-xs">{clima.viento} km/h</p>
-              <p className="text-ink-faint text-[10px] uppercase">{clima.direccion}</p>
+              <p className="text-ink-muted text-[11px]">{clima.viento} km/h</p>
+              <p className="text-ink-faint text-[9px] uppercase">{clima.direccion}</p>
             </div>
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Horas — semana" value={horasSemana.toFixed(1)} unit="h" />
-        <StatCard label="Km — semana" value={kmSemana.toFixed(0)} unit="km" />
-        <StatCard label="CTL (fitness)" value={ultimo.ctl} accent="hiviz" />
-        <StatCard label="ATL (fatiga)" value={ultimo.atl} accent="red" />
+      {/* Zona 1 — Hero de decisión */}
+      <div className="card text-center py-5" style={{ borderColor: estadoDia.color + '55', background: estadoDia.color + '14' }}>
+        <span className="label-eyebrow">Hoy</span>
+        <p className="text-2xl font-display font-bold mt-1.5" style={{ color: estadoDia.color }}>{estadoDia.titulo}</p>
+        <p className="text-ink-muted text-sm mt-1">{estadoDia.frase}</p>
       </div>
 
-      <div className="card">
-        <span className="label-eyebrow">Forma actual (TSB)</span>
-        <div className="flex items-baseline gap-3 mt-1">
-          <span className={`readout text-4xl font-bold text-${forma.color}`}>{ultimo.tsb}</span>
-          <span className="text-sm text-ink-muted">{forma.texto}</span>
-        </div>
-        <button onClick={() => setMostrarExplicacion((v) => !v)} className="text-hiviz text-xs mt-2.5">
-          {mostrarExplicacion ? 'Ocultar explicación' : '¿Qué significan estos números?'}
-        </button>
-        {mostrarExplicacion && (
-          <div className="flex flex-col gap-2.5 mt-3 pt-3 border-t border-asphalt-700">
-            <p className="text-ink-muted text-xs"><b className="text-ink">CTL — tu fondo de forma.</b> Cuánto entrenaste en las últimas 6 semanas. Sube y baja lento: hace falta constancia para moverlo.</p>
-            <p className="text-ink-muted text-xs"><b className="text-ink">ATL — tu cansancio reciente.</b> Cuánto entrenaste en la última semana. Sube y baja rápido: unos días duros y ya lo notás.</p>
-            <p className="text-ink-muted text-xs"><b className="text-ink">TSB — tu estado hoy.</b> Es CTL menos ATL. Positivo: estás descansado. Muy negativo: estás cargado, conviene bajar un cambio.</p>
-          </div>
-        )}
+      {/* Zona 2 — Qué hacer hoy */}
+      <div className="flex flex-col gap-2">
+        <FilaHoy
+          Icono={Activity}
+          label="Entrenamiento"
+          sub={entrenamientoPendienteHoy ? entrenamientoPendienteHoy.tipo : undefined}
+          estado={entrenamientoHechoHoy ? 'hecho' : entrenamientoPendienteHoy ? 'pendiente' : 'nada'}
+          to="/entrenamientos"
+        />
+        <FilaHoy
+          Icono={Dumbbell}
+          label="Gimnasio"
+          estado={gimnasioPendienteHoy ? 'pendiente' : 'nada'}
+          to="/gimnasio"
+        />
+        <FilaHoy
+          Icono={Moon}
+          label="Recuperación"
+          sub={faltaRecuperacionHoy ? 'Falta cargar' : 'Cargado hoy'}
+          estado={faltaRecuperacionHoy ? 'pendiente' : 'hecho'}
+          to="/recuperacion"
+        />
       </div>
 
-      {tieneAlgunPlan && (
-        <div className="card" style={{ borderColor: colorAdherencia }}>
-          <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
-          {adherenciaPct != null ? (
-            <>
-              <div className="flex items-baseline gap-3 mt-1">
-                <span className="readout text-4xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
-                <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
+      {/* Zona 3 — Alertas urgentes */}
+      {(alertasMantenimiento.length > 0 || (diasCompetencia != null && diasCompetencia <= 7)) && (
+        <div className="flex flex-col gap-2">
+          {diasCompetencia != null && diasCompetencia <= 7 && (
+            <Link to="/competencias" className="card flex items-center justify-between hover:border-hiviz" style={{ borderColor: '#EB642A55' }}>
+              <div className="flex items-center gap-2.5">
+                <IconoInsignia Icono={Trophy} color="#EB642A" />
+                <div>
+                  <p className="text-xs font-semibold text-hiviz">{proximaCompetencia.nombre}</p>
+                  <p className="text-ink-muted text-[11px]">{diasCompetencia === 0 ? 'Hoy' : `En ${diasCompetencia} días`}</p>
+                </div>
               </div>
-              <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
-                <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
-              </div>
-              <div className="flex gap-4 mt-2.5">
-                {diasEsperadosEntreno > 0 && (
-                  <span className="text-ink-muted text-xs">Entrenamiento: {diasCumplidosEntreno}/{diasEsperadosEntreno}</span>
-                )}
-                {diasEsperadosGym > 0 && (
-                  <span className="text-ink-muted text-xs">Gimnasio: {diasCumplidosGym}/{diasEsperadosGym}</span>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
+              <span className="text-ink-faint text-xs">→</span>
+            </Link>
           )}
-        </div>
-      )}
-
-      {proximaCompetencia && (() => {
-        const dias = Math.round((new Date(proximaCompetencia.fecha + 'T00:00:00') - new Date().setHours(0, 0, 0, 0)) / 86400000)
-        return (
-          <div className="card">
-            <span className="label-eyebrow">Próxima competencia</span>
-            <div className="flex items-baseline justify-between mt-1">
-              <p className="text-sm font-semibold">{proximaCompetencia.nombre}</p>
-              <span className="readout text-2xl font-bold text-hiviz">{dias === 0 ? 'Hoy' : `${dias}d`}</span>
-            </div>
-            <p className="text-ink-faint text-xs mt-0.5">{proximaCompetencia.fecha}</p>
-          </div>
-        )
-      })()}
-
-      <PMCChart data={serie} />
-
-      {alertasMantenimiento.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Mantenimiento</h2>
-          <div className="flex flex-col gap-2">
-            {alertasMantenimiento.map((a, i) => (
-              <Link
-                key={i}
-                to={`/bicicletas/${a.biciId}`}
-                className="card flex items-center justify-between hover:border-hiviz"
-                style={{ borderColor: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}
-              >
+          {alertasMantenimiento.slice(0, 2).map((a, i) => (
+            <Link
+              key={i}
+              to={`/bicicletas/${a.biciId}`}
+              className="card flex items-center justify-between hover:border-alert-red"
+              style={{ borderColor: (a.nivel === 'critico' ? '#F14A4A' : '#F5A623') + '55' }}
+            >
+              <div className="flex items-center gap-2.5">
+                <IconoInsignia Icono={Wrench} color={a.nivel === 'critico' ? '#F14A4A' : '#F5A623'} />
                 <div>
-                  <p className="text-sm font-medium">{a.label}</p>
-                  <p className="text-ink-muted text-xs">{a.bici}</p>
+                  <p className="text-xs font-semibold" style={{ color: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}>{a.label} — {a.pct}%</p>
+                  <p className="text-ink-muted text-[11px]">{a.bici}</p>
                 </div>
-                <span className="readout text-sm font-bold" style={{ color: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}>{a.pct}%</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
-        {bicicletas.length === 0 ? (
-          <p className="text-ink-muted text-sm">
-            Todavía no cargaste ninguna bicicleta. Andá a la sección Bicis para agregar la primera.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {bicicletas.map((b) => (
-              <div key={b.id} className="card flex items-center justify-between">
-                <div>
-                  <p className="font-medium">{b.nombre}</p>
-                  <p className="text-ink-muted text-xs">{b.marca} {b.modelo}</p>
-                </div>
-                <span className="readout text-sm text-ink-muted">
-                  {(b.km_totales || 0).toLocaleString('es-AR')} km
-                </span>
               </div>
-            ))}
+              <span className="text-ink-faint text-xs">→</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Zona 4 — Detalle, colapsado por default */}
+      <button onClick={() => setVerMas((v) => !v)} className="text-hiviz text-xs font-semibold flex items-center gap-1 self-start">
+        {verMas ? 'Ocultar detalle' : 'Ver más detalle'} <span className="text-ink-faint">{verMas ? '▲' : '▼'}</span>
+      </button>
+
+      {verMas && (
+        <div className="flex flex-col gap-4 pt-1 border-t border-asphalt-700">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <StatCard label="Horas — semana" value={horasSemana.toFixed(1)} unit="h" />
+            <StatCard label="Km — semana" value={kmSemana.toFixed(0)} unit="km" />
+            <StatCard label="CTL (fitness)" value={ultimo.ctl} accent="hiviz" />
+            <StatCard label="ATL (fatiga)" value={ultimo.atl} accent="red" />
           </div>
-        )}
-      </div>
+
+          <PMCChart data={serie} />
+
+          {tieneAlgunPlan && (
+            <div className="card" style={{ borderColor: colorAdherencia }}>
+              <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
+              {adherenciaPct != null ? (
+                <>
+                  <div className="flex items-baseline gap-3 mt-1">
+                    <span className="readout text-3xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
+                    <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
+                    <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
+                  </div>
+                </>
+              ) : (
+                <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
+            {bicicletas.length === 0 ? (
+              <p className="text-ink-muted text-sm">
+                Todavía no cargaste ninguna bicicleta. Andá a la sección Bicicletas para agregar la primera.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {bicicletas.map((b) => (
+                  <Link key={b.id} to={`/bicicletas/${b.id}`} className="card flex items-center justify-between hover:border-hiviz">
+                    <div>
+                      <p className="font-medium">{b.nombre}</p>
+                      <p className="text-ink-muted text-xs">{b.marca} {b.modelo}</p>
+                    </div>
+                    <span className="readout text-sm text-ink-muted">
+                      {(b.km_totales || 0).toLocaleString('es-AR')} km
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function IconoInsignia({ Icono, color, activo = true }) {
+  return (
+    <span
+      className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+      style={{ background: activo ? `${color}1A` : 'rgb(44,44,44)' }}
+    >
+      <Icono size={15} strokeWidth={2} color={activo ? color : '#6E6E6E'} />
+    </span>
+  )
+}
+
+function FilaHoy({ Icono, label, sub, estado, to }) {
+  const hecho = estado === 'hecho'
+  const nada = estado === 'nada'
+  return (
+    <Link
+      to={to}
+      className={`card flex items-center justify-between py-2.5 ${nada ? 'opacity-50' : 'hover:border-hiviz'}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <IconoInsignia Icono={Icono} color="#EB642A" activo={!nada} />
+        <div>
+          <p className="text-sm font-semibold">{label}</p>
+          {sub && <p className="text-ink-muted text-xs">{sub}</p>}
+        </div>
+      </div>
+      {nada ? (
+        <span className="text-ink-faint text-xs">Sin plan</span>
+      ) : hecho ? (
+        <Check size={16} className="text-hiviz" strokeWidth={2.5} />
+      ) : (
+        <span className="text-hiviz text-xs font-semibold">Ver →</span>
+      )}
+    </Link>
   )
 }
