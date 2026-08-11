@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import IconoInsignia from '../components/IconoInsignia'
+import { Users } from 'lucide-react'
 
 const ROLES = [
   { id: 'entrenador', label: 'Entrenador' },
@@ -152,9 +154,12 @@ export default function Equipo() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Equipo</h1>
-          <p className="text-ink-muted text-sm mt-1">Tus atletas y profesionales</p>
+        <div className="flex items-center gap-3">
+          <IconoInsignia Icono={Users} />
+          <div>
+            <h1 className="text-2xl font-bold">Equipo</h1>
+            <p className="text-ink-muted text-sm mt-1">Tus atletas y profesionales</p>
+          </div>
         </div>
         <button
           onClick={() => setFormOpen((v) => !v)}
