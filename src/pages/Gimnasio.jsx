@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
+import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
 
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
@@ -184,7 +185,11 @@ export default function Gimnasio() {
           {formMesoOpen && <FormMesociclo onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
 
           {mesociclos.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu bloque de 4 semanas con los días y ejercicios de cada uno.</p>
+            <EstadoVacio
+              Icono={Dumbbell}
+              titulo="Sin mesociclos todavía"
+              descripcion="Armá tu bloque de 4 semanas con los días y ejercicios de cada uno."
+            />
           ) : (
             <div className="flex flex-col gap-2">
               {mesociclos.map((m) =>
@@ -272,7 +277,11 @@ export default function Gimnasio() {
           {cargando ? (
             <SkeletonList rows={4} />
           ) : porDia.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin sesiones registradas todavía.</p>
+            <EstadoVacio
+              Icono={Dumbbell}
+              titulo="Sin sesiones registradas"
+              descripcion="Cargá un ejercicio suelto o registrá desde tu planificación."
+            />
           ) : (
             <div className="flex flex-col gap-5">
               {porDia.map(([fecha, items]) => (
