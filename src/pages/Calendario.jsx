@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Skeleton from '../components/Skeleton'
+import IconoInsignia from '../components/IconoInsignia'
+import { Calendar } from 'lucide-react'
 
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -109,9 +111,12 @@ export default function Calendario() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Calendario</h1>
-          <p className="text-ink-muted text-sm mt-1">{MESES[mes]} {anio}</p>
+        <div className="flex items-center gap-3">
+          <IconoInsignia Icono={Calendar} />
+          <div>
+            <h1 className="text-2xl font-bold">Calendario</h1>
+            <p className="text-ink-muted text-sm mt-1">{MESES[mes]} {anio}</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <button onClick={() => cambiarMes(-1)} className="border border-asphalt-700 rounded-lg w-9 h-9 text-ink-muted">‹</button>
