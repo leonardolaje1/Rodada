@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import IconoInsignia from '../components/IconoInsignia'
+import { Bike } from 'lucide-react'
 
 export default function Bicicletas() {
   const [bicicletas, setBicicletas] = useState([])
@@ -35,9 +37,12 @@ export default function Bicicletas() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Bicicletas</h1>
-          <p className="text-ink-muted text-sm mt-1">Tu flota</p>
+        <div className="flex items-center gap-3">
+          <IconoInsignia Icono={Bike} />
+          <div>
+            <h1 className="text-2xl font-bold">Bicicletas</h1>
+            <p className="text-ink-muted text-sm mt-1">Tu flota</p>
+          </div>
         </div>
         <button
           onClick={() => setMostrarForm((v) => !v)}
