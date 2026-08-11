@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
+import IconoInsignia from '../components/IconoInsignia'
+import { Dumbbell } from 'lucide-react'
 
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
 const DIAS_SEMANA = [
@@ -160,7 +162,13 @@ export default function Gimnasio() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div><h1 className="text-2xl font-bold">Gimnasio</h1><p className="text-ink-muted text-sm mt-1">Planificación, objetivos y récords</p></div>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={Dumbbell} />
+        <div>
+          <h1 className="text-2xl font-bold">Gimnasio</h1>
+          <p className="text-ink-muted text-sm mt-1">Planificación, objetivos y récords</p>
+        </div>
+      </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
         {[['planificacion', 'Planificación'], ['registro', 'Registro'], ['objetivos', 'Objetivos'], ['records', 'Récords']].map(([id, label]) => (
