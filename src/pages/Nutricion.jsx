@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
+import IconoInsignia from '../components/IconoInsignia'
+import { Apple } from 'lucide-react'
 import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 
@@ -204,7 +206,13 @@ export default function Nutricion() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div><h1 className="text-2xl font-bold">Nutrición</h1><p className="text-ink-muted text-sm mt-1">Calorías, hidratación y composición corporal</p></div>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={Apple} />
+        <div>
+          <h1 className="text-2xl font-bold">Nutrición</h1>
+          <p className="text-ink-muted text-sm mt-1">Calorías, hidratación y composición corporal</p>
+        </div>
+      </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
         {[['resumen', 'Resumen'], ['planes', 'Planes'], ['documentos', 'Documentos'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
