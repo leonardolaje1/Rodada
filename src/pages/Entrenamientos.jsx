@@ -5,6 +5,7 @@ import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/t
 import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
+import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
@@ -332,7 +333,11 @@ export default function Entrenamientos() {
           {cargando ? (
             <SkeletonList rows={4} />
           ) : porDia.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin entrenamientos registrados.</p>
+            <EstadoVacio
+              Icono={Activity}
+              titulo="Sin entrenamientos registrados"
+              descripcion="Importá un archivo de tu Garmin o cargá uno a mano con '+ Nuevo'."
+            />
           ) : (
             <div className="flex flex-col gap-5">
               {porDia.map(([fecha, items]) => {
@@ -559,7 +564,11 @@ export default function Entrenamientos() {
           </div>
 
           {mesociclos.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin mesociclos cargados todavía. Armá tu bloque de 4 semanas: base, construcción, específico, pico o transición.</p>
+            <EstadoVacio
+              Icono={Activity}
+              titulo="Sin mesociclos todavía"
+              descripcion="Armá tu bloque de 4 semanas: base, construcción, específico, pico o transición."
+            />
           ) : (
             <div className="flex flex-col gap-2">
               {mesociclos.map((m) =>
