@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
+import EstadoVacio from '../components/EstadoVacio'
 import { Bike } from 'lucide-react'
 
 export default function Bicicletas() {
@@ -57,7 +58,11 @@ export default function Bicicletas() {
       {cargando ? (
         <p className="text-ink-muted text-sm">Cargando…</p>
       ) : bicicletas.length === 0 ? (
-        <p className="text-ink-muted text-sm">No tenés bicicletas cargadas todavía.</p>
+        <EstadoVacio
+          Icono={Bike}
+          titulo="Todavía no cargaste ninguna bici"
+          descripcion="Agregá tu primera bicicleta para empezar a llevar su kilometraje, mantenimiento y desgaste."
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {bicicletas.map((b) => (
