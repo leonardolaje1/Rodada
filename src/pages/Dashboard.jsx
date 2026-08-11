@@ -9,6 +9,7 @@ import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
 import Skeleton, { SkeletonList } from '../components/Skeleton'
 import { calcularTDEE } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
+import { generarInsightRecuperacion } from '../lib/motorInsights'
 import { Apple } from 'lucide-react'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
@@ -21,12 +22,6 @@ const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function diaIdDe(fecha) {
   return DIA_POR_INDICE[new Date(fecha + 'T12:00:00').getDay()]
-}
-
-function calcularEstadoDia(tsb) {
-  if (tsb < -25) return { titulo: 'Descansá', frase: 'Fatiga acumulada alta — priorizá recuperar hoy.', color: '#F14A4A' }
-  if (tsb < -10) return { titulo: 'Con cuidado', frase: 'TSB bajo — bajá un cambio de intensidad hoy.', color: '#F5A623' }
-  return { titulo: 'Entrená fuerte', frase: 'Estás recuperado, buen día para exigir.', color: '#4ADE80' }
 }
 
 export default function Dashboard() {
@@ -44,9 +39,14 @@ export default function Dashboard() {
   const [gimnasioPendienteHoy, setGimnasioPendienteHoy] = useState(false)
   const [faltaRecuperacionHoy, setFaltaRecuperacionHoy] = useState(false)
   const [verMas, setVerMas] = useState(false)
+  const [verSeñales, setVerSeñales] = useState(false)
   const [perfilNutricional, setPerfilNutricional] = useState(null)
   const [comidasRecientes, setComidasRecientes] = useState([])
   const [pesoActual, setPesoActual] = useState(null)
+  const [historialHrv, setHistorialHrv] = useState([])
+  const [hrvActual, setHrvActual] = useState(null)
+  const [sueñoUltimaNoche, setSueñoUltimaNoche] = useState(null)
+  const [historialAtl, setHistorialAtl] = useState([])
 
   useEffect(() => {
     async function cargar() {
@@ -58,7 +58,7 @@ export default function Dashboard() {
       const hoyStr = new Date().toISOString().slice(0, 10)
       const desde7 = new Date()
       desde7.setDate(desde7.getDate() - 7)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }] = await Promise.all([
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }, { data: metricasRecientes }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -75,7 +75,8 @@ export default function Dashboard() {
         supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle(),
         supabase.from('perfil_nutricional').select('*').maybeSingle(),
         supabase.from('comidas').select('fecha, kcal, proteinas').gte('fecha', desde7.toISOString().slice(0, 10)),
-        supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1)
+        supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1),
+        supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8)
       ])
 
       setEntrenamientos(ents || [])
@@ -91,6 +92,10 @@ export default function Dashboard() {
       setPerfilNutricional(perfilNutri || null)
       setComidasRecientes(comidasNutri || [])
       setPesoActual((pesosNutri && pesosNutri[0]?.peso) || perfilNutri?.peso || null)
+      const metricasOrdenadas = metricasRecientes || []
+      setHrvActual(metricasOrdenadas[0]?.hrv ?? null)
+      setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
+      setSueñoUltimaNoche(metricasOrdenadas[0]?.sueño_horas ?? null)
       setCargando(false)
     }
     cargar()
@@ -131,7 +136,18 @@ export default function Dashboard() {
     construirSerieDiaria(entrenamientos, desde90.toISOString().slice(0, 10), hoy)
   )
   const ultimo = serie[serie.length - 1] || { ctl: 0, atl: 0, tsb: 0 }
-  const estadoDia = calcularEstadoDia(ultimo.tsb)
+  const historialAtlSerie = serie.slice(-43, -1).map((d) => d.atl)
+  const insight = generarInsightRecuperacion({
+    tsb: ultimo.tsb,
+    atl: ultimo.atl,
+    historialAtl: historialAtlSerie,
+    hrvActual,
+    historialHrv,
+    sueñoUltimaNoche
+  })
+  const coloresPorNivel = { critico: '#F14A4A', atencion: '#F5A623', optimo: '#4ADE80' }
+  const titulosPorNivel = { critico: 'Descansá', atencion: 'Con cuidado', optimo: 'Entrená fuerte' }
+  const estadoDia = { titulo: titulosPorNivel[insight.nivel], frase: insight.mensaje, color: coloresPorNivel[insight.nivel] }
 
   const inicioSemana = new Date()
   inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
@@ -245,6 +261,16 @@ export default function Dashboard() {
         <span className="label-eyebrow">Hoy</span>
         <p className="text-2xl font-display font-bold mt-1.5" style={{ color: estadoDia.color }}>{estadoDia.titulo}</p>
         <p className="text-ink-muted text-sm mt-1">{estadoDia.frase}</p>
+        {insight.señales.length > 0 && (
+          <button onClick={() => setVerSeñales((v) => !v)} className="text-ink-faint text-[11px] mt-2 underline">
+            {verSeñales ? 'Ocultar por qué' : '¿Por qué?'}
+          </button>
+        )}
+        {verSeñales && (
+          <ul className="text-ink-muted text-xs mt-2 flex flex-col gap-1 text-left list-disc pl-4 max-w-xs mx-auto">
+            {insight.señales.map((s, i) => <li key={i}>{s}</li>)}
+          </ul>
+        )}
       </div>
 
       {/* Zona 2 — Qué hacer hoy */}
