@@ -180,6 +180,10 @@ export default function Entrenamientos() {
     const file = e.target.files[0]; e.target.value = ''
     if (!file) return
     setErrorImport('')
+    if (!/\.(gpx|tcx|fit)$/i.test(file.name)) {
+      setErrorImport(`"${file.name}" no es un archivo .gpx, .tcx o .fit. Elegí el archivo exportado desde Garmin Connect.`)
+      return
+    }
     try {
       const datos = await parseActivityFile(file)
       setValoresImportados({ tipo: 'Ruta', ruta: file.name.replace(/\.(gpx|tcx|fit)$/i, ''), bicicleta_id: '', ...datos, fuente: 'garmin' })
@@ -318,7 +322,7 @@ export default function Entrenamientos() {
             <button onClick={() => inputArchivoRef.current?.click()} className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-3 py-2 rounded-lg hover:text-ink">
               Importar FIT/GPX/TCX
             </button>
-            <input ref={inputArchivoRef} type="file" accept=".gpx,.tcx,.fit" className="hidden" onChange={manejarArchivo} />
+            <input ref={inputArchivoRef} type="file" className="hidden" onChange={manejarArchivo} />
             <button onClick={() => { setValoresImportados(null); setEditandoId(null); setMostrarForm((v) => !v) }} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-95">
               + Nuevo
             </button>
