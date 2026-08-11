@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
+import { useToast } from '../lib/ToastContext'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
@@ -72,6 +73,7 @@ function agruparPorFecha(items) {
 }
 
 export default function Entrenamientos() {
+  const toast = useToast()
   const [vista, setVista] = useState('temporada')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
@@ -139,11 +141,13 @@ export default function Entrenamientos() {
     const tss = calcularTSS(nuevo)
     await supabase.from('entrenamientos').insert({ ...nuevo, tss })
     setMostrarForm(false); setValoresImportados(null); cargar()
+    toast('Entrenamiento guardado')
   }
   async function actualizar(id, datos) {
     const tss = calcularTSS(datos)
     await supabase.from('entrenamientos').update({ ...datos, tss }).eq('id', id)
     setEditandoId(null); cargar()
+    toast('Entrenamiento guardado')
   }
   async function eliminar(id) {
     await supabase.from('entrenamientos').delete().eq('id', id); cargar()
