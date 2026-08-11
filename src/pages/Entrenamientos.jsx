@@ -752,10 +752,15 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
     fecha: new Date().toISOString().slice(0, 10), tipo: 'Ruta', ruta: '', bicicleta_id: '',
     duracion_min: '', km: '', desnivel: '', potencia_avg: '', potencia_normalizada: '', fc_avg: '', rpe: '', comentarios: '',
     plan_id: '', estado: 'realizado', es_clave: false,
+    calorias: '', cadencia_avg: '', cadencia_max: '', descenso: '', altura_min: '', altura_max: '',
+    temperatura_avg: '', temperatura_min: '', temperatura_max: '', velocidad_avg: '', velocidad_max: '',
+    potencia_max: '', potencia_20min: '', trabajo_kj: '', tiempo_movimiento_min: '',
     ...valoresIniciales
   })
+  const [masMetricas, setMasMetricas] = useState(false)
   function campo(k) { return { value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) } }
   const esRodillo = form.tipo === 'Rodillo'
+  const numOrNull = (v) => (v === '' || v == null ? null : Number(v))
 
   return (
     <form className="card grid grid-cols-1 sm:grid-cols-3 gap-3" onSubmit={(e) => {
@@ -765,13 +770,28 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
         ...form,
         bicicleta_id: form.bicicleta_id || null,
         plan_id: form.plan_id || null,
-        duracion_min: form.duracion_min ? Number(form.duracion_min) : null,
-        km: form.km ? Number(form.km) : null,
-        desnivel: form.desnivel ? Number(form.desnivel) : null,
-        potencia_avg: form.potencia_avg ? Number(form.potencia_avg) : null,
-        potencia_normalizada: form.potencia_normalizada ? Number(form.potencia_normalizada) : null,
-        fc_avg: form.fc_avg ? Number(form.fc_avg) : null,
-        rpe: form.rpe ? Number(form.rpe) : null
+        duracion_min: numOrNull(form.duracion_min),
+        km: numOrNull(form.km),
+        desnivel: numOrNull(form.desnivel),
+        potencia_avg: numOrNull(form.potencia_avg),
+        potencia_normalizada: numOrNull(form.potencia_normalizada),
+        fc_avg: numOrNull(form.fc_avg),
+        rpe: numOrNull(form.rpe),
+        calorias: numOrNull(form.calorias),
+        cadencia_avg: numOrNull(form.cadencia_avg),
+        cadencia_max: numOrNull(form.cadencia_max),
+        descenso: numOrNull(form.descenso),
+        altura_min: numOrNull(form.altura_min),
+        altura_max: numOrNull(form.altura_max),
+        temperatura_avg: numOrNull(form.temperatura_avg),
+        temperatura_min: numOrNull(form.temperatura_min),
+        temperatura_max: numOrNull(form.temperatura_max),
+        velocidad_avg: numOrNull(form.velocidad_avg),
+        velocidad_max: numOrNull(form.velocidad_max),
+        potencia_max: numOrNull(form.potencia_max),
+        potencia_20min: numOrNull(form.potencia_20min),
+        trabajo_kj: numOrNull(form.trabajo_kj),
+        tiempo_movimiento_min: numOrNull(form.tiempo_movimiento_min)
       })
     }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
@@ -809,6 +829,33 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
       <Campo label="Potencia normalizada / NP (W)" type="number" {...campo('potencia_normalizada')} />
       <Campo label="FC media" type="number" {...campo('fc_avg')} />
       <Campo label="RPE (1-10)" type="number" min="1" max="10" {...campo('rpe')} />
+
+      <div className="sm:col-span-3">
+        <button type="button" onClick={() => setMasMetricas((v) => !v)} className="text-hiviz text-xs font-semibold">
+          {masMetricas ? 'Ocultar más métricas ▲' : 'Más métricas (opcional) ▼'}
+        </button>
+      </div>
+
+      {masMetricas && (
+        <>
+          <Campo label="Calorías" type="number" {...campo('calorias')} />
+          <Campo label="Cadencia media (rpm)" type="number" {...campo('cadencia_avg')} />
+          <Campo label="Cadencia máxima (rpm)" type="number" {...campo('cadencia_max')} />
+          <Campo label="Descenso (m)" type="number" {...campo('descenso')} />
+          <Campo label="Altura mínima (m)" type="number" {...campo('altura_min')} />
+          <Campo label="Altura máxima (m)" type="number" {...campo('altura_max')} />
+          <Campo label="Temperatura media (°C)" type="number" step="0.1" {...campo('temperatura_avg')} />
+          <Campo label="Temperatura mínima (°C)" type="number" step="0.1" {...campo('temperatura_min')} />
+          <Campo label="Temperatura máxima (°C)" type="number" step="0.1" {...campo('temperatura_max')} />
+          <Campo label="Velocidad media (km/h)" type="number" step="0.1" {...campo('velocidad_avg')} />
+          <Campo label="Velocidad máxima (km/h)" type="number" step="0.1" {...campo('velocidad_max')} />
+          <Campo label="Potencia máxima (W)" type="number" {...campo('potencia_max')} />
+          <Campo label="Pot. media máx. 20min (W)" type="number" {...campo('potencia_20min')} />
+          <Campo label="Trabajo (kJ)" type="number" {...campo('trabajo_kj')} />
+          <Campo label="Tiempo en movimiento (min)" type="number" {...campo('tiempo_movimiento_min')} />
+        </>
+      )}
+
       <label className="flex flex-col gap-1 text-sm sm:col-span-3"><span className="text-ink-muted text-xs">Comentarios</span>
         <textarea {...campo('comentarios')} rows={2} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="sm:col-span-3 flex gap-2 justify-end mt-2">
