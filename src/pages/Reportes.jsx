@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS } from '../lib/tss'
+import IconoInsignia from '../components/IconoInsignia'
+import { FileText } from 'lucide-react'
 
 const ATAJOS = [
   { dias: 1, label: 'Hoy' },
@@ -301,9 +303,12 @@ export default function Reportes() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reportes</h1>
-        <p className="text-ink-muted text-sm mt-1">Exportá tu actividad en PDF</p>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={FileText} />
+        <div>
+          <h1 className="text-2xl font-bold">Reportes</h1>
+          <p className="text-ink-muted text-sm mt-1">Exportá tu actividad en PDF</p>
+        </div>
       </div>
 
       <div className="card">
