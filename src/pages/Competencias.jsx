@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
+import EstadoVacio from '../components/EstadoVacio'
 import { Trophy } from 'lucide-react'
 
 export default function Competencias() {
@@ -46,7 +47,11 @@ export default function Competencias() {
       {formOpen && <FormCompetencia onGuardar={crear} onCancelar={() => setFormOpen(false)} error={error} />}
 
       {competencias.length === 0 ? (
-        <p className="text-ink-muted text-sm">Sin competencias registradas todavía.</p>
+        <EstadoVacio
+          Icono={Trophy}
+          titulo="Sin competencias todavía"
+          descripcion="Cargá la primera carrera para hacer seguimiento de tus objetivos y resultados."
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {competencias.map((c) => (
