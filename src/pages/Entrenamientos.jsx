@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
+import IconoInsignia from '../components/IconoInsignia'
+import { Activity } from 'lucide-react'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -276,9 +278,12 @@ export default function Entrenamientos() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Entrenamientos</h1>
-        <p className="text-ink-muted text-sm mt-1">Registro, planificación y análisis</p>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={Activity} />
+        <div>
+          <h1 className="text-2xl font-bold">Entrenamientos</h1>
+          <p className="text-ink-muted text-sm mt-1">Registro, planificación y análisis</p>
+        </div>
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
@@ -678,6 +683,7 @@ export default function Entrenamientos() {
           )}
         </div>
       )}
+
 
       {vista === 'records' && (
         <div className="flex flex-col gap-2">
