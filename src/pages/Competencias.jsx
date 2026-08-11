@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import IconoInsignia from '../components/IconoInsignia'
+import { Trophy } from 'lucide-react'
 
 export default function Competencias() {
   const [competencias, setCompetencias] = useState([])
@@ -31,9 +33,12 @@ export default function Competencias() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Competencias</h1>
-          <p className="text-ink-muted text-sm mt-1">Carreras y resultados</p>
+        <div className="flex items-center gap-3">
+          <IconoInsignia Icono={Trophy} />
+          <div>
+            <h1 className="text-2xl font-bold">Competencias</h1>
+            <p className="text-ink-muted text-sm mt-1">Carreras y resultados</p>
+          </div>
         </div>
         <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormOpen((v) => !v)}>+ Nueva</button>
       </div>
