@@ -39,16 +39,26 @@ export default function Equipo() {
   const [compartirCopiado, setCompartirCopiado] = useState(false)
   const [error, setError] = useState('')
   const [vinculoConfirmando, setVinculoConfirmando] = useState(null)
+  const [miEmail, setMiEmail] = useState('')
+  const [invitacionesPendientes, setInvitacionesPendientes] = useState([])
 
   async function cargar() {
     const { data: userData } = await supabase.auth.getUser()
     setMiId(userData.user.id)
+    setMiEmail(userData.user.email || '')
 
     const { data } = await supabase
       .from('vinculos')
       .select('*')
       .order('created_at', { ascending: false })
     setVinculos(data || [])
+
+    const { data: invitPend } = await supabase
+      .from('invitaciones_pendientes')
+      .select('*')
+      .eq('invitado_por', userData.user.id)
+      .order('created_at', { ascending: false })
+    setInvitacionesPendientes(invitPend || [])
 
     const idsAMostrar = new Set()
     for (const v of data || []) {
@@ -111,26 +121,22 @@ export default function Equipo() {
 
   async function invitar({ email, rol, direccion }) {
     setError('')
-    const { data: otroId } = await supabase.rpc('buscar_usuario_por_email', { p_email: email })
-    if (!otroId) {
-      setError('No encontramos ninguna cuenta con ese email en HELU.')
-      return
-    }
-    if (otroId === miId) {
+    if (email.trim().toLowerCase() === miEmail.trim().toLowerCase()) {
       setError('No podés invitarte a vos mismo.')
       return
     }
 
-    const payload = direccion === 'yo_profesional'
-      ? { profesional_id: miId, atleta_id: otroId, rol, iniciado_por: miId }
-      : { profesional_id: otroId, atleta_id: miId, rol, iniciado_por: miId }
-
-    const { error: err } = await supabase.from('vinculos').insert(payload)
+    const { error: err } = await supabase.rpc('enviar_invitacion', { p_email: email, p_rol: rol, p_direccion: direccion })
     if (err) {
-      setError(err.code === '23505' ? 'Ya existe una invitación o vínculo con esa persona para ese rol.' : err.message)
+      setError('No se pudo enviar la invitación. ' + err.message)
       return
     }
     setFormOpen(false)
+    cargar()
+  }
+
+  async function cancelarInvitacionPendiente(id) {
+    await supabase.from('invitaciones_pendientes').delete().eq('id', id)
     cargar()
   }
 
@@ -149,6 +155,13 @@ export default function Equipo() {
 
   const pendientesParaMi = vinculos.filter((v) => v.estado === 'pendiente' && v.iniciado_por !== miId)
   const pendientesEnviadas = vinculos.filter((v) => v.estado === 'pendiente' && v.iniciado_por === miId)
+  const enviadasCombinadas = [
+    ...pendientesEnviadas.map((v) => ({
+      id: v.id, origen: 'vinculo', rol: v.rol,
+      email: emails[v.profesional_id === miId ? v.atleta_id : v.profesional_id] || '…'
+    })),
+    ...invitacionesPendientes.map((i) => ({ id: i.id, origen: 'invitacion', rol: i.rol, email: i.email }))
+  ]
   const misAtletas = vinculos.filter((v) => v.estado === 'aceptado' && v.profesional_id === miId)
   const misProfesionales = vinculos.filter((v) => v.estado === 'aceptado' && v.atleta_id === miId)
 
@@ -215,22 +228,24 @@ export default function Equipo() {
         </div>
       )}
 
-      {pendientesEnviadas.length > 0 && (
+      {enviadasCombinadas.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold mb-2">Invitaciones enviadas</h2>
           <div className="flex flex-col gap-2">
-            {pendientesEnviadas.map((v) => {
-              const otroId = v.profesional_id === miId ? v.atleta_id : v.profesional_id
-              return (
-                <div key={v.id} className="card flex items-center justify-between">
-                  <div>
-                    <p className="text-sm">{emails[otroId] || '…'} · <span className="text-ink-muted">{v.rol}</span></p>
-                    <p className="text-ink-faint text-xs">Esperando respuesta</p>
-                  </div>
-                  <button onClick={() => cortarVinculo(v.id)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Cancelar</button>
+            {enviadasCombinadas.map((item) => (
+              <div key={`${item.origen}-${item.id}`} className="card flex items-center justify-between">
+                <div>
+                  <p className="text-sm">{item.email} · <span className="text-ink-muted">{item.rol}</span></p>
+                  <p className="text-ink-faint text-xs">Esperando respuesta</p>
                 </div>
-              )
-            })}
+                <button
+                  onClick={() => (item.origen === 'vinculo' ? cortarVinculo(item.id) : cancelarInvitacionPendiente(item.id))}
+                  className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
