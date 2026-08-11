@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
 import { Moon } from 'lucide-react'
+import { useToast } from '../lib/ToastContext'
 
 const NIVELES = [1, 2, 3, 4, 5]
 const PERIODOS = [
@@ -53,6 +54,7 @@ function diasDesde(fecha) {
 }
 
 export default function Recuperacion() {
+  const toast = useToast()
   const [registros, setRegistros] = useState([])
   const [lesiones, setLesiones] = useState([])
   const [periodoDias, setPeriodoDias] = useState(30)
@@ -114,6 +116,7 @@ export default function Recuperacion() {
     )
     if (error) { alert('No se pudo guardar: ' + error.message); return }
     cargar()
+    toast('Recuperación guardada')
   }
 
   async function crearLesion(datos) {
