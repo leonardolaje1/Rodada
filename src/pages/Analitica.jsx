@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import IconoInsignia from '../components/IconoInsignia'
+import { LineChart } from 'lucide-react'
 
 const DIAS_ANALISIS = 90
 
@@ -80,9 +82,12 @@ export default function Analitica() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Análisis</h1>
-        <p className="text-ink-muted text-sm mt-1">Cómo se relaciona tu recuperación con tu rendimiento — últimos {DIAS_ANALISIS} días</p>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={LineChart} />
+        <div>
+          <h1 className="text-2xl font-bold">Análisis</h1>
+          <p className="text-ink-muted text-sm mt-1">Cómo se relaciona tu recuperación con tu rendimiento — últimos {DIAS_ANALISIS} días</p>
+        </div>
       </div>
 
       {!suficienteSueño && !suficienteBB && (
