@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
+import IconoInsignia from '../components/IconoInsignia'
+import { Moon } from 'lucide-react'
 
 const NIVELES = [1, 2, 3, 4, 5]
 const PERIODOS = [
@@ -151,9 +153,12 @@ export default function Recuperacion() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Recuperación</h1>
-        <p className="text-ink-muted text-sm mt-1">Sueño, estrés, body battery y estado general</p>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={Moon} />
+        <div>
+          <h1 className="text-2xl font-bold">Recuperación</h1>
+          <p className="text-ink-muted text-sm mt-1">Sueño, estrés, body battery y estado general</p>
+        </div>
       </div>
 
       <div className="card" style={{ borderColor: color }}>
