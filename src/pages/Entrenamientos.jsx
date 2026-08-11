@@ -29,6 +29,10 @@ const ZONAS_POTENCIA = [
   { zona: 'Z6', nombre: 'Capacidad anaeróbica', desde: 1.21, hasta: 1.50, color: '#C34AF1' },
   { zona: 'Z7', nombre: 'Neuromuscular', desde: 1.51, hasta: null, color: '#7A4AF1' }
 ]
+const ESTILOS_SESION = [
+  'Recuperación', 'Resistencia (Endurance)', 'Tempo', 'Sweet Spot', 'Umbral (Threshold)',
+  'VO2 Max', 'Anaeróbico', 'Sprint / Neuromuscular', 'Fuerza (baja cadencia)', 'Otro'
+]
 const TIPOS_MESOCICLO = [
   { id: 'base', label: 'Base', color: '#4A9EFF' },
   { id: 'construccion', label: 'Construcción', color: '#C4F135' },
@@ -232,7 +236,14 @@ export default function Entrenamientos() {
           comentarios: d.descripcion || null,
           estado: 'pendiente',
           es_clave: !!d.es_clave,
-          mesociclo_id: nuevo.id
+          mesociclo_id: nuevo.id,
+          estilo_sesion: d.estilo_sesion || null,
+          zona_objetivo: d.zona_objetivo || null,
+          watts_kg_objetivo: d.watts_kg_objetivo ? Number(d.watts_kg_objetivo) : null,
+          series_objetivo: d.series_objetivo ? Number(d.series_objetivo) : null,
+          repeticiones_objetivo: d.repeticiones_objetivo ? Number(d.repeticiones_objetivo) : null,
+          tiempo_trabajo_objetivo: d.tiempo_trabajo_objetivo || null,
+          pausa_objetivo: d.pausa_objetivo || null
         })
       })
     })
@@ -794,6 +805,20 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
         tiempo_movimiento_min: numOrNull(form.tiempo_movimiento_min)
       })
     }}>
+      {(form.estilo_sesion || form.zona_objetivo || form.watts_kg_objetivo || form.series_objetivo || form.tiempo_trabajo_objetivo) && (
+        <div className="sm:col-span-3 bg-asphalt-900 border border-hiviz-dim rounded-lg px-3 py-2 text-xs text-ink-muted">
+          <span className="text-hiviz font-semibold">Prescrito por tu entrenador:</span>{' '}
+          {[
+            form.estilo_sesion,
+            form.zona_objetivo,
+            form.watts_kg_objetivo && `${form.watts_kg_objetivo} W/kg`,
+            form.series_objetivo && `${form.series_objetivo} series`,
+            form.repeticiones_objetivo && `${form.repeticiones_objetivo} reps`,
+            form.tiempo_trabajo_objetivo && `trabajo ${form.tiempo_trabajo_objetivo}`,
+            form.pausa_objetivo && `pausa ${form.pausa_objetivo}`
+          ].filter(Boolean).join(' · ')}
+        </div>
+      )}
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
         <input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Estado</span>
@@ -952,7 +977,11 @@ function FormObjetivo({ onGuardar, onCancelar }) {
 function crearSemanaVacia(numero) {
   return {
     semana: numero,
-    dias: DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '', es_clave: false }))
+    dias: DIAS_SEMANA.map((d) => ({
+      dia: d.id, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '', es_clave: false,
+      estilo_sesion: '', zona_objetivo: '', watts_kg_objetivo: '', series_objetivo: '',
+      repeticiones_objetivo: '', tiempo_trabajo_objetivo: '', pausa_objetivo: ''
+    }))
   }
 }
 
@@ -965,7 +994,11 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
   const [semanas, setSemanas] = useState(
     valoresIniciales?.semanas?.length ? valoresIniciales.semanas : [1, 2, 3, 4].map(crearSemanaVacia)
   )
+  const [parametrosAbiertos, setParametrosAbiertos] = useState({})
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+  function toggleParametros(key) {
+    setParametrosAbiertos((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   function actualizarDia(semanaIdx, diaId, cambios) {
     setSemanas((prev) => prev.map((s, i) => (
@@ -1041,6 +1074,30 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
                             <input type="checkbox" checked={!!d.es_clave} onChange={(e) => actualizarDia(si, diaInfo.id, { es_clave: e.target.checked })} />
                             ★ clave
                           </label>
+                        </div>
+                      )}
+                      {d.activo && (
+                        <div className="pl-9">
+                          <button type="button" onClick={() => toggleParametros(`${si}_${diaInfo.id}`)} className="text-hiviz text-[11px] font-semibold">
+                            {parametrosAbiertos[`${si}_${diaInfo.id}`] ? 'Ocultar parámetros ▲' : '+ Parámetros (zona, W/kg, series...) ▼'}
+                          </button>
+                          {parametrosAbiertos[`${si}_${diaInfo.id}`] && (
+                            <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                              <select value={d.estilo_sesion} onChange={(e) => actualizarDia(si, diaInfo.id, { estilo_sesion: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs col-span-2">
+                                <option value="">Estilo de sesión (opcional)</option>
+                                {ESTILOS_SESION.map((es) => <option key={es}>{es}</option>)}
+                              </select>
+                              <select value={d.zona_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { zona_objetivo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs">
+                                <option value="">Zona objetivo</option>
+                                {ZONAS_POTENCIA.map((z) => <option key={z.zona} value={z.zona}>{z.zona} — {z.nombre}</option>)}
+                              </select>
+                              <input type="number" step="0.1" value={d.watts_kg_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { watts_kg_objetivo: e.target.value })} placeholder="W/kg objetivo" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs" />
+                              <input type="number" value={d.series_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { series_objetivo: e.target.value })} placeholder="Series" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs" />
+                              <input type="number" value={d.repeticiones_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { repeticiones_objetivo: e.target.value })} placeholder="Repeticiones" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs" />
+                              <input value={d.tiempo_trabajo_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { tiempo_trabajo_objetivo: e.target.value })} placeholder="Tiempo de trabajo (ej: 8min)" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs" />
+                              <input value={d.pausa_objetivo} onChange={(e) => actualizarDia(si, diaInfo.id, { pausa_objetivo: e.target.value })} placeholder="Pausa (ej: 3min)" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs" />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
