@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
+import EstadoVacio from '../components/EstadoVacio'
 import { Users } from 'lucide-react'
 
 const ROLES = [
@@ -246,7 +247,11 @@ export default function Equipo() {
           )}
         </div>
         {misAtletas.length === 0 ? (
-          <p className="text-ink-muted text-sm">Todavía no tenés atletas a cargo.</p>
+          <EstadoVacio
+            Icono={Users}
+            titulo="Sin atletas a cargo"
+            descripcion="Invitá a alguien con el botón '+ Invitar' de arriba."
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {misAtletas.map((v) => {
@@ -284,7 +289,11 @@ export default function Equipo() {
       <div>
         <h2 className="text-sm font-semibold mb-2">Mis profesionales</h2>
         {misProfesionales.length === 0 ? (
-          <p className="text-ink-muted text-sm">Todavía no tenés profesionales vinculados.</p>
+          <EstadoVacio
+            Icono={Users}
+            titulo="Sin profesionales vinculados"
+            descripcion="Invitá a tu entrenador o nutricionista con el botón '+ Invitar' de arriba."
+          />
         ) : (
           <div className="flex flex-col gap-2">
             {misProfesionales.map((v) => (
