@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { usePremium } from '../lib/usePremium'
 import Avatar from '../components/Avatar'
+import IconoInsignia from '../components/IconoInsignia'
+import { Settings } from 'lucide-react'
 
 const TABLAS = [
   'bicicletas',
@@ -237,9 +239,12 @@ export default function Configuracion() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold">Configuración</h1>
-        <p className="text-ink-muted text-sm mt-1">Cuenta y datos</p>
+      <div className="flex items-center gap-3">
+        <IconoInsignia Icono={Settings} />
+        <div>
+          <h1 className="text-2xl font-bold">Configuración</h1>
+          <p className="text-ink-muted text-sm mt-1">Cuenta y datos</p>
+        </div>
       </div>
 
       <div className="card">
