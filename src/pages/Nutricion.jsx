@@ -8,6 +8,7 @@ import IconoInsignia from '../components/IconoInsignia'
 import { Apple } from 'lucide-react'
 import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
+import { useToast } from '../lib/ToastContext'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -28,6 +29,7 @@ function agruparPorFecha(items) {
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 
 export default function Nutricion() {
+  const toast = useToast()
   const [sub, setSub] = useState('resumen')
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
   const [comidas, setComidas] = useState([])
@@ -83,16 +85,17 @@ export default function Nutricion() {
     const { data: userData } = await supabase.auth.getUser()
     await supabase.from('perfil_nutricional').upsert({ ...next, user_id: userData.user.id })
   }
-  async function crearComida(n) { await supabase.from('comidas').insert(n); setFormComida(false); setRegistrandoComida(null); cargar() }
-  async function actualizarComida(id, n) { await supabase.from('comidas').update(n).eq('id', id); setComidaEditando(null); cargar() }
+  async function crearComida(n) { await supabase.from('comidas').insert(n); setFormComida(false); setRegistrandoComida(null); cargar(); toast('Comida guardada') }
+  async function actualizarComida(id, n) { await supabase.from('comidas').update(n).eq('id', id); setComidaEditando(null); cargar(); toast('Comida guardada') }
   async function eliminarComida(id) { await supabase.from('comidas').delete().eq('id', id); cargar() }
 
   async function crearPeso(form) {
     await supabase.from('peso_historial').insert(form)
     await guardarPerfil({ ...perfil, peso: form.peso })
     setFormPeso(false); cargar()
+    toast('Peso guardado')
   }
-  async function actualizarPeso(id, form) { await supabase.from('peso_historial').update(form).eq('id', id); setPesoEditando(null); cargar() }
+  async function actualizarPeso(id, form) { await supabase.from('peso_historial').update(form).eq('id', id); setPesoEditando(null); cargar(); toast('Peso guardado') }
   async function eliminarPeso(id) { if (!confirm('¿Borrar este registro de peso?')) return; await supabase.from('peso_historial').delete().eq('id', id); cargar() }
 
   async function crearAntropo(form) { await supabase.from('antropometria').insert(form); setFormAntropo(false); cargar() }
