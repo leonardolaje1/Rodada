@@ -6,7 +6,7 @@ import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/o
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
 import { Apple } from 'lucide-react'
-import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE } from '../lib/tdee'
+import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE, calcularEdad } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
@@ -58,6 +58,7 @@ export default function Nutricion() {
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const [errorArchivo, setErrorArchivo] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [editarDatosFisicos, setEditarDatosFisicos] = useState(false)
 
   async function cargar() {
     const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }] = await Promise.all([
@@ -193,11 +194,13 @@ export default function Nutricion() {
   })).filter((b) => b.ml > 0)
   const hidratacionPorDia = agruparPorFecha(hidratacion)
 
-  const bmr = calcularBMR(perfil)
-  const tdee = calcularTDEE(perfil)
+  const pesoActual = pesoHistorial[pesoHistorial.length - 1] || null
+  const edadCalculada = perfil.fecha_nacimiento ? calcularEdad(perfil.fecha_nacimiento) : perfil.edad
+  const perfilEfectivo = { ...perfil, peso: pesoActual?.peso || perfil.peso, edad: edadCalculada }
+  const bmr = calcularBMR(perfilEfectivo)
+  const tdee = calcularTDEE(perfilEfectivo)
   const comidasPorDia = agruparPorFecha(comidas)
 
-  const pesoActual = pesoHistorial[pesoHistorial.length - 1] || null
   const alertasNutricion = evaluarDeficitNutricional({ comidas, tdee, pesoKg: pesoActual?.peso || perfil?.peso })
   const pesoInicial = pesoHistorial[0] || null
   const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1 ? (pesoActual.peso - pesoInicial.peso) : null
@@ -228,27 +231,37 @@ export default function Nutricion() {
       {sub === 'resumen' && (
         <>
           <div className="card">
-            <span className="label-eyebrow">Calculadora — TDEE (Mifflin-St Jeor)</span>
-            <div className="grid grid-cols-2 gap-3 mt-3">
-              <Campo label="Peso (kg)" type="number" value={perfil.peso} onChange={(v) => guardarPerfil({ ...perfil, peso: v })} />
-              <Campo label="Altura (cm)" type="number" value={perfil.altura} onChange={(v) => guardarPerfil({ ...perfil, altura: v })} />
-              <Campo label="Edad" type="number" value={perfil.edad} onChange={(v) => guardarPerfil({ ...perfil, edad: v })} />
-              <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Sexo</span>
-                <select value={perfil.sexo} onChange={(e) => guardarPerfil({ ...perfil, sexo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-                  <option value="M">Masculino</option><option value="F">Femenino</option>
-                </select></label>
-              <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Nivel de actividad</span>
-                <select value={perfil.nivel_actividad} onChange={(e) => guardarPerfil({ ...perfil, nivel_actividad: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-                  {NIVELES_ACTIVIDAD.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
-                </select></label>
-            </div>
+            <span className="label-eyebrow">Tu gasto calórico (TDEE)</span>
+            <label className="flex flex-col gap-1 text-sm mt-3">
+              <span className="text-ink-muted text-xs">Nivel de actividad</span>
+              <select value={perfil.nivel_actividad} onChange={(e) => guardarPerfil({ ...perfil, nivel_actividad: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+                {NIVELES_ACTIVIDAD.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+              </select>
+            </label>
             {tdee ? (
               <div className="flex gap-6 mt-4 pt-4 border-t border-asphalt-700">
                 <div><span className="label-eyebrow">BMR</span><p className="readout text-xl font-bold mt-0.5">{Math.round(bmr)}</p></div>
                 <div><span className="label-eyebrow">TDEE estimado</span><p className="readout text-xl font-bold mt-0.5 text-hiviz">{tdee} kcal</p></div>
               </div>
             ) : (
-              <p className="text-ink-muted text-xs mt-3">Completá peso, altura y edad para calcular tu gasto calórico.</p>
+              <p className="text-ink-muted text-xs mt-3">
+                Completá tus datos físicos para calcular tu gasto calórico. Tu peso se toma de la pestaña Peso.
+              </p>
+            )}
+            <button onClick={() => setEditarDatosFisicos((v) => !v)} className="text-hiviz text-xs font-semibold mt-3">
+              {editarDatosFisicos ? 'Ocultar datos físicos ▲' : 'Editar datos físicos (altura, edad, sexo) ▼'}
+            </button>
+            {editarDatosFisicos && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <Campo label="Altura (cm)" type="number" value={perfil.altura} onChange={(v) => guardarPerfil({ ...perfil, altura: v })} />
+                <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de nacimiento</span>
+                  <input type="date" value={perfil.fecha_nacimiento || ''} onChange={(e) => guardarPerfil({ ...perfil, fecha_nacimiento: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+                <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Sexo</span>
+                  <select value={perfil.sexo} onChange={(e) => guardarPerfil({ ...perfil, sexo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+                    <option value="M">Masculino</option><option value="F">Femenino</option>
+                  </select></label>
+                {edadCalculada && <p className="text-ink-faint text-xs col-span-2">Edad actual: {edadCalculada} años (se actualiza sola cada año)</p>}
+              </div>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
