@@ -20,6 +20,16 @@ function fechaHace(dias) {
   return d.toISOString().slice(0, 10)
 }
 
+function textoPrescrito(e) {
+  const partes = []
+  if (e.estilo_sesion) partes.push(e.estilo_sesion)
+  if (e.zona_objetivo) partes.push(e.zona_objetivo)
+  if (e.watts_kg_objetivo) partes.push(`${e.watts_kg_objetivo}W/kg`)
+  if (e.series_objetivo) partes.push(`${e.series_objetivo}x${e.tiempo_trabajo_objetivo || (e.repeticiones_objetivo ? e.repeticiones_objetivo + 'r' : '')}`)
+  if (e.pausa_objetivo) partes.push(`r=${e.pausa_objetivo}`)
+  return partes.length > 0 ? partes.join(' · ') : '—'
+}
+
 function nuevoDoc() {
   return { naranjaHiviz: [235, 100, 42], grisTexto: [90, 95, 108], negro: [20, 22, 26] }
 }
@@ -178,14 +188,15 @@ export default function Reportes() {
         if (ents.length > 0) {
           autoTable(doc, {
             startY: y,
-            head: [['Fecha', 'Tipo', 'Ruta', 'Bici', 'Km', 'Min', 'Desnivel', 'Pot. media', 'NP', 'FC media', 'RPE', 'TSS', '★', 'Comentarios']],
+            head: [['Fecha', 'Tipo', 'Ruta', 'Bici', 'Km', 'Min', 'Desnivel', 'Pot. media', 'NP', 'FC media', 'RPE', 'Cal', 'Vel', 'TSS', '★', 'Prescrito', 'Comentarios']],
             body: ents.map(({ data: e }) => [
               e.fecha, e.tipo || '—', e.ruta || '—', nombreBici(e.bicicleta_id),
               e.km ?? '—', e.duracion_min ?? '—', e.desnivel ?? '—',
               e.potencia_avg ?? '—', e.potencia_normalizada ?? '—', e.fc_avg ?? '—', e.rpe ?? '—',
-              e.tss ?? calcularTSS(e).toFixed(0), e.es_clave ? '★' : '', e.comentarios || ''
+              e.calorias ?? '—', e.velocidad_avg ?? '—',
+              e.tss ?? calcularTSS(e).toFixed(0), e.es_clave ? '★' : '', textoPrescrito(e), e.comentarios || ''
             ]),
-            theme: 'striped', headStyles: { fillColor: [38, 42, 51], textColor: 255, fontSize: 6.5 }, styles: { fontSize: 6.5 }, margin: { left: 14, right: 14 }
+            theme: 'striped', headStyles: { fillColor: [38, 42, 51], textColor: 255, fontSize: 6 }, styles: { fontSize: 6 }, margin: { left: 14, right: 14 }
           })
           y = doc.lastAutoTable.finalY + 10
         } else {
