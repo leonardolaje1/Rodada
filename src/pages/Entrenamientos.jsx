@@ -622,6 +622,7 @@ export default function Entrenamientos() {
                     const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
                     const pctTiempo = Math.round((diasPasados / totalDias) * 100)
                     const sesionesMeso = lista.filter((e) => e.mesociclo_id === m.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    const finalizado = !enCurso && hoyStr > m.fecha_fin
                     return (
                       <div key={m.id} className="card" style={enCurso ? { borderColor: tipoInfo.color } : undefined}>
                         <div className="flex items-start justify-between">
@@ -630,6 +631,7 @@ export default function Entrenamientos() {
                               <span className="w-2 h-2 rounded-full inline-block" style={{ background: tipoInfo.color }} />
                               <p className="font-semibold text-sm">{m.nombre}</p>
                               {enCurso && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-hiviz text-asphalt-950">EN CURSO</span>}
+                              {finalizado && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-asphalt-700 text-ink-muted">FINALIZADO</span>}
                             </div>
                             <p className="text-ink-muted text-xs mt-0.5">
                               {tipoInfo.label} · {m.fecha_inicio} a {m.fecha_fin}
@@ -653,6 +655,10 @@ export default function Entrenamientos() {
                           </p>
                         )}
                         {m.notas && <p className="text-ink-faint text-xs mt-1.5">{m.notas}</p>}
+
+                        {finalizado && (
+                          <ResumenMesociclo m={m} sesionesMeso={sesionesMeso} serieCTL={serieCTL} ftpHistorial={ftpHistorial} />
+                        )}
 
                         {sesionesMeso.length > 0 && (
                           <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
