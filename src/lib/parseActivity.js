@@ -133,7 +133,11 @@ function parseGPX(xml) {
     temperatura_min: minimo(puntos.map((p) => p.atemp)) != null ? Math.round(minimo(puntos.map((p) => p.atemp)) * 10) / 10 : null,
     temperatura_max: maximo(puntos.map((p) => p.atemp)) != null ? Math.round(maximo(puntos.map((p) => p.atemp)) * 10) / 10 : null,
     velocidad_avg,
-    velocidad_max: maximo(velocidadesInstant) != null ? Math.round(maximo(velocidadesInstant) * 10) / 10 : null
+    velocidad_max: maximo(velocidadesInstant) != null ? Math.round(maximo(velocidadesInstant) * 10) / 10 : null,
+    serie_potencia: (() => {
+      const serie = puntos.filter((p) => p.power != null).map((p) => p.power)
+      return serie.length > 0 ? serie : null
+    })()
   }
 }
 
@@ -195,7 +199,8 @@ function parseTCX(xml) {
     potencia_max: maximo(watts) != null ? Math.round(maximo(watts)) : null,
     calorias: totalCalorias ? Math.round(totalCalorias) : null,
     velocidad_avg: totalSegundos ? Math.round(((totalMetros / 1000) / (totalSegundos / 3600)) * 10) / 10 : null,
-    velocidad_max: velocidadMaxLap != null ? Math.round(velocidadMaxLap * 3.6 * 10) / 10 : null
+    velocidad_max: velocidadMaxLap != null ? Math.round(velocidadMaxLap * 3.6 * 10) / 10 : null,
+    serie_potencia: watts.length > 0 ? watts : null
     // Nota: temperatura, trabajo (kJ), potencia normalizada y tiempo en movimiento
     // no vienen en el formato TCX estándar de Garmin — quedan para carga manual,
     // o se podrían sumar más adelante si extendemos parseFit.js para leerlos del .FIT.
