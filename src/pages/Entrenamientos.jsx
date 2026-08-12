@@ -5,6 +5,7 @@ import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/t
 import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
+import { useConfirm } from '../lib/ConfirmContext'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
@@ -74,6 +75,7 @@ function agruparPorFecha(items) {
 
 export default function Entrenamientos() {
   const toast = useToast()
+  const { confirmar, alertar } = useConfirm()
   const [vista, setVista] = useState('temporada')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
@@ -214,16 +216,16 @@ export default function Entrenamientos() {
   }
   async function actualizarValorObjetivo(id, valor) { await supabase.from('objetivos').update({ valor_actual: valor }).eq('id', id); cargar() }
   async function marcarCumplidoObjetivo(o) { await supabase.from('objetivos').update({ estado: o.estado === 'cumplido' ? 'activo' : 'cumplido' }).eq('id', o.id); cargar() }
-  async function borrarObjetivo(id) { if (!confirm('¿Borrar este objetivo?')) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
+  async function borrarObjetivo(id) { if (!(await confirmar('¿Borrar este objetivo?', { destructivo: true }))) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
 
   async function crearFtp(form) { await supabase.from('ftp_historial').insert(form); setFormFtpOpen(false); cargar() }
   async function actualizarFtp(id, form) { await supabase.from('ftp_historial').update(form).eq('id', id); setFtpEditando(null); cargar() }
-  async function eliminarFtp(id) { if (!confirm('¿Borrar este registro de FTP?')) return; await supabase.from('ftp_historial').delete().eq('id', id); cargar() }
+  async function eliminarFtp(id) { if (!(await confirmar('¿Borrar este registro de FTP?', { destructivo: true }))) return; await supabase.from('ftp_historial').delete().eq('id', id); cargar() }
 
   async function crearMesociclo(form) {
     const { semanas, ...meta } = form
     const { error, data: nuevo } = await supabase.from('mesociclos').insert({ ...meta, semanas }).select().single()
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
     const sesionesNuevas = []
@@ -258,11 +260,11 @@ export default function Entrenamientos() {
   async function actualizarMesociclo(id, form) {
     const { semanas, ...meta } = form
     const { error } = await supabase.from('mesociclos').update(meta).eq('id', id)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setMesoEditando(null); cargar()
   }
   async function eliminarMesociclo(id) {
-    if (!confirm('¿Borrar este mesociclo? Las sesiones pendientes generadas por él también se van a borrar (las ya realizadas quedan como historial).')) return
+    if (!(await confirmar('¿Borrar este mesociclo? Las sesiones pendientes generadas por él también se van a borrar (las ya realizadas quedan como historial).', { destructivo: true }))) return
     await supabase.from('entrenamientos').delete().eq('mesociclo_id', id).eq('estado', 'pendiente')
     await supabase.from('mesociclos').delete().eq('id', id)
     cargar()
@@ -413,7 +415,7 @@ export default function Entrenamientos() {
                                   <button onClick={() => exportarGPX(e)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">GPX</button>
                                 )}
                                 <button onClick={() => { setMostrarForm(false); setValoresEdicion(null); setEditandoId(e.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                                <button onClick={() => { if (confirm('¿Borrar este entrenamiento?')) eliminar(e.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                                <button onClick={async () => { if (await confirmar('¿Borrar este entrenamiento?', { destructivo: true })) eliminar(e.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                               </div>
                             </div>
                           </div>
@@ -780,7 +782,7 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
   return (
     <form className="card grid grid-cols-1 sm:grid-cols-3 gap-3" onSubmit={(e) => {
       e.preventDefault()
-      if (!esRodillo && !form.bicicleta_id) { alert('Elegí con qué bici hiciste este entrenamiento (o marcá Rodillo si fue indoor).'); return }
+      if (!esRodillo && !form.bicicleta_id) { alertar('Elegí con qué bici hiciste este entrenamiento (o marcá Rodillo si fue indoor).'); return }
       onGuardar({
         ...form,
         bicicleta_id: form.bicicleta_id || null,
