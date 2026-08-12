@@ -9,6 +9,7 @@ import { Apple } from 'lucide-react'
 import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { useToast } from '../lib/ToastContext'
+import { useConfirm } from '../lib/ConfirmContext'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -30,6 +31,7 @@ function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 
 export default function Nutricion() {
   const toast = useToast()
+  const { confirmar, alertar } = useConfirm()
   const [sub, setSub] = useState('resumen')
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
   const [comidas, setComidas] = useState([])
@@ -96,12 +98,12 @@ export default function Nutricion() {
     toast('Peso guardado')
   }
   async function actualizarPeso(id, form) { await supabase.from('peso_historial').update(form).eq('id', id); setPesoEditando(null); cargar(); toast('Peso guardado') }
-  async function eliminarPeso(id) { if (!confirm('¿Borrar este registro de peso?')) return; await supabase.from('peso_historial').delete().eq('id', id); cargar() }
+  async function eliminarPeso(id) { if (!(await confirmar('¿Borrar este registro de peso?', { destructivo: true }))) return; await supabase.from('peso_historial').delete().eq('id', id); cargar() }
 
   async function crearAntropo(form) { await supabase.from('antropometria').insert(form); setFormAntropo(false); cargar() }
   async function actualizarAntropo(id, form) { await supabase.from('antropometria').update(form).eq('id', id); setAntropoEditando(null); cargar() }
-  async function eliminarAntropo(id) { if (!confirm('¿Borrar este registro?')) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
-  async function eliminarSuplemento(id) { if (!confirm('¿Borrar este suplemento?')) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
+  async function eliminarAntropo(id) { if (!(await confirmar('¿Borrar este registro?', { destructivo: true }))) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
+  async function eliminarSuplemento(id) { if (!(await confirmar('¿Borrar este suplemento?', { destructivo: true }))) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
 
   async function cargarBebida(bebida, ml, fecha) {
     await supabase.from('hidratacion').insert({ fecha: fecha || fechaHidratacion, ml, bebida, hora: new Date().toTimeString().slice(0, 5) })
@@ -112,23 +114,23 @@ export default function Nutricion() {
     setEditandoHidratacionId(null); cargar()
   }
   async function eliminarHidratacion(id) {
-    if (!confirm('¿Borrar este registro de hidratación?')) return
+    if (!(await confirmar('¿Borrar este registro de hidratación?', { destructivo: true }))) return
     await supabase.from('hidratacion').delete().eq('id', id); cargar()
   }
 
   async function crearPlan(form) {
     const { data: userData } = await supabase.auth.getUser()
     const { error } = await supabase.from('planes_nutricion').insert({ ...form, user_id: userData.user.id })
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setFormPlanOpen(false); cargar()
   }
   async function actualizarPlan(id, form) {
     const { error } = await supabase.from('planes_nutricion').update(form).eq('id', id)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setPlanEditando(null); cargar()
   }
   async function borrarPlan(id) {
-    if (!confirm('¿Borrar este plan de comidas?')) return
+    if (!(await confirmar('¿Borrar este plan de comidas?', { destructivo: true }))) return
     await supabase.from('planes_nutricion').update({ activo: false }).eq('id', id); cargar()
   }
 
@@ -156,12 +158,12 @@ export default function Nutricion() {
 
   async function verDocumento(doc) {
     const { data, error } = await supabase.storage.from('documentos-nutricion').createSignedUrl(doc.ruta_storage, 60)
-    if (error) { alert('No se pudo abrir el archivo: ' + error.message); return }
+    if (error) { alertar('No se pudo abrir el archivo: ' + error.message); return }
     window.open(data.signedUrl, '_blank')
   }
 
   async function borrarDocumento(doc) {
-    if (!confirm(`¿Borrar "${doc.nombre}"?`)) return
+    if (!(await confirmar(`¿Borrar "${doc.nombre}"?`, { destructivo: true }))) return
     await supabase.storage.from('documentos-nutricion').remove([doc.ruta_storage])
     await supabase.from('documentos_nutricion').delete().eq('id', doc.id)
     cargar()
@@ -401,7 +403,7 @@ export default function Nutricion() {
                               <div className="flex gap-3 text-right"><MiniDato label="kcal" value={c.kcal} color="text-hiviz" /><MiniDato label="P" value={c.proteinas} /><MiniDato label="C" value={c.carbohidratos} /><MiniDato label="G" value={c.grasas} /></div>
                               <div className="flex gap-1">
                                 <button onClick={() => { setFormComida(false); setComidaEditando(c.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                                <button onClick={() => { if (confirm('¿Borrar esta comida?')) eliminarComida(c.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                                <button onClick={async () => { if (await confirmar('¿Borrar esta comida?', { destructivo: true })) eliminarComida(c.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                               </div>
                             </div>
                           </div>
