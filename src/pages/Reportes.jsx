@@ -468,9 +468,14 @@ export default function Reportes() {
       <div className="card">
         <span className="label-eyebrow">Resumen general</span>
         <p className="text-ink-muted text-xs mt-2">Panorama rápido: entrenamiento, recuperación, nutrición y gimnasio en un vistazo.</p>
-        <button onClick={generarPDFGeneral} disabled={!!generando} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60 mt-4">
-          {generando === 'general' ? 'Generando…' : 'Descargar resumen (PDF)'}
-        </button>
+        <div className="flex gap-2 mt-4">
+          <button onClick={generarPDFGeneral} disabled={!!generando} className="flex-1 bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60">
+            {generando === 'general' ? 'Generando…' : 'PDF'}
+          </button>
+          <button onClick={generarExcelGeneral} disabled={!!generando} className="flex-1 border border-asphalt-700 text-ink font-semibold text-sm px-4 py-2.5 rounded-lg hover:border-hiviz disabled:opacity-60">
+            {generando === 'excel-general' ? 'Generando…' : 'Excel'}
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -478,9 +483,14 @@ export default function Reportes() {
         <p className="text-ink-muted text-xs mt-2">
           Detalle completo de ciclismo y gimnasio, ordenado por fecha, con todas las métricas (incluida ruta y sesiones clave) — pensado para mostrarle a un entrenador que no use la app.
         </p>
-        <button onClick={generarPDFEntrenamiento} disabled={!!generando} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60 mt-4">
-          {generando === 'entrenamiento' ? 'Generando…' : 'Descargar entrenamiento (PDF)'}
-        </button>
+        <div className="flex gap-2 mt-4">
+          <button onClick={generarPDFEntrenamiento} disabled={!!generando} className="flex-1 bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60">
+            {generando === 'entrenamiento' ? 'Generando…' : 'PDF'}
+          </button>
+          <button onClick={generarExcelEntrenamiento} disabled={!!generando} className="flex-1 border border-asphalt-700 text-ink font-semibold text-sm px-4 py-2.5 rounded-lg hover:border-hiviz disabled:opacity-60">
+            {generando === 'excel-entrenamiento' ? 'Generando…' : 'Excel'}
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -488,9 +498,14 @@ export default function Reportes() {
         <p className="text-ink-muted text-xs mt-2">
           Peso corporal con fecha, comidas, hidratación y suplementos con sus notas — pensado para mostrarle a un nutricionista que no use la app.
         </p>
-        <button onClick={generarPDFNutricion} disabled={!!generando} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60 mt-4">
-          {generando === 'nutricion' ? 'Generando…' : 'Descargar nutrición (PDF)'}
-        </button>
+        <div className="flex gap-2 mt-4">
+          <button onClick={generarPDFNutricion} disabled={!!generando} className="flex-1 bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2.5 rounded-lg hover:brightness-95 disabled:opacity-60">
+            {generando === 'nutricion' ? 'Generando…' : 'PDF'}
+          </button>
+          <button onClick={generarExcelNutricion} disabled={!!generando} className="flex-1 border border-asphalt-700 text-ink font-semibold text-sm px-4 py-2.5 rounded-lg hover:border-hiviz disabled:opacity-60">
+            {generando === 'excel-nutricion' ? 'Generando…' : 'Excel'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-alert-red text-xs">{error}</p>}
