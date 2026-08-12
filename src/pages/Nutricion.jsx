@@ -58,9 +58,10 @@ export default function Nutricion() {
   const [subiendoArchivo, setSubiendoArchivo] = useState(false)
   const [errorArchivo, setErrorArchivo] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [estrategias, setEstrategias] = useState([])
 
   async function cargar() {
-    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }] = await Promise.all([
+    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }, { data: estr }] = await Promise.all([
       supabase.from('perfil_nutricional').select('*').maybeSingle(),
       supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(100),
       supabase.from('hidratacion').select('*').order('fecha', { ascending: false }).limit(60),
@@ -68,7 +69,8 @@ export default function Nutricion() {
       supabase.from('peso_historial').select('*').order('fecha', { ascending: true }),
       supabase.from('antropometria').select('*').order('fecha', { ascending: false }),
       supabase.from('planes_nutricion').select('*').eq('activo', true).order('created_at', { ascending: true }),
-      supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false })
+      supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false }),
+      supabase.from('estrategia_intraentreno').select('*, entrenamientos(fecha, tipo, duracion_min, km)').order('created_at', { ascending: false })
     ])
     if (p) setPerfil(p)
     setComidas(cm || [])
@@ -78,6 +80,7 @@ export default function Nutricion() {
     setAntropometria(antro || [])
     setPlanes(pl || [])
     setDocumentos(docs || [])
+    setEstrategias(estr || [])
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -220,7 +223,7 @@ export default function Nutricion() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['resumen', 'Resumen'], ['planes', 'Planes'], ['documentos', 'Documentos'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
+        {[['resumen', 'Resumen'], ['planes', 'Planes'], ['documentos', 'Documentos'], ['intraentreno', 'Intra-entreno'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
           <button key={id} onClick={() => setSub(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${sub === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
         ))}
       </div>
@@ -364,6 +367,53 @@ export default function Nutricion() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {sub === 'intraentreno' && (
+        <>
+          <p className="text-ink-muted text-xs">
+            Estrategias cargadas desde tus entrenamientos largos (más de 1h) — repasalas antes de una carrera para replicar lo que te funcionó.
+          </p>
+          {estrategias.length === 0 ? (
+            <EstadoVacio
+              Icono={Apple}
+              titulo="Sin estrategias cargadas"
+              descripcion="Andá a un entrenamiento largo en Entrenamientos y tocá '+ Estrategia' para empezar a registrar."
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {estrategias.map((e) => {
+                const ent = e.entrenamientos
+                const horas = ent?.duracion_min ? ent.duracion_min / 60 : null
+                const carbohidratosTotal = (e.productos || []).reduce((a, p) => a + (Number(p.carbohidratosUnidadG) || 0) * p.cantidad, 0)
+                const gHora = horas ? Math.round((carbohidratosTotal / horas) * 10) / 10 : null
+                const mlHora = horas && e.liquido_ml ? Math.round(e.liquido_ml / horas) : null
+                return (
+                  <div key={e.id} className="card">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">{ent?.fecha} · {ent?.tipo}</p>
+                      <span className="text-ink-muted text-xs">{horas ? `${horas.toFixed(1)}h` : '—'}{ent?.km ? ` · ${ent.km}km` : ''}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-2.5">
+                      <div>
+                        <span className="label-eyebrow">Carbohidratos</span>
+                        <p className="readout text-lg font-bold text-hiviz mt-0.5">{carbohidratosTotal.toFixed(0)}g{gHora ? <span className="text-ink-muted text-xs font-normal"> · {gHora}g/h</span> : ''}</p>
+                      </div>
+                      <div>
+                        <span className="label-eyebrow">Líquido</span>
+                        <p className="readout text-lg font-bold text-route mt-0.5">{e.liquido_ml || 0}ml{mlHora ? <span className="text-ink-muted text-xs font-normal"> · {mlHora}ml/h</span> : ''}</p>
+                      </div>
+                    </div>
+                    {(e.productos || []).length > 0 && (
+                      <p className="text-ink-muted text-xs mt-2">{e.productos.map((p) => `${p.cantidad}x ${p.nombre}`).join(' · ')}</p>
+                    )}
+                    {e.notas && <p className="text-ink-faint text-xs mt-1.5">"{e.notas}"</p>}
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
