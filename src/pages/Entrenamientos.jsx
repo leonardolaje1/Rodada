@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
+import { calcularMejoresPotencias, etiquetaDuracion } from '../lib/potenciaCurva'
+import { LineChart as ReLineChart, Line as ReLine, XAxis as ReXAxis, YAxis as ReYAxis, Tooltip as ReTooltip, ResponsiveContainer as ReResponsiveContainer, CartesianGrid as ReCartesianGrid } from 'recharts'
 import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
@@ -95,6 +97,7 @@ export default function Entrenamientos() {
   const [ftpEditando, setFtpEditando] = useState(null)
   const [feedbackPorEntreno, setFeedbackPorEntreno] = useState({})
   const [mesociclos, setMesociclos] = useState([])
+  const [registrosPotencia, setRegistrosPotencia] = useState([])
   const [competencias, setCompetencias] = useState([])
   const [formMesoOpen, setFormMesoOpen] = useState(false)
   const [mesoEditando, setMesoEditando] = useState(null)
@@ -102,14 +105,15 @@ export default function Entrenamientos() {
 
   async function cargar() {
     setCargando(true)
-    const [{ data: ents }, { data: bicis }, { data: pls }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }] = await Promise.all([
+    const [{ data: ents }, { data: bicis }, { data: pls }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
       supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
       supabase.from('bicicletas').select('id, nombre'),
       supabase.from('planes_entrenamiento').select('*').eq('activo', true).order('created_at', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'entrenamiento').order('created_at', { ascending: false }),
       supabase.from('ftp_historial').select('*').order('fecha', { ascending: true }),
       supabase.from('mesociclos').select('*').order('fecha_inicio', { ascending: true }),
-      supabase.from('competencias').select('id, nombre, fecha').order('fecha', { ascending: true })
+      supabase.from('competencias').select('id, nombre, fecha').order('fecha', { ascending: true }),
+      supabase.from('registros_potencia').select('*').order('duracion_seg', { ascending: true })
     ])
     setLista(ents || [])
     setBicicletas(bicis || [])
@@ -117,6 +121,7 @@ export default function Entrenamientos() {
     setObjetivos(objs || [])
     setFtpHistorial(ftps || [])
     setMesociclos(mesos || [])
+    setRegistrosPotencia(regPot || [])
     setCompetencias(comps || [])
 
     if (ents && ents.length > 0) {
@@ -141,8 +146,22 @@ export default function Entrenamientos() {
 
   async function crear(nuevo) {
     const tss = calcularTSS(nuevo)
-    await supabase.from('entrenamientos').insert({ ...nuevo, tss })
-    setMostrarForm(false); setValoresImportados(null); cargar()
+    const { data: creado, error } = await supabase.from('entrenamientos').insert({ ...nuevo, tss }).select().single()
+    setMostrarForm(false); setValoresImportados(null)
+
+    if (!error && creado && Array.isArray(nuevo.serie_potencia) && nuevo.serie_potencia.length > 0) {
+      const mejores = calcularMejoresPotencias(nuevo.serie_potencia)
+      await Promise.all(
+        mejores.map((m) => supabase.rpc('actualizar_registro_potencia', {
+          p_duracion_seg: m.duracion_seg,
+          p_watts: m.watts,
+          p_entrenamiento_id: creado.id,
+          p_fecha: creado.fecha
+        }))
+      )
+    }
+
+    cargar()
     toast('Entrenamiento guardado')
   }
   async function actualizar(id, datos) {
@@ -737,6 +756,32 @@ export default function Entrenamientos() {
           <RecordCard label="Salida más larga" item={records.km} valor={records.km ? `${records.km.km} km` : null} />
           <RecordCard label="Mayor desnivel" item={records.desnivel} valor={records.desnivel ? `${records.desnivel.desnivel} m` : null} />
           <RecordCard label="Mayor TSS en una salida" item={records.tss} valor={records.tss ? `${records.tss.tss} TSS` : null} />
+
+          {registrosPotencia.length > 0 && (
+            <div className="card mt-2">
+              <span className="label-eyebrow">Curva de potencia</span>
+              <p className="text-ink-faint text-xs mt-1 mb-2">Mejor promedio sostenido por duración, de todas tus salidas importadas.</p>
+              <div className="-ml-4">
+                <ReResponsiveContainer width="100%" height={200}>
+                  <ReLineChart data={registrosPotencia.map((r) => ({ ...r, etiqueta: etiquetaDuracion(r.duracion_seg) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <ReCartesianGrid stroke="#262A33" vertical={false} />
+                    <ReXAxis dataKey="etiqueta" tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
+                    <ReYAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={34} />
+                    <ReTooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} />
+                    <ReLine type="monotone" dataKey="watts" stroke="#EB642A" strokeWidth={2} dot={{ r: 3 }} name="W" />
+                  </ReLineChart>
+                </ReResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
+                {registrosPotencia.map((r) => (
+                  <div key={r.duracion_seg} className="text-center">
+                    <p className="readout text-sm font-bold text-hiviz">{r.watts}W</p>
+                    <p className="text-ink-faint text-[10px] uppercase">{etiquetaDuracion(r.duracion_seg)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
