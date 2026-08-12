@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
+import { useConfirm } from '../lib/ConfirmContext'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
@@ -46,6 +47,7 @@ function crearSemanaVacia(numero) {
 
 export default function Gimnasio() {
   const toast = useToast()
+  const { confirmar, alertar } = useConfirm()
   const [vista, setVista] = useState('planificacion')
   const [sesiones, setSesiones] = useState([])
   const [mesociclos, setMesociclos] = useState([])
@@ -100,17 +102,17 @@ export default function Gimnasio() {
 
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
-    if (error) { alert('No se pudo guardar el objetivo: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar el objetivo: ' + error.message); return }
     setFormObjetivoOpen(false); cargar()
   }
   async function actualizarValorObjetivo(id, valor) { await supabase.from('objetivos').update({ valor_actual: valor }).eq('id', id); cargar() }
   async function marcarCumplidoObjetivo(o) { await supabase.from('objetivos').update({ estado: o.estado === 'cumplido' ? 'activo' : 'cumplido' }).eq('id', o.id); cargar() }
-  async function borrarObjetivo(id) { if (!confirm('¿Borrar este objetivo?')) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
+  async function borrarObjetivo(id) { if (!(await confirmar('¿Borrar este objetivo?', { destructivo: true }))) return; await supabase.from('objetivos').delete().eq('id', id); cargar() }
 
   async function crearMesociclo(form) {
     const { semanas, ...meta } = form
     const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas }).select().single()
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
     const filasNuevas = []
@@ -142,11 +144,11 @@ export default function Gimnasio() {
   async function actualizarMesociclo(id, form) {
     const { semanas, ...meta } = form
     const { error } = await supabase.from('mesociclos_gimnasio').update(meta).eq('id', id)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setMesoEditando(null); cargar()
   }
   async function eliminarMesociclo(id) {
-    if (!confirm('¿Borrar este mesociclo? Los ejercicios pendientes generados se van a borrar (los ya realizados quedan como historial).')) return
+    if (!(await confirmar('¿Borrar este mesociclo? Los ejercicios pendientes generados se van a borrar (los ya realizados quedan como historial).', { destructivo: true }))) return
     await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
     await supabase.from('mesociclos_gimnasio').delete().eq('id', id)
     cargar()
@@ -318,7 +320,7 @@ export default function Gimnasio() {
                                 <button onClick={() => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar resultado</button>
                               )}
                               <button onClick={() => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                              <button onClick={() => { if (confirm('¿Borrar este ejercicio?')) eliminar(g.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                              <button onClick={async () => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(g.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
                             </div>
                           </div>
                         </div>
