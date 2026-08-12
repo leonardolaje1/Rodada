@@ -18,6 +18,7 @@ import VerAtleta from './pages/VerAtleta'
 import Configuracion from './pages/Configuracion'
 import { useAuth } from './lib/useAuth'
 import { ToastProvider } from './lib/ToastContext'
+import { ConfirmProvider } from './lib/ConfirmContext'
 
 export default function App() {
   const { session, cargando, modoRecuperacion, setModoRecuperacion } = useAuth()
@@ -40,6 +41,7 @@ export default function App() {
 
   return (
     <ToastProvider>
+      <ConfirmProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
@@ -58,6 +60,7 @@ export default function App() {
           <Route path="/configuracion" element={<Configuracion />} />
         </Route>
       </Routes>
+      </ConfirmProvider>
     </ToastProvider>
   )
 }
