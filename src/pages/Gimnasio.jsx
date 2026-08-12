@@ -208,6 +208,7 @@ export default function Gimnasio() {
                     const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
                     const pctTiempo = Math.round((diasPasados / totalDias) * 100)
                     const filasMeso = sesiones.filter((s) => s.mesociclo_gimnasio_id === m.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    const finalizado = !enCurso && hoyStr > m.fecha_fin
                     return (
                       <div key={m.id} className={`card ${enCurso ? 'border-hiviz' : ''}`}>
                         <div className="flex items-start justify-between">
@@ -215,6 +216,7 @@ export default function Gimnasio() {
                             <div className="flex items-center gap-2">
                               <p className="font-semibold text-sm">{m.nombre}</p>
                               {enCurso && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-hiviz text-asphalt-950">EN CURSO</span>}
+                              {finalizado && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-asphalt-700 text-ink-muted">FINALIZADO</span>}
                             </div>
                             <p className="text-ink-muted text-xs mt-0.5">{m.fecha_inicio} a {m.fecha_fin}</p>
                           </div>
@@ -229,6 +231,10 @@ export default function Gimnasio() {
                           </div>
                         )}
                         {m.notas && <p className="text-ink-faint text-xs mt-1.5">{m.notas}</p>}
+
+                        {finalizado && (
+                          <ResumenMesocicloGym m={m} filasMeso={filasMeso} sesiones={sesiones} />
+                        )}
 
                         {filasMeso.length > 0 && (
                           <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
@@ -610,5 +616,60 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
       </div>
     </form>
+  )
+}
+
+function mejorPesoHasta(sesiones, ejercicio, fechaLimite) {
+  const candidatos = sesiones.filter((s) => s.ejercicio === ejercicio && s.estado === 'realizado' && s.fecha <= fechaLimite && s.peso)
+  if (candidatos.length === 0) return null
+  return Math.max(...candidatos.map((s) => Number(s.peso)))
+}
+
+function ResumenMesocicloGym({ m, filasMeso, sesiones }) {
+  const realizadas = filasMeso.filter((s) => s.estado === 'realizado')
+  const totalSesiones = filasMeso.length
+  const pctAdherencia = totalSesiones > 0 ? Math.round((realizadas.length / totalSesiones) * 100) : null
+
+  const clave = filasMeso.filter((s) => s.es_clave)
+  const claveHechas = clave.filter((s) => s.estado === 'realizado')
+
+  const volumenTotal = realizadas.reduce((a, s) => a + (Number(s.series) || 0) * (Number(s.reps) || 0) * (Number(s.peso) || 0), 0)
+
+  const cambiosPr = PRS_DESTACADOS.map((ej) => {
+    const antes = mejorPesoHasta(sesiones, ej, m.fecha_inicio)
+    const despues = mejorPesoHasta(sesiones, ej, m.fecha_fin)
+    if (antes == null || despues == null || antes === despues) return null
+    return { ejercicio: ej, antes, despues }
+  }).filter(Boolean)
+
+  return (
+    <div className="mt-3 pt-3 border-t border-asphalt-700">
+      <span className="label-eyebrow">Resumen del bloque</span>
+      <div className="flex flex-col gap-1.5 mt-2">
+        {totalSesiones > 0 && (
+          <p className="text-xs text-ink-muted">
+            Adherencia: <span className="text-ink font-semibold">{realizadas.length}/{totalSesiones} sesiones</span>
+            {pctAdherencia != null && <span className="text-ink-faint"> ({pctAdherencia}%)</span>}
+          </p>
+        )}
+        {clave.length > 0 && (
+          <p className="text-xs text-ink-muted">
+            Sesiones clave: <span className="text-ink font-semibold">{claveHechas.length} de {clave.length}</span>
+            {claveHechas.length === clave.length ? ' ✓' : ''}
+          </p>
+        )}
+        {volumenTotal > 0 && (
+          <p className="text-xs text-ink-muted">
+            Volumen total levantado: <span className="text-hiviz font-semibold">{volumenTotal.toLocaleString('es-AR')} kg</span>
+          </p>
+        )}
+        {cambiosPr.map((c) => (
+          <p key={c.ejercicio} className="text-xs text-ink-muted">
+            {c.ejercicio}: {c.antes}kg → <span className="text-hiviz font-semibold">{c.despues}kg</span>
+            <span className={c.despues >= c.antes ? 'text-hiviz' : 'text-alert-amber'}> ({c.despues >= c.antes ? '+' : ''}{c.despues - c.antes}kg)</span>
+          </p>
+        ))}
+      </div>
+    </div>
   )
 }
