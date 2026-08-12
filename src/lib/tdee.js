@@ -18,3 +18,13 @@ export function calcularTDEE(perfil) {
   const nivel = NIVELES_ACTIVIDAD.find((n) => n.id === perfil?.nivel_actividad) || NIVELES_ACTIVIDAD[2]
   return Math.round(bmr * nivel.factor)
 }
+
+export function calcularEdad(fechaNacimiento) {
+  if (!fechaNacimiento) return null
+  const hoy = new Date()
+  const nacimiento = new Date(fechaNacimiento + 'T00:00:00')
+  let edad = hoy.getFullYear() - nacimiento.getFullYear()
+  const aunNoCumplio = hoy.getMonth() < nacimiento.getMonth() || (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate())
+  if (aunNoCumplio) edad -= 1
+  return edad
+}
