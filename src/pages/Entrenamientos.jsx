@@ -6,7 +6,6 @@ import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
-import BuscadorProductoUnidad from '../components/BuscadorProductoUnidad'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
@@ -86,8 +85,6 @@ export default function Entrenamientos() {
   const [cargando, setCargando] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
-  const [estrategias, setEstrategias] = useState({})
-  const [estrategiaAbiertaId, setEstrategiaAbiertaId] = useState(null)
   const [valoresEdicion, setValoresEdicion] = useState(null)
   const [valoresImportados, setValoresImportados] = useState(null)
   const [errorImport, setErrorImport] = useState('')
@@ -134,17 +131,8 @@ export default function Entrenamientos() {
         agrupado[fb.entrenamiento_id].push(fb)
       }
       setFeedbackPorEntreno(agrupado)
-
-      const { data: estr } = await supabase
-        .from('estrategia_intraentreno')
-        .select('*')
-        .in('entrenamiento_id', ents.map((e) => e.id))
-      const estrPorId = {}
-      for (const e of estr || []) estrPorId[e.entrenamiento_id] = e
-      setEstrategias(estrPorId)
     } else {
       setFeedbackPorEntreno({})
-      setEstrategias({})
     }
 
     setCargando(false)
@@ -165,16 +153,6 @@ export default function Entrenamientos() {
   }
   async function eliminar(id) {
     await supabase.from('entrenamientos').delete().eq('id', id); cargar()
-  }
-  async function guardarEstrategia(entrenamientoId, datos) {
-    const { error } = await supabase.from('estrategia_intraentreno').upsert(
-      { entrenamiento_id: entrenamientoId, ...datos },
-      { onConflict: 'entrenamiento_id' }
-    )
-    if (error) { alertar('No se pudo guardar la estrategia: ' + error.message); return }
-    setEstrategiaAbiertaId(null)
-    cargar()
-    toast('Estrategia guardada')
   }
   function exportarGPX(e) {
     const nombre = `${e.tipo}${e.ruta ? ' - ' + e.ruta : ''}`
@@ -398,14 +376,6 @@ export default function Entrenamientos() {
                       {items.map((e) =>
                         editandoId === e.id ? (
                           <FormEntrenamiento key={e.id} bicicletas={bicicletas} planes={planes} valoresIniciales={valoresEdicion && valoresEdicion.id === e.id ? valoresEdicion : e} onGuardar={(datos) => actualizar(e.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
-                        ) : estrategiaAbiertaId === e.id ? (
-                          <FormEstrategiaIntra
-                            key={e.id}
-                            entrenamiento={e}
-                            valoresIniciales={estrategias[e.id]}
-                            onGuardar={(datos) => guardarEstrategia(e.id, datos)}
-                            onCancelar={() => setEstrategiaAbiertaId(null)}
-                          />
                         ) : (
                           <div key={e.id} className={`card flex items-center justify-between gap-4 ${e.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
                             <div className="flex items-center gap-2">
@@ -443,11 +413,6 @@ export default function Entrenamientos() {
                                 )}
                                 {e.estado === 'realizado' && (
                                   <button onClick={() => exportarGPX(e)} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">GPX</button>
-                                )}
-                                {e.estado === 'realizado' && e.duracion_min >= 60 && (
-                                  <button onClick={() => { setEditandoId(null); setEstrategiaAbiertaId(e.id) }} className={`text-xs border border-asphalt-700 rounded-lg px-2 py-1 ${estrategias[e.id] ? 'text-hiviz' : 'text-ink-muted'}`}>
-                                    {estrategias[e.id] ? '✓ Estrategia' : '+ Estrategia'}
-                                  </button>
                                 )}
                                 <button onClick={() => { setMostrarForm(false); setValoresEdicion(null); setEditandoId(e.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
                                 <button onClick={async () => { if (await confirmar('¿Borrar este entrenamiento?', { destructivo: true })) eliminar(e.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
@@ -1208,94 +1173,3 @@ function FormFTP({ onGuardar, onCancelar, valoresIniciales }) {
   )
 }
 
-function FormEstrategiaIntra({ entrenamiento, onGuardar, onCancelar, valoresIniciales }) {
-  const [productos, setProductos] = useState(valoresIniciales?.productos || [])
-  const [liquidoMl, setLiquidoMl] = useState(valoresIniciales?.liquido_ml ?? '')
-  const [notas, setNotas] = useState(valoresIniciales?.notas || '')
-  const [buscadorAbierto, setBuscadorAbierto] = useState(false)
-
-  function agregarProducto(p) {
-    setProductos((prev) => [...prev, p])
-    setBuscadorAbierto(false)
-  }
-  function cambiarCantidad(i, delta) {
-    setProductos((prev) => prev.map((p, idx) => (idx === i ? { ...p, cantidad: Math.max(1, p.cantidad + delta) } : p)))
-  }
-  function quitarProducto(i) {
-    setProductos((prev) => prev.filter((_, idx) => idx !== i))
-  }
-
-  const carbohidratosTotal = productos.reduce((a, p) => a + (Number(p.carbohidratosUnidadG) || 0) * p.cantidad, 0)
-  const horas = entrenamiento.duracion_min ? entrenamiento.duracion_min / 60 : null
-  const gHora = horas ? Math.round((carbohidratosTotal / horas) * 10) / 10 : null
-  const mlHora = horas && liquidoMl ? Math.round((Number(liquidoMl) / horas)) : null
-
-  return (
-    <form
-      className="card flex flex-col gap-3"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onGuardar({ productos, liquido_ml: liquidoMl === '' ? null : Number(liquidoMl), notas: notas || null })
-      }}
-    >
-      <div>
-        <span className="label-eyebrow">Estrategia intra-entreno</span>
-        <p className="text-ink-muted text-xs mt-0.5">{entrenamiento.fecha} · {entrenamiento.duracion_min ? `${(entrenamiento.duracion_min / 60).toFixed(1)}h` : 'sin duración'}</p>
-      </div>
-
-      {productos.length > 0 && (
-        <div className="flex flex-col gap-1.5">
-          {productos.map((p, i) => (
-            <div key={i} className="flex items-center justify-between border border-asphalt-700 rounded-lg px-2.5 py-1.5">
-              <div>
-                <p className="text-xs font-medium">{p.nombre}</p>
-                <p className="text-ink-faint text-[10px]">{p.pesoUnidadG}g/u · {p.carbohidratosUnidadG || '—'}g carbos/u</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => cambiarCantidad(i, -1)} className="text-ink-muted text-xs w-5">−</button>
-                <span className="text-xs font-semibold w-4 text-center">{p.cantidad}</span>
-                <button type="button" onClick={() => cambiarCantidad(i, 1)} className="text-ink-muted text-xs w-5">+</button>
-                <button type="button" onClick={() => quitarProducto(i)} className="text-alert-red text-xs ml-1">✕</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {buscadorAbierto ? (
-        <BuscadorProductoUnidad onAgregar={agregarProducto} onCancelar={() => setBuscadorAbierto(false)} />
-      ) : (
-        <button type="button" onClick={() => setBuscadorAbierto(true)} className="text-hiviz text-xs font-semibold self-start">+ Agregar producto (gel, barrita...)</button
-        >
-      )}
-
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-ink-muted text-xs">Líquido total (ml)</span>
-        <input type="number" value={liquidoMl} onChange={(e) => setLiquidoMl(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
-      </label>
-
-      {(carbohidratosTotal > 0 || liquidoMl) && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="card py-2.5">
-            <span className="label-eyebrow">Carbohidratos</span>
-            <p className="readout text-lg font-bold text-hiviz mt-0.5">{carbohidratosTotal.toFixed(0)}g{gHora ? <span className="text-ink-muted text-xs font-normal"> · {gHora}g/h</span> : ''}</p>
-          </div>
-          <div className="card py-2.5">
-            <span className="label-eyebrow">Líquido</span>
-            <p className="readout text-lg font-bold text-route mt-0.5">{liquidoMl || 0}ml{mlHora ? <span className="text-ink-muted text-xs font-normal"> · {mlHora}ml/h</span> : ''}</p>
-          </div>
-        </div>
-      )}
-
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-ink-muted text-xs">Notas (cómo cayó, qué repetirías)</span>
-        <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
-      </label>
-
-      <div className="flex justify-end gap-2 mt-1">
-        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
-        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button>
-      </div>
-    </form>
-  )
-}
