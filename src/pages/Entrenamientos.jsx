@@ -8,6 +8,7 @@ import { parseActivityFile } from '../lib/parseActivity'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
+import { descargarWorkoutFit } from '../lib/generarWorkoutFit'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
@@ -172,6 +173,12 @@ export default function Entrenamientos() {
   }
   async function eliminar(id) {
     await supabase.from('entrenamientos').delete().eq('id', id); cargar()
+  }
+  async function descargarParaReloj(s) {
+    const ftpActual = ftpHistorial[ftpHistorial.length - 1]?.ftp_watts || null
+    const { data: pesos } = await supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1)
+    const pesoActual = pesos && pesos[0]?.peso || null
+    descargarWorkoutFit(s, { ftp: ftpActual, peso: pesoActual })
   }
   function exportarGPX(e) {
     const nombre = `${e.tipo}${e.ruta ? ' - ' + e.ruta : ''}`
@@ -677,6 +684,7 @@ export default function Entrenamientos() {
                                   key={s.id}
                                   s={s}
                                   onCargarDatos={() => { setMostrarForm(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                  onDescargarReloj={() => descargarParaReloj(s)}
                                 />
                               )
                             )}
@@ -1174,7 +1182,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
   )
 }
 
-function SesionMesocicloRow({ s, onCargarDatos }) {
+function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-1.5">
@@ -1187,7 +1195,10 @@ function SesionMesocicloRow({ s, onCargarDatos }) {
         </div>
       </div>
       {s.estado === 'pendiente' ? (
-        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar datos</button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={onDescargarReloj} className="text-ink-muted text-[11px] whitespace-nowrap">⌚ Reloj</button>
+          <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar datos</button>
+        </div>
       ) : (
         <span className="text-hiviz text-[11px]">✓ hecha</span>
       )}
@@ -1224,3 +1235,58 @@ function FormFTP({ onGuardar, onCancelar, valoresIniciales }) {
   )
 }
 
+
+function ftpMasCercano(ftpHistorial, fechaLimite) {
+  const candidatos = ftpHistorial.filter((h) => h.fecha <= fechaLimite)
+  if (candidatos.length === 0) return null
+  return candidatos[candidatos.length - 1]
+}
+
+function ResumenMesociclo({ m, sesionesMeso, serieCTL, ftpHistorial }) {
+  const ctlCierre = serieCTL.find((s) => s.fecha === m.fecha_fin)?.ctl ?? null
+
+  const realizadas = sesionesMeso.filter((s) => s.estado === 'realizado')
+  const totalSesiones = sesionesMeso.length
+  const pctAdherencia = totalSesiones > 0 ? Math.round((realizadas.length / totalSesiones) * 100) : null
+
+  const clave = sesionesMeso.filter((s) => s.es_clave)
+  const claveHechas = clave.filter((s) => s.estado === 'realizado')
+
+  const ftpInicio = ftpMasCercano(ftpHistorial, m.fecha_inicio)
+  const ftpFin = ftpMasCercano(ftpHistorial, m.fecha_fin)
+  const huboCambioFtp = ftpInicio && ftpFin && ftpInicio.id !== ftpFin.id
+
+  return (
+    <div className="mt-3 pt-3 border-t border-asphalt-700">
+      <span className="label-eyebrow">Resumen del bloque</span>
+      <div className="flex flex-col gap-1.5 mt-2">
+        {m.ctl_objetivo && (
+          <p className="text-xs text-ink-muted">
+            CTL: apuntabas a <span className="text-ink font-semibold">{m.ctl_objetivo}</span>
+            {ctlCierre != null && (
+              <> · llegaste a <span className={ctlCierre >= m.ctl_objetivo ? 'text-hiviz font-semibold' : 'text-alert-amber font-semibold'}>{ctlCierre.toFixed(0)}</span></>
+            )}
+          </p>
+        )}
+        {totalSesiones > 0 && (
+          <p className="text-xs text-ink-muted">
+            Adherencia: <span className="text-ink font-semibold">{realizadas.length}/{totalSesiones} sesiones</span>
+            {pctAdherencia != null && <span className="text-ink-faint"> ({pctAdherencia}%)</span>}
+          </p>
+        )}
+        {clave.length > 0 && (
+          <p className="text-xs text-ink-muted">
+            Sesiones clave: <span className="text-ink font-semibold">{claveHechas.length} de {clave.length}</span>
+            {claveHechas.length === clave.length ? ' ✓' : ''}
+          </p>
+        )}
+        {huboCambioFtp && (
+          <p className="text-xs text-ink-muted">
+            FTP: {ftpInicio.ftp_watts}W → <span className="text-hiviz font-semibold">{ftpFin.ftp_watts}W</span>
+            <span className={ftpFin.ftp_watts >= ftpInicio.ftp_watts ? 'text-hiviz' : 'text-alert-amber'}> ({ftpFin.ftp_watts >= ftpInicio.ftp_watts ? '+' : ''}{ftpFin.ftp_watts - ftpInicio.ftp_watts}W)</span>
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
