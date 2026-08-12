@@ -1,4 +1,5 @@
 const FIT_EPOCH_OFFSET = 631065600
+const GLOBAL_MSG_RECORD = 20
 const GLOBAL_MSG_SESSION = 18
 
 function leerCampoNumerico(view, offset, size, baseType, littleEndian) {
@@ -54,6 +55,7 @@ export function parseFIT(arrayBuffer) {
 
   const definiciones = {}
   let mejorSesion = null
+  const seriePotencia = []
 
   while (offset < finDatos && offset < view.byteLength) {
     const headerByte = view.getUint8(offset)
@@ -134,6 +136,21 @@ export function parseFIT(arrayBuffer) {
       }
     }
 
+    if (def.globalMsg === GLOBAL_MSG_RECORD) {
+      // Campo 7 = power (uint16, base type 4), en los mensajes "record" de FIT
+      const campoPower = def.fields.find((f) => f.number === 7)
+      if (campoPower) {
+        let cursor = offset
+        for (const campo of def.fields) {
+          if (campo.number === 7) {
+            const potencia = leerCampoNumerico(view, cursor, campo.size, campo.baseType, def.littleEndian)
+            if (potencia != null) seriePotencia.push(potencia)
+          }
+          cursor += campo.size
+        }
+      }
+    }
+
     offset += tamañoRegistro(def)
   }
 
@@ -157,7 +174,8 @@ export function parseFIT(arrayBuffer) {
     desnivel: mejorSesion.totalAscent ?? null,
     fc_avg: mejorSesion.avgHeartRate ?? null,
     cadencia_avg: mejorSesion.avgCadence ?? null,
-    potencia_avg: mejorSesion.avgPower ?? null
+    potencia_avg: mejorSesion.avgPower ?? null,
+    serie_potencia: seriePotencia.length > 0 ? seriePotencia : null
   }
 }
 
