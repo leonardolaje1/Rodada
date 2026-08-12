@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [desgaste, setDesgaste] = useState([])
   const [gimnasioPendienteHoy, setGimnasioPendienteHoy] = useState(false)
   const [faltaRecuperacionHoy, setFaltaRecuperacionHoy] = useState(false)
+  const [comidasHoyCount, setComidasHoyCount] = useState(0)
   const [verMas, setVerMas] = useState(false)
   const [verSeñales, setVerSeñales] = useState(false)
   const [perfilNutricional, setPerfilNutricional] = useState(null)
@@ -58,7 +59,7 @@ export default function Dashboard() {
       const hoyStr = new Date().toISOString().slice(0, 10)
       const desde7 = new Date()
       desde7.setDate(desde7.getDate() - 7)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }, { data: metricasRecientes }] = await Promise.all([
+      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: comidasHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }, { data: metricasRecientes }] = await Promise.all([
         supabase
           .from('entrenamientos')
           .select('*')
@@ -73,6 +74,7 @@ export default function Dashboard() {
         supabase.from('desgaste_componentes').select('*'),
         supabase.from('gimnasio').select('id').eq('fecha', hoyStr).eq('estado', 'pendiente').limit(1),
         supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle(),
+        supabase.from('comidas').select('id').eq('fecha', hoyStr),
         supabase.from('perfil_nutricional').select('*').maybeSingle(),
         supabase.from('comidas').select('fecha, kcal, proteinas').gte('fecha', desde7.toISOString().slice(0, 10)),
         supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1),
@@ -89,6 +91,7 @@ export default function Dashboard() {
       setDesgaste(desgasteData || [])
       setGimnasioPendienteHoy((gymHoy || []).length > 0)
       setFaltaRecuperacionHoy(!recupHoy)
+      setComidasHoyCount((comidasHoy || []).length)
       setPerfilNutricional(perfilNutri || null)
       setComidasRecientes(comidasNutri || [])
       setPesoActual((pesosNutri && pesosNutri[0]?.peso) || perfilNutri?.peso || null)
@@ -287,6 +290,13 @@ export default function Dashboard() {
           label="Gimnasio"
           estado={gimnasioPendienteHoy ? 'pendiente' : 'nada'}
           to="/gimnasio"
+        />
+        <FilaHoy
+          Icono={Apple}
+          label="Nutrición"
+          sub={`${comidasHoyCount} comida${comidasHoyCount === 1 ? '' : 's'} hoy`}
+          estado={comidasHoyCount > 0 ? 'hecho' : 'pendiente'}
+          to="/nutricion"
         />
         <FilaHoy
           Icono={Moon}
