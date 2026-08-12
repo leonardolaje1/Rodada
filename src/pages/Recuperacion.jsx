@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
 import { Moon } from 'lucide-react'
 import { useToast } from '../lib/ToastContext'
+import { useConfirm } from '../lib/ConfirmContext'
 
 const NIVELES = [1, 2, 3, 4, 5]
 const PERIODOS = [
@@ -55,6 +56,7 @@ function diasDesde(fecha) {
 
 export default function Recuperacion() {
   const toast = useToast()
+  const { confirmar, alertar } = useConfirm()
   const [registros, setRegistros] = useState([])
   const [lesiones, setLesiones] = useState([])
   const [periodoDias, setPeriodoDias] = useState(30)
@@ -89,10 +91,10 @@ export default function Recuperacion() {
   }
 
   async function eliminarRegistro(fecha) {
-    if (!confirm(`¿Borrar el registro de recuperación del ${fecha}?`)) return
+    if (!(await confirmar(`¿Borrar el registro de recuperación del ${fecha}?`, { destructivo: true }))) return
     const { data: userData } = await supabase.auth.getUser()
     const { error } = await supabase.from('metricas_diarias').delete().eq('user_id', userData.user.id).eq('fecha', fecha)
-    if (error) { alert('No se pudo borrar: ' + error.message); return }
+    if (error) { alertar('No se pudo borrar: ' + error.message); return }
     if (form.fecha === fecha) setForm({ fecha: hoy, ...valoresVacios })
     cargar()
   }
@@ -114,21 +116,21 @@ export default function Recuperacion() {
       { ...payload, user_id: userData.user.id, fuente: 'manual' },
       { onConflict: 'user_id,fecha' }
     )
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     cargar()
     toast('Recuperación guardada')
   }
 
   async function crearLesion(datos) {
     const { error } = await supabase.from('lesiones').insert(datos)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setFormLesionOpen(false); cargar()
   }
   async function marcarRecuperada(id) {
     await supabase.from('lesiones').update({ estado: 'recuperada' }).eq('id', id); cargar()
   }
   async function eliminarLesion(id) {
-    if (!confirm('¿Borrar este registro de lesión?')) return
+    if (!(await confirmar('¿Borrar este registro de lesión?', { destructivo: true }))) return
     await supabase.from('lesiones').delete().eq('id', id); cargar()
   }
 
