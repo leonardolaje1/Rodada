@@ -312,6 +312,124 @@ export default function Reportes() {
     } finally { setGenerando('') }
   }
 
+  async function generarExcelGeneral() {
+    setGenerando('excel-general')
+    setError('')
+    try {
+      const [{ data: entrenamientos }, { data: metricas }, { data: comidas }, { data: gimnasio }, { data: bicicletas }] = await Promise.all([
+        supabase.from('entrenamientos').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: true }),
+        supabase.from('metricas_diarias').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: true }),
+        supabase.from('comidas').select('*').gte('fecha', desde).lte('fecha', hasta),
+        supabase.from('gimnasio').select('*').gte('fecha', desde).lte('fecha', hasta),
+        supabase.from('bicicletas').select('id, nombre')
+      ])
+      const XLSX = await import('xlsx')
+      const nombreBici = (id) => (bicicletas || []).find((b) => b.id === id)?.nombre || '—'
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((entrenamientos || []).map((e) => ({
+        Fecha: e.fecha, Tipo: e.tipo, Ruta: e.ruta, Bici: nombreBici(e.bicicleta_id), Km: e.km,
+        'Duración (min)': e.duracion_min, 'Desnivel (m)': e.desnivel, 'Descenso (m)': e.descenso,
+        'Pot. media (W)': e.potencia_avg, 'NP (W)': e.potencia_normalizada, 'Pot. máxima (W)': e.potencia_max,
+        'FC media': e.fc_avg, RPE: e.rpe, TSS: e.tss ?? calcularTSS(e).toFixed(0), Calorías: e.calorias,
+        'Cadencia media': e.cadencia_avg, 'Cadencia máx': e.cadencia_max,
+        'Velocidad media (km/h)': e.velocidad_avg, 'Velocidad máx (km/h)': e.velocidad_max,
+        'Temperatura media (°C)': e.temperatura_avg, 'Trabajo (kJ)': e.trabajo_kj,
+        Estado: e.estado, 'Sesión clave': e.es_clave ? 'Sí' : '', Comentarios: e.comentarios
+      }))), 'Entrenamientos')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((metricas || []).map((m) => ({
+        Fecha: m.fecha, 'Sueño (h)': m.sueño_horas, 'Body Battery mañana': m.body_battery_manana,
+        'Estrés': m.estres_score, HRV: m.hrv, 'FC reposo': m.fc_reposo
+      }))), 'Recuperación')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((comidas || []).map((c) => ({
+        Fecha: c.fecha, Hora: c.hora, Tipo: c.tipo, Descripción: c.descripcion,
+        Kcal: c.kcal, 'Proteínas (g)': c.proteinas, 'Carbohidratos (g)': c.carbohidratos, 'Grasas (g)': c.grasas
+      }))), 'Nutrición')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((gimnasio || []).map((g) => ({
+        Fecha: g.fecha, Ejercicio: g.ejercicio, Series: g.series, Reps: g.reps, 'Peso (kg)': g.peso,
+        Estado: g.estado, PR: g.pr ? 'Sí' : ''
+      }))), 'Gimnasio')
+
+      XLSX.writeFile(wb, `helu-resumen-${desde}-a-${hasta}.xlsx`)
+    } catch (err) {
+      console.error(err); setError('No se pudo generar el Excel. ' + (err.message || ''))
+    } finally { setGenerando('') }
+  }
+
+  async function generarExcelEntrenamiento() {
+    setGenerando('excel-entrenamiento')
+    setError('')
+    try {
+      const [{ data: entrenamientos }, { data: gimnasio }, { data: bicicletas }] = await Promise.all([
+        supabase.from('entrenamientos').select('*').gte('fecha', desde).lte('fecha', hasta).eq('estado', 'realizado').order('fecha', { ascending: true }),
+        supabase.from('gimnasio').select('*').gte('fecha', desde).lte('fecha', hasta).eq('estado', 'realizado').order('fecha', { ascending: true }),
+        supabase.from('bicicletas').select('id, nombre')
+      ])
+      const XLSX = await import('xlsx')
+      const nombreBici = (id) => (bicicletas || []).find((b) => b.id === id)?.nombre || '—'
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((entrenamientos || []).map((e) => ({
+        Fecha: e.fecha, Tipo: e.tipo, Ruta: e.ruta, Bici: nombreBici(e.bicicleta_id),
+        'Km': e.km, 'Duración (min)': e.duracion_min, 'Tiempo en movimiento (min)': e.tiempo_movimiento_min,
+        'Desnivel (m)': e.desnivel, 'Descenso (m)': e.descenso, 'Altura mín (m)': e.altura_min, 'Altura máx (m)': e.altura_max,
+        'Pot. media (W)': e.potencia_avg, 'NP (W)': e.potencia_normalizada, 'Pot. máxima (W)': e.potencia_max, 'Pot. media máx 20min (W)': e.potencia_20min,
+        'Cadencia media': e.cadencia_avg, 'Cadencia máx': e.cadencia_max,
+        'FC media': e.fc_avg, RPE: e.rpe, TSS: e.tss ?? calcularTSS(e).toFixed(0),
+        Calorías: e.calorias, 'Trabajo (kJ)': e.trabajo_kj,
+        'Velocidad media (km/h)': e.velocidad_avg, 'Velocidad máx (km/h)': e.velocidad_max,
+        'Temperatura media (°C)': e.temperatura_avg, 'Temperatura mín (°C)': e.temperatura_min, 'Temperatura máx (°C)': e.temperatura_max,
+        'Sesión clave': e.es_clave ? 'Sí' : '',
+        'Estilo prescrito': e.estilo_sesion, 'Zona prescrita': e.zona_objetivo, 'W/kg prescrito': e.watts_kg_objetivo,
+        'Series prescritas': e.series_objetivo, 'Reps prescritas': e.repeticiones_objetivo,
+        'Tiempo de trabajo prescrito': e.tiempo_trabajo_objetivo, 'Pausa prescrita': e.pausa_objetivo,
+        Comentarios: e.comentarios
+      }))), 'Ciclismo')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((gimnasio || []).map((g) => ({
+        Fecha: g.fecha, Ejercicio: g.ejercicio, Series: g.series, Reps: g.reps, 'Peso (kg)': g.peso, RPE: g.rpe,
+        PR: g.pr ? 'Sí' : '', 'Sesión clave': g.es_clave ? 'Sí' : '',
+        'Método prescrito': g.metodo_prescrito, 'Valor prescrito': g.valor_prescrito
+      }))), 'Gimnasio')
+
+      XLSX.writeFile(wb, `helu-entrenamiento-${desde}-a-${hasta}.xlsx`)
+    } catch (err) {
+      console.error(err); setError('No se pudo generar el Excel. ' + (err.message || ''))
+    } finally { setGenerando('') }
+  }
+
+  async function generarExcelNutricion() {
+    setGenerando('excel-nutricion')
+    setError('')
+    try {
+      const [{ data: comidas }, { data: hidratacion }, { data: suplementos }, { data: pesos }] = await Promise.all([
+        supabase.from('comidas').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: true }),
+        supabase.from('hidratacion').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: true }),
+        supabase.from('suplementos').select('*').eq('activo', true),
+        supabase.from('peso_historial').select('*').gte('fecha', desde).lte('fecha', hasta).order('fecha', { ascending: true })
+      ])
+      const XLSX = await import('xlsx')
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((pesos || []).map((p) => ({
+        Fecha: p.fecha, 'Peso (kg)': p.peso, Notas: p.notas
+      }))), 'Peso')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((comidas || []).map((c) => ({
+        Fecha: c.fecha, Hora: c.hora, Tipo: c.tipo, Descripción: c.descripcion,
+        Kcal: c.kcal, 'Proteínas (g)': c.proteinas, 'Carbohidratos (g)': c.carbohidratos, 'Grasas (g)': c.grasas
+      }))), 'Comidas')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((hidratacion || []).map((h) => ({
+        Fecha: h.fecha, Hora: h.hora, Bebida: h.bebida || 'Agua', 'Cantidad (ml)': h.ml
+      }))), 'Hidratación')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((suplementos || []).map((s) => ({
+        Nombre: s.nombre, Tipo: s.tipo, Dosis: s.dosis, Frecuencia: s.frecuencia, Notas: s.notas
+      }))), 'Suplementos')
+
+      XLSX.writeFile(wb, `helu-nutricion-${desde}-a-${hasta}.xlsx`)
+    } catch (err) {
+      console.error(err); setError('No se pudo generar el Excel. ' + (err.message || ''))
+    } finally { setGenerando('') }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
