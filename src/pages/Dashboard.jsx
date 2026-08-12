@@ -152,6 +152,28 @@ export default function Dashboard() {
   const titulosPorNivel = { critico: 'Descansá', atencion: 'Con cuidado', optimo: 'Entrená fuerte' }
   const estadoDia = { titulo: titulosPorNivel[insight.nivel], frase: insight.mensaje, color: coloresPorNivel[insight.nivel] }
 
+  // Guarda en silencio un snapshot diario del insight (features + predicción) para
+  // ir construyendo el dataset que algún día va a alimentar el modelo de ML.
+  useEffect(() => {
+    if (cargando) return
+    supabase.from('insights_historial').upsert(
+      {
+        fecha: hoy,
+        tsb: ultimo.tsb ?? null,
+        atl: ultimo.atl ?? null,
+        atl_promedio: historialAtlSerie.length > 0 ? historialAtlSerie.reduce((a, b) => a + b, 0) / historialAtlSerie.length : null,
+        hrv_actual: hrvActual ?? null,
+        hrv_promedio: historialHrv.length > 0 ? historialHrv.reduce((a, b) => a + (b || 0), 0) / historialHrv.length : null,
+        sueño_ultima_noche: sueñoUltimaNoche ?? null,
+        nivel: insight.nivel,
+        mensaje: insight.mensaje,
+        señales: insight.señales,
+        fuente: insight.fuente
+      },
+      { onConflict: 'user_id,fecha' }
+    )
+  }, [cargando])
+
   const inicioSemana = new Date()
   inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
   const entrenosSemana = entrenamientos.filter((e) => e.fecha >= inicioSemana.toISOString().slice(0, 10))
