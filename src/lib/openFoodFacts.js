@@ -14,15 +14,33 @@ function normalizar(producto) {
   }
 }
 
-export async function buscarAlimentosPorTexto(texto) {
-  if (!texto || texto.trim().length < 2) return []
-  // El endpoint viejo (/cgi/search.pl) fue discontinuado por Open Food Facts —
-  // este es el reemplazo oficial (search-a-licious, en beta).
+async function buscarViaSearchALicious(texto) {
   const url = `${BASE_BUSQUEDA}/search?q=${encodeURIComponent(texto)}&langs=es:en&page_size=10&fields=code,product_name,product_name_es,brands,nutriments`
   const res = await fetch(url)
-  if (!res.ok) throw new Error('No se pudo buscar el alimento')
+  if (!res.ok) throw new Error(`search-a-licious respondió ${res.status}`)
   const data = await res.json()
-  const productos = data.hits || data.products || data.results || []
+  return data.hits || data.products || data.results || []
+}
+
+async function buscarViaLegacy(texto) {
+  // Endpoint clásico de Open Food Facts. Sigue soportado y sirve como respaldo
+  // cuando search-a-licious (todavía en beta) no responde.
+  const url = `${BASE}/cgi/search.pl?search_terms=${encodeURIComponent(texto)}&search_simple=1&action=process&json=1&page_size=10&fields=code,product_name,product_name_es,brands,nutriments`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Búsqueda clásica respondió ${res.status}`)
+  const data = await res.json()
+  return data.products || []
+}
+
+export async function buscarAlimentosPorTexto(texto) {
+  if (!texto || texto.trim().length < 2) return []
+  let productos = []
+  try {
+    productos = await buscarViaSearchALicious(texto)
+  } catch (err) {
+    // Si el buscador nuevo (beta) falla, probamos con el endpoint clásico antes de rendirnos.
+    productos = await buscarViaLegacy(texto)
+  }
   return productos
     .filter((p) => p.product_name || p.product_name_es)
     .map(normalizar)
