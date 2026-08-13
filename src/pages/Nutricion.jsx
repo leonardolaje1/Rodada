@@ -3,6 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
+import { buscarAlimentosUSDA } from '../lib/usdaFoodData'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
 import { Apple } from 'lucide-react'
@@ -16,12 +17,23 @@ const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
 const BEBIDAS = ['Agua', 'Isotónica', 'Café', 'Té', 'Otra']
 const METRICAS_ANTROPOMETRIA = [
   { id: 'grasa_corporal_pct', label: '% Grasa corporal', color: '#F14A4A' },
-  { id: 'masa_muscular_pct', label: '% Masa muscular', color: '#C4F135' },
+  { id: 'masa_muscular_pct', label: '% Masa muscular', color: '#4A9EFF' },
   { id: 'perimetro_cintura', label: 'Cintura (cm)', color: '#4A9EFF' },
   { id: 'perimetro_cadera', label: 'Cadera (cm)', color: '#F5A623' },
   { id: 'perimetro_brazo', label: 'Brazo (cm)', color: '#C34AF1' },
   { id: 'perimetro_pierna', label: 'Pierna (cm)', color: '#7A4AF1' }
 ]
+const TABS = [['hoy', 'Hoy'], ['comidas', 'Comidas'], ['composicion', 'Composición'], ['mas', 'Más']]
+const OPCIONES_FAB_DEFAULT = [
+  { id: 'comida', label: 'Comida', icono: '🍽️' },
+  { id: 'agua', label: 'Agua (+250 ml)', icono: '💧' },
+  { id: 'peso', label: 'Peso', icono: '⚖️' }
+]
+const OPCIONES_FAB_COMPOSICION = [
+  { id: 'peso', label: 'Peso', icono: '⚖️' },
+  { id: 'medidas', label: 'Medidas (músculo, grasa, perímetros)', icono: '📏' }
+]
+
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
@@ -32,7 +44,11 @@ function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 export default function Nutricion() {
   const toast = useToast()
   const { confirmar, alertar } = useConfirm()
-  const [sub, setSub] = useState('resumen')
+
+  const [tab, setTab] = useState('hoy')
+  const [subMas, setSubMas] = useState(null) // null = lista | 'planes' | 'hidratacion' | 'suplementos' | 'documentos'
+  const [fabAbierto, setFabAbierto] = useState(false)
+
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
   const [comidas, setComidas] = useState([])
   const [hidratacion, setHidratacion] = useState([])
@@ -115,8 +131,9 @@ export default function Nutricion() {
     const { data: userData } = await supabase.auth.getUser()
     await supabase.from('antropometria').insert({ ...form, user_id: userData.user.id })
     setFormAntropo(false); cargar()
+    toast('Registro guardado')
   }
-  async function actualizarAntropo(id, form) { await supabase.from('antropometria').update(form).eq('id', id); setAntropoEditando(null); cargar() }
+  async function actualizarAntropo(id, form) { await supabase.from('antropometria').update(form).eq('id', id); setAntropoEditando(null); cargar(); toast('Registro guardado') }
   async function eliminarAntropo(id) { if (!(await confirmar('¿Borrar este registro?', { destructivo: true }))) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
   async function eliminarSuplemento(id) { if (!(await confirmar('¿Borrar este suplemento?', { destructivo: true }))) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
 
@@ -193,6 +210,14 @@ export default function Nutricion() {
     })
   }
 
+  function manejarAccionRapida(accion) {
+    setFabAbierto(false)
+    if (accion === 'agua') { cargarBebida('Agua', 250, new Date().toISOString().slice(0, 10)); return }
+    if (accion === 'comida') { setTab('comidas'); setComidaEditando(null); setFormComida(true); return }
+    if (accion === 'peso') { setTab('composicion'); setPesoEditando(null); setFormAntropo(false); setFormPeso(true); return }
+    if (accion === 'medidas') { setTab('composicion'); setAntropoEditando(null); setFormPeso(false); setFormAntropo(true) }
+  }
+
   const hoy = new Date().toISOString().slice(0, 10)
   const comidasHoy = comidas.filter((c) => c.fecha === hoy)
   const kcalHoy = comidasHoy.reduce((a, c) => a + (Number(c.kcal) || 0), 0)
@@ -221,14 +246,17 @@ export default function Nutricion() {
   const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1 ? (pesoActual.peso - pesoInicial.peso) : null
   const graficoPeso = pesoHistorial.map((p) => ({ fecha: p.fecha, peso: p.peso }))
 
+  const ultimaComposicion = antropometria[0] || null
   const antropometriaAsc = [...antropometria].reverse()
   const graficoAntropo = antropometriaAsc
     .filter((a) => a[metricaGrafico] != null)
     .map((a) => ({ fecha: a.fecha, valor: a[metricaGrafico] }))
   const metricaActual = METRICAS_ANTROPOMETRIA.find((m) => m.id === metricaGrafico)
 
+  const opcionesFab = tab === 'composicion' ? OPCIONES_FAB_COMPOSICION : OPCIONES_FAB_DEFAULT
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 pb-16">
       <div className="flex items-center gap-3">
         <IconoInsignia Icono={Apple} />
         <div>
@@ -237,14 +265,14 @@ export default function Nutricion() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['resumen', 'Resumen'], ['planes', 'Planes'], ['documentos', 'Documentos'], ['comidas', 'Comidas'], ['peso', 'Peso'], ['antropometria', 'Antropometría'], ['hidratacion', 'Hidratación'], ['suplementos', 'Suplementos']].map(([id, label]) => (
-          <button key={id} onClick={() => setSub(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${sub === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
+      <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg">
+        {TABS.map(([id, label]) => (
+          <button key={id} onClick={() => { setTab(id); setSubMas(null) }} className={`flex-1 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${tab === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
         ))}
       </div>
 
-      {sub === 'resumen' && (
-        <>
+      {tab === 'hoy' && (
+        <div className="flex flex-col gap-3">
           <div className="card">
             <span className="label-eyebrow">Tu gasto calórico (TDEE)</span>
             <label className="flex flex-col gap-1 text-sm mt-3">
@@ -260,7 +288,7 @@ export default function Nutricion() {
               </div>
             ) : (
               <p className="text-ink-muted text-xs mt-3">
-                Completá tus datos físicos para calcular tu gasto calórico. Tu peso se toma de la pestaña Peso.
+                Completá tus datos físicos para calcular tu gasto calórico. Tu peso se toma de la pestaña Composición.
               </p>
             )}
             <button onClick={() => setEditarDatosFisicos((v) => !v)} className="text-hiviz text-xs font-semibold mt-3">
@@ -285,120 +313,17 @@ export default function Nutricion() {
             <StatMini label="Proteínas" value={proteinasHoy.toFixed(0)} unit="g" />
             <StatMini label="Carbos / Grasas" value={`${carbosHoy.toFixed(0)}/${grasasHoy.toFixed(0)}`} unit="g" />
           </div>
-
           {alertasNutricion.map((a) => (
             <div key={a.tipo} className="card border-alert-amber">
               <span className="label-eyebrow text-alert-amber">{a.titulo}</span>
               <p className="text-ink-muted text-sm mt-1.5">{a.mensaje}</p>
             </div>
           ))}
-        </>
+        </div>
       )}
 
-      {sub === 'planes' && (
-        <>
-          <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPlanEditando(null); setFormPlanOpen((v) => !v) }}>+ Plan</button>
-          </div>
-          {formPlanOpen && <FormPlanNutricion onGuardar={crearPlan} onCancelar={() => setFormPlanOpen(false)} />}
-
-          {registrandoComida && (
-            <FormComida
-              valoresIniciales={registrandoComida}
-              onGuardar={crearComida}
-              onCancelar={() => setRegistrandoComida(null)}
-            />
-          )}
-
-          {planes.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin planes de comidas cargados todavía.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {planes.map((p) =>
-                planEditando === p.id ? (
-                  <FormPlanNutricion key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPlan(p.id, datos)} onCancelar={() => setPlanEditando(null)} />
-                ) : (
-                  <div key={p.id} className="card">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm">{p.nombre}</p>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setFormPlanOpen(false); setPlanEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                        <button onClick={() => borrarPlan(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2 mt-3">
-                      {(p.comidas || []).map((c, i) => {
-                        const registradaHoy = comidasHoy.find((ch) => ch.tipo === c.momento)
-                        return (
-                          <div key={i} className="flex items-center justify-between border border-asphalt-700 rounded-lg px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium">{c.momento}{c.nombre ? ` — ${c.nombre}` : ''}</p>
-                              <p className="text-ink-muted text-xs">
-                                Objetivo: {c.kcal_objetivo ? `${c.kcal_objetivo} kcal` : '—'}{c.proteinas_objetivo ? ` · ${c.proteinas_objetivo}g prot` : ''}
-                              </p>
-                            </div>
-                            {registradaHoy ? (
-                              <span className="text-hiviz text-xs font-semibold whitespace-nowrap">✓ hoy: {registradaHoy.kcal ?? '—'} kcal</span>
-                            ) : (
-                              <button onClick={() => registrarDesdeComida(c)} className="text-hiviz text-xs font-semibold whitespace-nowrap">+ Registrar</button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {sub === 'documentos' && (
-        <>
-          <div className="card">
-            <span className="label-eyebrow">Subir plan de comidas (PDF o foto)</span>
-            <p className="text-ink-muted text-xs mt-1.5">
-              Si tu nutricionista te pasa el plan en PDF o como foto, subilo acá para tenerlo siempre a mano dentro de la app.
-            </p>
-            <label className="inline-block mt-3">
-              <span className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-4 py-2.5 rounded-lg inline-block cursor-pointer hover:text-ink hover:border-hiviz">
-                {subiendoArchivo ? 'Subiendo…' : 'Elegir archivo'}
-              </span>
-              <input
-                type="file"
-                accept=".pdf,image/*"
-                className="hidden"
-                disabled={subiendoArchivo}
-                onChange={(e) => { subirDocumento(e.target.files[0]); e.target.value = '' }}
-              />
-            </label>
-            {errorArchivo && <p className="text-alert-red text-xs mt-3">{errorArchivo}</p>}
-          </div>
-
-          {documentos.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin documentos subidos todavía.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {documentos.map((doc) => (
-                <div key={doc.id} className="card flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{doc.nombre}</p>
-                    <p className="text-ink-muted text-xs">{new Date(doc.created_at).toLocaleDateString('es-AR')}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => verDocumento(doc)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Ver</button>
-                    <button onClick={() => borrarDocumento(doc)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {sub === 'comidas' && (
-        <>
+      {tab === 'comidas' && (
+        <div className="flex flex-col gap-3">
           <div className="flex justify-end">
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setComidaEditando(null); setFormComida((v) => !v) }}>+ Comida</button>
           </div>
@@ -443,13 +368,11 @@ export default function Nutricion() {
               })}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {sub === 'peso' && (
-        <>
-          <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPesoEditando(null); setFormPeso((v) => !v) }}>+ Registro</button></div>
-          {formPeso && <FormPeso onGuardar={crearPeso} onCancelar={() => setFormPeso(false)} />}
+      {tab === 'composicion' && (
+        <div className="flex flex-col gap-3">
           {!pesoActual ? (
             <p className="text-ink-muted text-sm">Todavía no cargaste ningún registro de peso.</p>
           ) : (
@@ -465,9 +388,9 @@ export default function Nutricion() {
               </div>
               {pesoHistorial.length > 1 && (
                 <div className="card">
-                  <span className="label-eyebrow">Evolución</span>
+                  <span className="label-eyebrow">Evolución del peso</span>
                   <div className="mt-2 -ml-4">
-                    <ResponsiveContainer width="100%" height={180}>
+                    <ResponsiveContainer width="100%" height={160}>
                       <LineChart data={graficoPeso} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                         <CartesianGrid stroke="#262A33" vertical={false} />
                         <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
@@ -481,34 +404,43 @@ export default function Nutricion() {
               )}
             </>
           )}
-          {pesoHistorial.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {[...pesoHistorial].reverse().map((p) =>
-                pesoEditando === p.id ? (
-                  <FormPeso key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPeso(p.id, datos)} onCancelar={() => setPesoEditando(null)} />
-                ) : (
-                  <div key={p.id} className="card flex items-center justify-between py-2.5">
-                    <div><span className="readout text-sm font-semibold">{p.peso} kg</span><span className="text-ink-muted text-xs ml-2">{p.fecha}</span>{p.notas && <p className="text-ink-faint text-xs mt-0.5">{p.notas}</p>}</div>
-                    <div className="flex gap-1">
-                      <button onClick={() => { setFormPeso(false); setPesoEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                      <button onClick={() => eliminarPeso(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-        </>
-      )}
 
-      {sub === 'antropometria' && (
-        <>
-          <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setAntropoEditando(null); setFormAntropo((v) => !v) }}>+ Registro</button></div>
+          <div className="card">
+            <span className="label-eyebrow">Músculo vs. grasa</span>
+            {ultimaComposicion && (ultimaComposicion.grasa_corporal_pct != null || ultimaComposicion.masa_muscular_pct != null) ? (
+              <>
+                <div className="flex gap-6 mt-2.5">
+                  {ultimaComposicion.grasa_corporal_pct != null && (
+                    <div><span className="text-ink-muted text-xs">% Grasa</span><p className="readout text-2xl font-bold mt-0.5" style={{ color: '#F14A4A' }}>{ultimaComposicion.grasa_corporal_pct}</p></div>
+                  )}
+                  {ultimaComposicion.masa_muscular_pct != null && (
+                    <div><span className="text-ink-muted text-xs">% Músculo</span><p className="readout text-2xl font-bold mt-0.5 text-route">{ultimaComposicion.masa_muscular_pct}</p></div>
+                  )}
+                </div>
+                {ultimaComposicion.grasa_corporal_pct != null && ultimaComposicion.masa_muscular_pct != null && (
+                  <div className="flex h-1.5 rounded-full overflow-hidden mt-3 bg-asphalt-700">
+                    <div style={{ width: `${ultimaComposicion.grasa_corporal_pct}%`, background: '#F14A4A' }} />
+                    <div style={{ width: `${ultimaComposicion.masa_muscular_pct}%`, background: '#4A9EFF' }} />
+                  </div>
+                )}
+                <p className="text-ink-faint text-xs mt-2">Último registro: {ultimaComposicion.fecha}</p>
+              </>
+            ) : (
+              <p className="text-ink-muted text-xs mt-2">Todavía no cargaste % de grasa ni de músculo. Sumalo con "+ Medidas".</p>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPesoEditando(null); setFormPeso((v) => !v); setFormAntropo(false) }}>+ Peso</button>
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setAntropoEditando(null); setFormAntropo((v) => !v); setFormPeso(false) }}>+ Medidas</button>
+          </div>
+          {formPeso && <FormPeso onGuardar={crearPeso} onCancelar={() => setFormPeso(false)} />}
+          {formAntropo && <FormAntropometria onGuardar={crearAntropo} onCancelar={() => setFormAntropo(false)} />}
 
           {antropometria.length > 1 && (
             <div className="card">
               <div className="flex items-center justify-between mb-2">
-                <span className="label-eyebrow">Evolución</span>
+                <span className="label-eyebrow">Evolución — perímetros y %</span>
                 <select
                   value={metricaGrafico}
                   onChange={(e) => setMetricaGrafico(e.target.value)}
@@ -535,11 +467,28 @@ export default function Nutricion() {
             </div>
           )}
 
-          {formAntropo && <FormAntropometria onGuardar={crearAntropo} onCancelar={() => setFormAntropo(false)} />}
-          {antropometria.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin registros de antropometría todavía.</p>
-          ) : (
+          {pesoHistorial.length > 0 && (
             <div className="flex flex-col gap-2">
+              <span className="label-eyebrow">Historial de peso</span>
+              {[...pesoHistorial].reverse().map((p) =>
+                pesoEditando === p.id ? (
+                  <FormPeso key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPeso(p.id, datos)} onCancelar={() => setPesoEditando(null)} />
+                ) : (
+                  <div key={p.id} className="card flex items-center justify-between py-2.5">
+                    <div><span className="readout text-sm font-semibold">{p.peso} kg</span><span className="text-ink-muted text-xs ml-2">{p.fecha}</span>{p.notas && <p className="text-ink-faint text-xs mt-0.5">{p.notas}</p>}</div>
+                    <div className="flex gap-1">
+                      <button onClick={() => { setFormPeso(false); setPesoEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                      <button onClick={() => eliminarPeso(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {antropometria.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="label-eyebrow">Historial de medidas</span>
               {antropometria.map((a) =>
                 antropoEditando === a.id ? (
                   <FormAntropometria key={a.id} valoresIniciales={a} onGuardar={(datos) => actualizarAntropo(a.id, datos)} onCancelar={() => setAntropoEditando(null)} />
@@ -566,11 +515,93 @@ export default function Nutricion() {
               )}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {sub === 'hidratacion' && (
-        <>
+      {tab === 'mas' && subMas === null && (
+        <div className="flex flex-col gap-2">
+          <button onClick={() => setSubMas('planes')} className="card flex items-center justify-between text-left">
+            <div><p className="text-sm font-medium">Planes de comida</p><p className="text-ink-faint text-xs mt-0.5">{planes.length} plan{planes.length === 1 ? '' : 'es'} activo{planes.length === 1 ? '' : 's'}</p></div>
+            <span className="text-ink-faint">›</span>
+          </button>
+          <button onClick={() => setSubMas('hidratacion')} className="card flex items-center justify-between text-left">
+            <div><p className="text-sm font-medium">Hidratación — historial</p><p className="text-ink-faint text-xs mt-0.5">Detalle por día y tipo de bebida</p></div>
+            <span className="text-ink-faint">›</span>
+          </button>
+          <button onClick={() => setSubMas('suplementos')} className="card flex items-center justify-between text-left">
+            <div><p className="text-sm font-medium">Suplementos</p><p className="text-ink-faint text-xs mt-0.5">{suplementos.length} activo{suplementos.length === 1 ? '' : 's'}</p></div>
+            <span className="text-ink-faint">›</span>
+          </button>
+          <button onClick={() => setSubMas('documentos')} className="card flex items-center justify-between text-left">
+            <div><p className="text-sm font-medium">Documentos</p><p className="text-ink-faint text-xs mt-0.5">Análisis, planes en PDF</p></div>
+            <span className="text-ink-faint">›</span>
+          </button>
+        </div>
+      )}
+
+      {tab === 'mas' && subMas === 'planes' && (
+        <div className="flex flex-col gap-3">
+          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
+          <span className="label-eyebrow">Planes de comida</span>
+          <div className="flex justify-end">
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPlanEditando(null); setFormPlanOpen((v) => !v) }}>+ Plan</button>
+          </div>
+          {formPlanOpen && <FormPlanNutricion onGuardar={crearPlan} onCancelar={() => setFormPlanOpen(false)} />}
+          {registrandoComida && (
+            <FormComida
+              valoresIniciales={registrandoComida}
+              onGuardar={crearComida}
+              onCancelar={() => setRegistrandoComida(null)}
+            />
+          )}
+          {planes.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin planes de comidas cargados todavía.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {planes.map((p) =>
+                planEditando === p.id ? (
+                  <FormPlanNutricion key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPlan(p.id, datos)} onCancelar={() => setPlanEditando(null)} />
+                ) : (
+                  <div key={p.id} className="card">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-sm">{p.nombre}</p>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setFormPlanOpen(false); setPlanEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
+                        <button onClick={() => borrarPlan(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 mt-3">
+                      {(p.comidas || []).map((c, i) => {
+                        const registradaHoy = comidasHoy.find((ch) => ch.tipo === c.momento)
+                        return (
+                          <div key={i} className="flex items-center justify-between border border-asphalt-700 rounded-lg px-3 py-2">
+                            <div>
+                              <p className="text-sm font-medium">{c.momento}{c.nombre ? ` — ${c.nombre}` : ''}</p>
+                              <p className="text-ink-muted text-xs">
+                                Objetivo: {c.kcal_objetivo ? `${c.kcal_objetivo} kcal` : '—'}{c.proteinas_objetivo ? ` · ${c.proteinas_objetivo}g prot` : ''}
+                              </p>
+                            </div>
+                            {registradaHoy ? (
+                              <span className="text-hiviz text-xs font-semibold whitespace-nowrap">✓ hoy: {registradaHoy.kcal ?? '—'} kcal</span>
+                            ) : (
+                              <button onClick={() => registrarDesdeComida(c)} className="text-hiviz text-xs font-semibold whitespace-nowrap">+ Registrar</button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'mas' && subMas === 'hidratacion' && (
+        <div className="flex flex-col gap-3">
+          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
+          <span className="label-eyebrow">Hidratación</span>
           <div className="card">
             <span className="label-eyebrow">Fecha</span>
             <input
@@ -581,7 +612,6 @@ export default function Nutricion() {
               className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm mt-1.5"
             />
           </div>
-
           <div className="card">
             <span className="label-eyebrow">Agua — carga rápida ({fechaHidratacion === hoy ? 'hoy' : fechaHidratacion})</span>
             <div className="flex gap-2 mt-2.5 flex-wrap">
@@ -590,7 +620,6 @@ export default function Nutricion() {
               ))}
             </div>
           </div>
-
           <div className="flex justify-end">
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormBebidaOpen((v) => !v)}>+ Otra bebida</button>
           </div>
@@ -601,7 +630,6 @@ export default function Nutricion() {
               onCancelar={() => setFormBebidaOpen(false)}
             />
           )}
-
           <div className="grid grid-cols-2 gap-3">
             {BEBIDAS.map((b) => {
               const item = porBebidaFecha.find((x) => x.bebida === b)
@@ -614,7 +642,6 @@ export default function Nutricion() {
               )
             })}
           </div>
-
           {hidratacionPorDia.length === 0 ? (
             <p className="text-ink-muted text-sm">Sin registros de hidratación todavía.</p>
           ) : (
@@ -650,11 +677,13 @@ export default function Nutricion() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {sub === 'suplementos' && (
-        <>
+      {tab === 'mas' && subMas === 'suplementos' && (
+        <div className="flex flex-col gap-3">
+          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
+          <span className="label-eyebrow">Suplementos</span>
           <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormSuplemento((v) => !v)}>+ Suplemento</button></div>
           {formSuplemento && (
             <FormSuplemento onGuardar={async (n) => { const { data: userData } = await supabase.auth.getUser(); await supabase.from('suplementos').insert({ ...n, user_id: userData.user.id }); setFormSuplemento(false); cargar() }} onCancelar={() => setFormSuplemento(false)} />
@@ -685,6 +714,83 @@ export default function Nutricion() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {tab === 'mas' && subMas === 'documentos' && (
+        <div className="flex flex-col gap-3">
+          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
+          <span className="label-eyebrow">Documentos</span>
+          <div className="card">
+            <span className="label-eyebrow">Subir plan de comidas (PDF o foto)</span>
+            <p className="text-ink-muted text-xs mt-1.5">
+              Si tu nutricionista te pasa el plan en PDF o como foto, subilo acá para tenerlo siempre a mano dentro de la app.
+            </p>
+            <label className="inline-block mt-3">
+              <span className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-4 py-2.5 rounded-lg inline-block cursor-pointer hover:text-ink hover:border-hiviz">
+                {subiendoArchivo ? 'Subiendo…' : 'Elegir archivo'}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                disabled={subiendoArchivo}
+                onChange={(e) => { subirDocumento(e.target.files[0]); e.target.value = '' }}
+              />
+            </label>
+            {errorArchivo && <p className="text-alert-red text-xs mt-3">{errorArchivo}</p>}
+          </div>
+          {documentos.length === 0 ? (
+            <p className="text-ink-muted text-sm">Sin documentos subidos todavía.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {documentos.map((doc) => (
+                <div key={doc.id} className="card flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{doc.nombre}</p>
+                    <p className="text-ink-muted text-xs">{new Date(doc.created_at).toLocaleDateString('es-AR')}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => verDocumento(doc)} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Ver</button>
+                    <button onClick={() => borrarDocumento(doc)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Botón flotante de carga rápida, oculto en "Más" (sin acción rápida obvia ahí) */}
+      {tab !== 'mas' && (
+        <>
+          <button
+            onClick={() => setFabAbierto(true)}
+            className="fixed right-5 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] w-14 h-14 rounded-full bg-hiviz text-asphalt-950 text-2xl font-semibold flex items-center justify-center shadow-lg z-40"
+            aria-label="Registrar"
+          >
+            +
+          </button>
+          {fabAbierto && (
+            <div className="fixed inset-0 bg-black/55 z-50 flex items-end" onClick={(e) => { if (e.target === e.currentTarget) setFabAbierto(false) }}>
+              <div className="w-full bg-asphalt-800 border-t border-asphalt-700 rounded-t-2xl px-4 pt-2.5 pb-8">
+                <div className="w-9 h-1 bg-asphalt-600 rounded-full mx-auto mb-3.5" />
+                <p className="font-display font-semibold text-base mb-1.5">Registrar</p>
+                <div className="flex flex-col">
+                  {opcionesFab.map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => manejarAccionRapida(o.id)}
+                      className="flex items-center gap-3 py-3 border-b border-asphalt-700 last:border-none text-left"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-asphalt-700 flex items-center justify-center text-sm">{o.icono}</span>
+                      <span className="text-sm font-medium">{o.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -725,7 +831,6 @@ function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
         <span className="text-ink-muted text-xs">Nombre del plan</span>
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder="Plan de volumen / Plan pre-competencia" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
       </label>
-
       <div className="flex flex-col gap-2.5">
         {comidas.map((c, i) => (
           <div key={i} className="border border-asphalt-700 rounded-lg p-2.5 flex flex-col gap-2">
@@ -744,7 +849,6 @@ function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
         ))}
       </div>
       <button type="button" onClick={agregarComida} className="text-hiviz text-xs self-start">+ Agregar comida</button>
-
       <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
         <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar plan</button>
@@ -800,11 +904,20 @@ function BuscadorAlimento({ onSeleccionar }) {
   async function buscar() {
     setError(''); setBuscando(true); setResultados([])
     try {
-      const r = await buscarAlimentosPorTexto(texto)
-      if (r.length === 0) setError('Sin resultados. Probá con otro nombre o cargá los macros a mano.')
-      setResultados(r)
-    } catch (err) {
-      setError('No se pudo buscar (' + (err.message || 'error desconocido') + ')')
+      const [usda, off] = await Promise.allSettled([
+        buscarAlimentosUSDA(texto),
+        buscarAlimentosPorTexto(texto)
+      ])
+      // USDA primero: es donde vive la comida genérica (huevo, palta, arroz, pollo).
+      // Open Food Facts después: gana en productos envasados con marca.
+      const resultadosUsda = usda.status === 'fulfilled' ? usda.value : []
+      const resultadosOff = off.status === 'fulfilled' ? off.value : []
+      const combinados = [...resultadosUsda, ...resultadosOff]
+      if (combinados.length === 0) {
+        const ambasFallaron = usda.status === 'rejected' && off.status === 'rejected'
+        setError(ambasFallaron ? 'No se pudo buscar en ninguna base de datos.' : 'Sin resultados. Probá con otro nombre o cargá los macros a mano.')
+      }
+      setResultados(combinados)
     } finally {
       setBuscando(false)
     }
