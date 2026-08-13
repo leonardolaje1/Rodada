@@ -900,6 +900,7 @@ function BuscadorAlimento({ onSeleccionar }) {
   const [error, setError] = useState('')
   const [escaneando, setEscaneando] = useState(false)
   const [productoElegido, setProductoElegido] = useState(null)
+  const [modoCantidad, setModoCantidad] = useState('gramos') // 'gramos' | 'unidad'
   const [cantidad, setCantidad] = useState('100')
 
   async function buscar() {
@@ -944,11 +945,21 @@ function BuscadorAlimento({ onSeleccionar }) {
     }
   }
 
+  function elegirProducto(p) {
+    setProductoElegido(p)
+    if (p.unidad) { setModoCantidad('unidad'); setCantidad('1') }
+    else { setModoCantidad('gramos'); setCantidad('100') }
+  }
+
   function confirmarCantidad() {
-    const g = Number(cantidad) || 0
+    const cant = Number(cantidad) || 0
+    const g = modoCantidad === 'unidad' ? cant * (productoElegido.unidad?.gramos || 0) : cant
     const escala = g / 100
+    const detalleCantidad = modoCantidad === 'unidad'
+      ? `${cant} ${productoElegido.unidad.etiqueta}${cant === 1 ? '' : 's'}`
+      : `${g}g`
     onSeleccionar({
-      descripcion: `${productoElegido.nombre}${productoElegido.marca ? ` (${productoElegido.marca})` : ''} — ${g}g`,
+      descripcion: `${productoElegido.nombre}${productoElegido.marca ? ` (${productoElegido.marca})` : ''} — ${detalleCantidad}`,
       kcal: productoElegido.kcal100g != null ? Math.round(productoElegido.kcal100g * escala) : '',
       proteinas: productoElegido.proteinas100g != null ? Math.round(productoElegido.proteinas100g * escala * 10) / 10 : '',
       carbohidratos: productoElegido.carbohidratos100g != null ? Math.round(productoElegido.carbohidratos100g * escala * 10) / 10 : '',
@@ -974,11 +985,20 @@ function BuscadorAlimento({ onSeleccionar }) {
           {productoElegido.marca && <p className="text-ink-muted text-xs">{productoElegido.marca}</p>}
           <p className="text-ink-faint text-xs mt-1">
             Por 100g: {productoElegido.kcal100g ?? '—'} kcal · P {productoElegido.proteinas100g ?? '—'} · C {productoElegido.carbohidratos100g ?? '—'} · G {productoElegido.grasas100g ?? '—'}
+            {productoElegido.unidad && ` · 1 ${productoElegido.unidad.etiqueta} ≈ ${productoElegido.unidad.gramos}g`}
           </p>
         </div>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-ink-muted text-xs">¿Cuántos gramos comiste?</span>
-          <input type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+          {productoElegido.unidad && (
+            <div className="flex gap-1 mb-1">
+              <button type="button" onClick={() => { setModoCantidad('unidad'); setCantidad('1') }} className={`text-xs px-2.5 py-1 rounded-lg border ${modoCantidad === 'unidad' ? 'bg-hiviz text-asphalt-950 border-hiviz' : 'text-ink-muted border-asphalt-700'}`}>Por {productoElegido.unidad.etiqueta}</button>
+              <button type="button" onClick={() => { setModoCantidad('gramos'); setCantidad('100') }} className={`text-xs px-2.5 py-1 rounded-lg border ${modoCantidad === 'gramos' ? 'bg-hiviz text-asphalt-950 border-hiviz' : 'text-ink-muted border-asphalt-700'}`}>Por gramos</button>
+            </div>
+          )}
+          <span className="text-ink-muted text-xs">
+            {modoCantidad === 'unidad' ? `¿Cuántas unidades (${productoElegido.unidad.etiqueta} de ~${productoElegido.unidad.gramos}g)?` : '¿Cuántos gramos comiste?'}
+          </span>
+          <input type="number" step={modoCantidad === 'unidad' ? '0.5' : '1'} value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
         </label>
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={() => setProductoElegido(null)} className="text-ink-muted text-xs px-3 py-1.5">Elegir otro</button>
@@ -1012,7 +1032,7 @@ function BuscadorAlimento({ onSeleccionar }) {
             <button
               key={i}
               type="button"
-              onClick={() => setProductoElegido(r)}
+              onClick={() => elegirProducto(r)}
               className="text-left border border-asphalt-700 rounded-lg px-2.5 py-2 hover:border-hiviz"
             >
               <p className="text-xs font-medium">{r.nombre}{r.marca ? ` — ${r.marca}` : ''}</p>
