@@ -998,7 +998,7 @@ function BuscadorAlimento({ onSeleccionar }) {
           <span className="text-ink-muted text-xs">
             {modoCantidad === 'unidad' ? `¿Cuántas unidades (${productoElegido.unidad.etiqueta} de ~${productoElegido.unidad.gramos}g)?` : '¿Cuántos gramos comiste?'}
           </span>
-          <input type="number" step={modoCantidad === 'unidad' ? '0.5' : '1'} value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+          <input type="number" step={modoCantidad === 'unidad' ? '0.5' : '1'} value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
         </label>
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={() => setProductoElegido(null)} className="text-ink-muted text-xs px-3 py-1.5">Elegir otro</button>
