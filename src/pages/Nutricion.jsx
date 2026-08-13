@@ -1016,7 +1016,7 @@ function BuscadorAlimento({ onSeleccionar }) {
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); buscar() } }}
           placeholder="Ej: yogur natural, banana..."
-          className="flex-1 bg-asphalt-950 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm"
+          className="flex-1 bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink text-sm"
         />
         <button type="button" onClick={buscar} disabled={buscando} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-2 rounded-lg disabled:opacity-60">
           {buscando ? '...' : 'Buscar'}
