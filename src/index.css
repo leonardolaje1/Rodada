@@ -17,6 +17,14 @@
   --color-ink: 235 235 235;
   --color-ink-muted: 165 165 165;
   --color-ink-faint: 110 110 110;
+
+  /* Tokens de estado (dark). success y neutral no existían como
+     variable — antes vivían como hex sueltos (#C4F135, #565B68)
+     dentro de la lógica de cada página. */
+  --color-state-critical: 241 74 74;   /* = alert-red */
+  --color-state-warning: 245 166 35;   /* = alert-amber */
+  --color-state-success: 196 241 53;
+  --color-state-neutral: 86 91 104;
 }
 
 .light {
@@ -33,6 +41,13 @@
   --color-ink: 20 22 26;
   --color-ink-muted: 91 98 112;
   --color-ink-faint: 139 146 160;
+
+  /* Tokens de estado (light) — mismo criterio de contraste que el
+     resto de la paleta en modo claro. */
+  --color-state-critical: 217 54 54;
+  --color-state-warning: 181 120 15;
+  --color-state-success: 90 140 20;
+  --color-state-neutral: 139 146 160;
 }
 
 @layer base {
@@ -59,9 +74,54 @@
     @apply font-data tabular-nums tracking-tight;
   }
   .card {
-    @apply bg-asphalt-800 border border-asphalt-700 rounded-xl p-4;
+    @apply bg-asphalt-800 border border-asphalt-700 rounded-xl p-4
+           transition-colors duration-200 ease-apple;
   }
   .label-eyebrow {
     @apply text-[11px] uppercase tracking-[0.14em] text-ink-muted font-body font-medium;
+  }
+
+  /* Variantes de estado para .card — reemplazan
+     style={{ borderColor: '#F5A62355' }} y similares.
+     Uso: className="card card-warning" */
+  .card-critical {
+    @apply border-state-critical/30 bg-state-critical/10;
+  }
+  .card-warning {
+    @apply border-state-warning/30 bg-state-warning/10;
+  }
+  .card-success {
+    @apply border-state-success/30 bg-state-success/10;
+  }
+  .card-neutral {
+    @apply border-state-neutral/30 bg-state-neutral/10;
+  }
+  .card-hiviz {
+    @apply border-hiviz/30 bg-hiviz/10;
+  }
+
+  /* Contenedor colapsable animado sin JS extra (grid-template-rows trick).
+     Uso:
+       <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
+         <div className="collapse-inner">{contenido}</div>
+       </div> */
+  .collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  .collapse-open {
+    grid-template-rows: 1fr;
+  }
+  .collapse-inner {
+    overflow: hidden;
+  }
+
+  /* Chevron que rota al abrir/cerrar detalle */
+  .chevron {
+    @apply inline-block transition-transform duration-200 ease-apple;
+  }
+  .chevron-open {
+    @apply rotate-180;
   }
 }
