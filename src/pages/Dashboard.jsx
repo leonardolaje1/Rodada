@@ -148,9 +148,15 @@ export default function Dashboard() {
     historialHrv,
     sueñoUltimaNoche
   })
-  const coloresPorNivel = { critico: '#F14A4A', atencion: '#F5A623', optimo: '#4ADE80' }
+  const clasesPorNivel = { critico: 'card-critical', atencion: 'card-warning', optimo: 'card-success' }
+  const textoPorNivel = { critico: 'text-state-critical', atencion: 'text-state-warning', optimo: 'text-state-success' }
   const titulosPorNivel = { critico: 'Descansá', atencion: 'Con cuidado', optimo: 'Entrená fuerte' }
-  const estadoDia = { titulo: titulosPorNivel[insight.nivel], frase: insight.mensaje, color: coloresPorNivel[insight.nivel] }
+  const estadoDia = {
+    titulo: titulosPorNivel[insight.nivel],
+    frase: insight.mensaje,
+    claseCard: clasesPorNivel[insight.nivel],
+    claseTexto: textoPorNivel[insight.nivel]
+  }
 
   // Guarda en silencio un snapshot diario del insight (features + predicción) para
   // ir construyendo el dataset que algún día va a alimentar el modelo de ML.
@@ -215,7 +221,9 @@ export default function Dashboard() {
   const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
   const tieneAlgunPlan = planesEntreno.length > 0 || planesGym.length > 0
   const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
-  const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
+  const claseAdherencia = adherenciaPct == null ? 'card-neutral' : adherenciaPct >= 80 ? 'card-success' : adherenciaPct >= 50 ? 'card-warning' : 'card-critical'
+  const barraAdherencia = adherenciaPct == null ? 'bg-state-neutral' : adherenciaPct >= 80 ? 'bg-state-success' : adherenciaPct >= 50 ? 'bg-state-warning' : 'bg-state-critical'
+  const textoAdherencia = adherenciaPct == null ? 'text-state-neutral' : adherenciaPct >= 80 ? 'text-state-success' : adherenciaPct >= 50 ? 'text-state-warning' : 'text-state-critical'
 
   const nombreBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.nombre || 'Bici'
   const kmBiciPorId = (bId) => bicicletas.find((b) => b.id === bId)?.km_totales || 0
@@ -282,20 +290,22 @@ export default function Dashboard() {
       </div>
 
       {/* Zona 1 — Hero de decisión */}
-      <div className="card text-center py-5" style={{ borderColor: estadoDia.color + '55', background: estadoDia.color + '14' }}>
+      <div className={`card text-center py-5 ${estadoDia.claseCard}`}>
         <span className="label-eyebrow">Hoy</span>
-        <p className="text-2xl font-display font-bold mt-1.5" style={{ color: estadoDia.color }}>{estadoDia.titulo}</p>
+        <p className={`text-2xl font-display font-bold mt-1.5 ${estadoDia.claseTexto}`}>{estadoDia.titulo}</p>
         <p className="text-ink-muted text-sm mt-1">{estadoDia.frase}</p>
         {insight.señales.length > 0 && (
           <button onClick={() => setVerSeñales((v) => !v)} className="text-ink-faint text-[11px] mt-2 underline">
             {verSeñales ? 'Ocultar por qué' : '¿Por qué?'}
           </button>
         )}
-        {verSeñales && (
-          <ul className="text-ink-muted text-xs mt-2 flex flex-col gap-1 text-left list-disc pl-4 max-w-xs mx-auto">
-            {insight.señales.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
-        )}
+        <div className={`collapse ${verSeñales ? 'collapse-open' : ''}`}>
+          <div className="collapse-inner">
+            <ul className="text-ink-muted text-xs mt-2 flex flex-col gap-1 text-left list-disc pl-4 max-w-xs mx-auto">
+              {insight.señales.map((s, i) => <li key={i}>{s}</li>)}
+            </ul>
+          </div>
+        </div>
       </div>
 
       {/* Zona 2 — Qué hacer hoy */}
@@ -333,11 +343,11 @@ export default function Dashboard() {
       {(alertasMantenimiento.length > 0 || alertasNutricion.length > 0 || (diasCompetencia != null && diasCompetencia <= 7)) && (
         <div className="flex flex-col gap-2">
           {alertasNutricion.map((a) => (
-            <Link key={a.tipo} to="/nutricion" className="card flex items-center justify-between hover:border-alert-amber" style={{ borderColor: '#F5A62355' }}>
+            <Link key={a.tipo} to="/nutricion" className="card card-warning flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <IconoInsignia Icono={Apple} color="#F5A623" />
+                <IconoInsignia Icono={Apple} claseColor="text-state-warning" claseFondo="bg-state-warning/10" />
                 <div>
-                  <p className="text-xs font-semibold text-alert-amber">{a.titulo}</p>
+                  <p className="text-xs font-semibold text-state-warning">{a.titulo}</p>
                   <p className="text-ink-muted text-[11px]">{a.mensaje}</p>
                 </div>
               </div>
@@ -345,9 +355,9 @@ export default function Dashboard() {
             </Link>
           ))}
           {diasCompetencia != null && diasCompetencia <= 7 && (
-            <Link to="/competencias" className="card flex items-center justify-between hover:border-hiviz" style={{ borderColor: '#EB642A55' }}>
+            <Link to="/competencias" className="card card-hiviz flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <IconoInsignia Icono={Trophy} color="#EB642A" />
+                <IconoInsignia Icono={Trophy} claseColor="text-hiviz" claseFondo="bg-hiviz/10" />
                 <div>
                   <p className="text-xs font-semibold text-hiviz">{proximaCompetencia.nombre}</p>
                   <p className="text-ink-muted text-[11px]">{diasCompetencia === 0 ? 'Hoy' : `En ${diasCompetencia} días`}</p>
@@ -356,96 +366,109 @@ export default function Dashboard() {
               <span className="text-ink-faint text-xs">→</span>
             </Link>
           )}
-          {alertasMantenimiento.slice(0, 2).map((a, i) => (
-            <Link
-              key={i}
-              to={`/bicicletas/${a.biciId}`}
-              className="card flex items-center justify-between hover:border-alert-red"
-              style={{ borderColor: (a.nivel === 'critico' ? '#F14A4A' : '#F5A623') + '55' }}
-            >
-              <div className="flex items-center gap-2.5">
-                <IconoInsignia Icono={Wrench} color={a.nivel === 'critico' ? '#F14A4A' : '#F5A623'} />
-                <div>
-                  <p className="text-xs font-semibold" style={{ color: a.nivel === 'critico' ? '#F14A4A' : '#F5A623' }}>{a.label} — {a.pct}%</p>
-                  <p className="text-ink-muted text-[11px]">{a.bici}</p>
+          {alertasMantenimiento.slice(0, 2).map((a, i) => {
+            const critico = a.nivel === 'critico'
+            return (
+              <Link
+                key={i}
+                to={`/bicicletas/${a.biciId}`}
+                className={`card flex items-center justify-between ${critico ? 'card-critical' : 'card-warning'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <IconoInsignia
+                    Icono={Wrench}
+                    claseColor={critico ? 'text-state-critical' : 'text-state-warning'}
+                    claseFondo={critico ? 'bg-state-critical/10' : 'bg-state-warning/10'}
+                  />
+                  <div>
+                    <p className={`text-xs font-semibold ${critico ? 'text-state-critical' : 'text-state-warning'}`}>{a.label} — {a.pct}%</p>
+                    <p className="text-ink-muted text-[11px]">{a.bici}</p>
+                  </div>
                 </div>
-              </div>
-              <span className="text-ink-faint text-xs">→</span>
-            </Link>
-          ))}
+                <span className="text-ink-faint text-xs">→</span>
+              </Link>
+            )
+          })}
         </div>
       )}
 
       {/* Zona 4 — Detalle, colapsado por default */}
       <button onClick={() => setVerMas((v) => !v)} className="text-hiviz text-xs font-semibold flex items-center gap-1 self-start">
-        {verMas ? 'Ocultar detalle' : 'Ver más detalle'} <span className="text-ink-faint">{verMas ? '▲' : '▼'}</span>
+        {verMas ? 'Ocultar detalle' : 'Ver más detalle'}
+        <span className={`chevron text-ink-faint ${verMas ? 'chevron-open' : ''}`}>▼</span>
       </button>
 
-      {verMas && (
-        <div className="flex flex-col gap-4 pt-1 border-t border-asphalt-700">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-            <StatCard label="Horas — semana" value={horasSemana.toFixed(1)} unit="h" />
-            <StatCard label="Km — semana" value={kmSemana.toFixed(0)} unit="km" />
-            <StatCard label="CTL (fitness)" value={ultimo.ctl} accent="hiviz" />
-            <StatCard label="ATL (fatiga)" value={ultimo.atl} accent="red" />
-          </div>
-
-          <PMCChart data={serie} />
-
-          {tieneAlgunPlan && (
-            <div className="card" style={{ borderColor: colorAdherencia }}>
-              <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
-              {adherenciaPct != null ? (
-                <>
-                  <div className="flex items-baseline gap-3 mt-1">
-                    <span className="readout text-3xl font-bold" style={{ color: colorAdherencia }}>{adherenciaPct}%</span>
-                    <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
-                    <div className="h-full" style={{ width: `${adherenciaPct}%`, background: colorAdherencia }} />
-                  </div>
-                </>
-              ) : (
-                <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
-              )}
+      <div className={`collapse ${verMas ? 'collapse-open' : ''}`}>
+        <div className="collapse-inner">
+          <div className="flex flex-col gap-4 pt-1 border-t border-asphalt-700">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <StatCard label="Horas — semana" value={horasSemana.toFixed(1)} unit="h" />
+              <StatCard label="Km — semana" value={kmSemana.toFixed(0)} unit="km" />
+              <StatCard label="CTL (fitness)" value={ultimo.ctl} accent="hiviz" />
+              <StatCard label="ATL (fatiga)" value={ultimo.atl} accent="red" />
             </div>
-          )}
 
-          <div>
-            <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
-            {bicicletas.length === 0 ? (
-              <p className="text-ink-muted text-sm">
-                Todavía no cargaste ninguna bicicleta. Andá a la sección Bicicletas para agregar la primera.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {bicicletas.map((b) => (
-                  <Link key={b.id} to={`/bicicletas/${b.id}`} className="card flex items-center justify-between hover:border-hiviz">
-                    <div>
-                      <p className="font-medium">{b.nombre}</p>
-                      <p className="text-ink-muted text-xs">{b.marca} {b.modelo}</p>
+            <PMCChart data={serie} />
+
+            {tieneAlgunPlan && (
+              <div className={`card ${claseAdherencia}`}>
+                <span className="label-eyebrow">Adherencia al plan — últimos {DIAS_ADHERENCIA} días</span>
+                {adherenciaPct != null ? (
+                  <>
+                    <div className="flex items-baseline gap-3 mt-1">
+                      <span className={`readout text-3xl font-bold ${textoAdherencia}`}>{adherenciaPct}%</span>
+                      <span className="text-sm text-ink-muted">{diasCumplidosTotal} de {diasEsperadosTotal} días planificados</span>
                     </div>
-                    <span className="readout text-sm text-ink-muted">
-                      {(b.km_totales || 0).toLocaleString('es-AR')} km
-                    </span>
-                  </Link>
-                ))}
+                    <div className="w-full h-1.5 bg-asphalt-700 rounded-full mt-3 overflow-hidden">
+                      <div
+                        className={`h-full transition-[width] duration-500 ease-apple ${barraAdherencia}`}
+                        style={{ width: `${adherenciaPct}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-ink-muted text-sm mt-1">Tenés planes cargados, pero ninguno tiene días activos en los últimos {DIAS_ADHERENCIA}.</p>
+                )}
               </div>
             )}
+
+            <div>
+              <h2 className="text-lg font-semibold mb-3">Bicicletas</h2>
+              {bicicletas.length === 0 ? (
+                <p className="text-ink-muted text-sm">
+                  Todavía no cargaste ninguna bicicleta. Andá a la sección Bicicletas para agregar la primera.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {bicicletas.map((b) => (
+                    <Link key={b.id} to={`/bicicletas/${b.id}`} className="card flex items-center justify-between hover:border-hiviz">
+                      <div>
+                        <p className="font-medium">{b.nombre}</p>
+                        <p className="text-ink-muted text-xs">{b.marca} {b.modelo}</p>
+                      </div>
+                      <span className="readout text-sm text-ink-muted">
+                        {(b.km_totales || 0).toLocaleString('es-AR')} km
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
 
-function IconoInsignia({ Icono, color, activo = true }) {
+function IconoInsignia({ Icono, claseColor, claseFondo, activo = true }) {
   return (
     <span
-      className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ background: activo ? `${color}1A` : 'rgb(44,44,44)' }}
+      className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-200 ${
+        activo ? claseFondo : 'bg-asphalt-700'
+      }`}
     >
-      <Icono size={15} strokeWidth={2} color={activo ? color : '#6E6E6E'} />
+      <Icono size={15} strokeWidth={2} className={activo ? claseColor : 'text-ink-faint'} />
     </span>
   )
 }
@@ -459,7 +482,7 @@ function FilaHoy({ Icono, label, sub, estado, to }) {
       className={`card flex items-center justify-between py-2.5 ${nada ? 'opacity-50' : 'hover:border-hiviz'}`}
     >
       <div className="flex items-center gap-2.5">
-        <IconoInsignia Icono={Icono} color="#EB642A" activo={!nada} />
+        <IconoInsignia Icono={Icono} claseColor="text-hiviz" claseFondo="bg-hiviz/10" activo={!nada} />
         <div>
           <p className="text-sm font-semibold">{label}</p>
           {sub && <p className="text-ink-muted text-xs">{sub}</p>}
