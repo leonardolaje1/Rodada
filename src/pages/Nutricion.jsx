@@ -88,8 +88,16 @@ export default function Nutricion() {
     const { data: userData } = await supabase.auth.getUser()
     await supabase.from('perfil_nutricional').upsert({ ...next, user_id: userData.user.id })
   }
-  async function crearComida(n) { await supabase.from('comidas').insert(n); setFormComida(false); setRegistrandoComida(null); cargar(); toast('Comida guardada') }
-  async function actualizarComida(id, n) { await supabase.from('comidas').update(n).eq('id', id); setComidaEditando(null); cargar(); toast('Comida guardada') }
+  async function crearComida(n) {
+    const { error } = await supabase.from('comidas').insert(n)
+    if (error) { alertar('No se pudo guardar la comida: ' + error.message); return }
+    setFormComida(false); setRegistrandoComida(null); cargar(); toast('Comida guardada')
+  }
+  async function actualizarComida(id, n) {
+    const { error } = await supabase.from('comidas').update(n).eq('id', id)
+    if (error) { alertar('No se pudo guardar la comida: ' + error.message); return }
+    setComidaEditando(null); cargar(); toast('Comida guardada')
+  }
   async function eliminarComida(id) { await supabase.from('comidas').delete().eq('id', id); cargar() }
 
   async function crearPeso(form) {
@@ -789,7 +797,7 @@ function BuscadorAlimento({ onSeleccionar }) {
       if (r.length === 0) setError('Sin resultados. Probá con otro nombre o cargá los macros a mano.')
       setResultados(r)
     } catch (err) {
-      setError('No se pudo buscar. Revisá tu conexión.')
+      setError('No se pudo buscar (' + (err.message || 'error desconocido') + ')')
     } finally {
       setBuscando(false)
     }
