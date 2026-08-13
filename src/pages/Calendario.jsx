@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabaseClient'
 import Skeleton from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
 import { detectarConflictosCalendario } from '../lib/motorConflictos'
+import { detectarOportunidadCalendario } from '../lib/motorOportunidades'
+import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
+import { generarInsightRecuperacion } from '../lib/motorInsights'
 import { useToast } from '../lib/ToastContext'
 import { Calendar } from 'lucide-react'
 
@@ -53,6 +56,13 @@ export default function Calendario() {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [cargando, setCargando] = useState(true)
 
+  // Datos para detectar oportunidades de mañana (independiente del mes que se esté mirando).
+  const [entrenamientosHistorial, setEntrenamientosHistorial] = useState([])
+  const [hrvActual, setHrvActual] = useState(null)
+  const [historialHrv, setHistorialHrv] = useState([])
+  const [sueñoUltimaNoche, setSueñoUltimaNoche] = useState(null)
+  const [entrenamientoManana, setEntrenamientoManana] = useState(null)
+
   const { dias, inicioGrilla, finGrilla } = construirGrilla(anio, mes)
 
   async function cargar() {
@@ -79,6 +89,30 @@ export default function Calendario() {
 
   useEffect(() => { cargar() }, [anio, mes])
 
+  // Carga aparte, independiente del mes visible: recuperación actual +
+  // entrenamiento de mañana, para la detección de oportunidades.
+  useEffect(() => {
+    async function cargarRecuperacion() {
+      const hoyStr = aFecha(hoy)
+      const manana = new Date(hoy); manana.setDate(manana.getDate() + 1)
+      const mananaStr = aFecha(manana)
+      const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
+
+      const [{ data: entsHist }, { data: metricas }, { data: entManana }] = await Promise.all([
+        supabase.from('entrenamientos').select('fecha, tss').gte('fecha', aFecha(desde90)).lte('fecha', hoyStr).order('fecha', { ascending: true }),
+        supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8),
+        supabase.from('entrenamientos').select('*').eq('fecha', mananaStr).limit(1).maybeSingle()
+      ])
+      setEntrenamientosHistorial(entsHist || [])
+      const metricasOrdenadas = metricas || []
+      setHrvActual(metricasOrdenadas[0]?.hrv ?? null)
+      setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
+      setSueñoUltimaNoche(metricasOrdenadas[0]?.sueño_horas ?? null)
+      setEntrenamientoManana(entManana || null)
+    }
+    cargarRecuperacion()
+  }, [])
+
   async function aplicarSugerencia(conflicto) {
     const { tabla, fecha_origen, fecha_destino } = conflicto.sugerencia.mover
     const { error } = await supabase.from(tabla).update({ fecha: fecha_destino }).eq('fecha', fecha_origen).eq('estado', 'pendiente')
@@ -90,6 +124,22 @@ export default function Calendario() {
   const conflictos = detectarConflictosCalendario({ entrenamientos, gimnasio })
   const conflictosPorFecha = {}
   for (const c of conflictos) { (conflictosPorFecha[c.fecha] ||= []).push(c) }
+
+  const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
+  const serieCarga = calcularCargaDiaria(construirSerieDiaria(entrenamientosHistorial, aFecha(desde90), aFecha(hoy)))
+  const ultimaCarga = serieCarga[serieCarga.length - 1] || { tsb: 0, atl: 0 }
+  const historialAtlSerie = serieCarga.slice(-43, -1).map((d) => d.atl)
+  const insightRecuperacion = generarInsightRecuperacion({
+    tsb: ultimaCarga.tsb, atl: ultimaCarga.atl, historialAtl: historialAtlSerie,
+    hrvActual, historialHrv, sueñoUltimaNoche
+  })
+  const manana = new Date(hoy); manana.setDate(manana.getDate() + 1)
+  const mananaStr = aFecha(manana)
+  const oportunidad = detectarOportunidadCalendario({
+    nivelRecuperacion: insightRecuperacion.nivel,
+    entrenamientoManana,
+    fechaManana: mananaStr
+  })
 
   function cambiarMes(delta) {
     let nuevoMes = mes + delta
@@ -147,7 +197,22 @@ export default function Calendario() {
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-route inline-block" /> Mantenimiento</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full border border-ink-faint inline-block" /> Plan sugerido</span>
         <span className="flex items-center gap-1 text-alert-amber">⚠️ Posible conflicto</span>
+        <span className="flex items-center gap-1 text-hiviz">🟢 Oportunidad</span>
       </div>
+
+      {oportunidad && (
+        <div className="card border-hiviz">
+          <span className="text-hiviz font-semibold text-sm">🟢 Buena recuperación</span>
+          <p className="text-ink-muted text-xs mt-1">
+            Mañana: {oportunidad.zona} · {oportunidad.duracionActual}'
+          </p>
+          <div className="mt-2.5 pt-2.5 border-t border-asphalt-700">
+            <span className="label-eyebrow text-hiviz">Oportunidad</span>
+            <p className="text-sm mt-1">{oportunidad.mensaje}</p>
+            <Link to="/entrenamientos" className="text-hiviz text-xs mt-2 inline-block">Ajustar manualmente en Entrenamientos →</Link>
+          </div>
+        </div>
+      )}
 
       {conflictos.length > 0 && (
         <div className="flex flex-col gap-2">
