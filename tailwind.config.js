@@ -28,12 +28,26 @@ export default {
           DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
           muted: 'rgb(var(--color-ink-muted) / <alpha-value>)',
           faint: 'rgb(var(--color-ink-faint) / <alpha-value>)'
+        },
+        // Tokens de estado — usados en alertas, insignias y bordes de tarjeta
+        // condicionales. Reemplazan los hex inline (#F5A623, #F14A4A, etc.)
+        // que hoy están repartidos en Dashboard, BicicletaDetalle,
+        // Entrenamientos, Recuperacion y VerAtleta.
+        state: {
+          critical: 'rgb(var(--color-state-critical) / <alpha-value>)',
+          warning: 'rgb(var(--color-state-warning) / <alpha-value>)',
+          success: 'rgb(var(--color-state-success) / <alpha-value>)',
+          neutral: 'rgb(var(--color-state-neutral) / <alpha-value>)'
         }
       },
       fontFamily: {
         display: ['"Jost"', 'sans-serif'],
         body: ['"Inter"', 'sans-serif'],
         data: ['"JetBrains Mono"', 'monospace']
+      },
+      transitionTimingFunction: {
+        // easing tipo Apple: entrada rápida, salida suave
+        apple: 'cubic-bezier(0.25, 0.1, 0.25, 1)'
       }
     }
   },
