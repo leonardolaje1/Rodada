@@ -89,7 +89,8 @@ export default function Nutricion() {
     await supabase.from('perfil_nutricional').upsert({ ...next, user_id: userData.user.id })
   }
   async function crearComida(n) {
-    const { error } = await supabase.from('comidas').insert(n)
+    const { data: userData } = await supabase.auth.getUser()
+    const { error } = await supabase.from('comidas').insert({ ...n, user_id: userData.user.id })
     if (error) { alertar('No se pudo guardar la comida: ' + error.message); return }
     setFormComida(false); setRegistrandoComida(null); cargar(); toast('Comida guardada')
   }
@@ -101,7 +102,8 @@ export default function Nutricion() {
   async function eliminarComida(id) { await supabase.from('comidas').delete().eq('id', id); cargar() }
 
   async function crearPeso(form) {
-    await supabase.from('peso_historial').insert(form)
+    const { data: userData } = await supabase.auth.getUser()
+    await supabase.from('peso_historial').insert({ ...form, user_id: userData.user.id })
     await guardarPerfil({ ...perfil, peso: form.peso })
     setFormPeso(false); cargar()
     toast('Peso guardado')
@@ -109,13 +111,18 @@ export default function Nutricion() {
   async function actualizarPeso(id, form) { await supabase.from('peso_historial').update(form).eq('id', id); setPesoEditando(null); cargar(); toast('Peso guardado') }
   async function eliminarPeso(id) { if (!(await confirmar('¿Borrar este registro de peso?', { destructivo: true }))) return; await supabase.from('peso_historial').delete().eq('id', id); cargar() }
 
-  async function crearAntropo(form) { await supabase.from('antropometria').insert(form); setFormAntropo(false); cargar() }
+  async function crearAntropo(form) {
+    const { data: userData } = await supabase.auth.getUser()
+    await supabase.from('antropometria').insert({ ...form, user_id: userData.user.id })
+    setFormAntropo(false); cargar()
+  }
   async function actualizarAntropo(id, form) { await supabase.from('antropometria').update(form).eq('id', id); setAntropoEditando(null); cargar() }
   async function eliminarAntropo(id) { if (!(await confirmar('¿Borrar este registro?', { destructivo: true }))) return; await supabase.from('antropometria').delete().eq('id', id); cargar() }
   async function eliminarSuplemento(id) { if (!(await confirmar('¿Borrar este suplemento?', { destructivo: true }))) return; await supabase.from('suplementos').delete().eq('id', id); cargar() }
 
   async function cargarBebida(bebida, ml, fecha) {
-    await supabase.from('hidratacion').insert({ fecha: fecha || fechaHidratacion, ml, bebida, hora: new Date().toTimeString().slice(0, 5) })
+    const { data: userData } = await supabase.auth.getUser()
+    await supabase.from('hidratacion').insert({ fecha: fecha || fechaHidratacion, ml, bebida, hora: new Date().toTimeString().slice(0, 5), user_id: userData.user.id })
     setFormBebidaOpen(false); cargar()
   }
   async function actualizarHidratacion(id, datos) {
@@ -650,7 +657,7 @@ export default function Nutricion() {
         <>
           <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormSuplemento((v) => !v)}>+ Suplemento</button></div>
           {formSuplemento && (
-            <FormSuplemento onGuardar={async (n) => { await supabase.from('suplementos').insert(n); setFormSuplemento(false); cargar() }} onCancelar={() => setFormSuplemento(false)} />
+            <FormSuplemento onGuardar={async (n) => { const { data: userData } = await supabase.auth.getUser(); await supabase.from('suplementos').insert({ ...n, user_id: userData.user.id }); setFormSuplemento(false); cargar() }} onCancelar={() => setFormSuplemento(false)} />
           )}
           {['Natural', 'Químico'].map((grupo) => {
             const items = suplementos.filter((s) => s.tipo === grupo)
