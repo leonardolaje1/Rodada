@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Skeleton from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
+import { detectarConflictosCalendario } from '../lib/motorConflictos'
+import { useToast } from '../lib/ToastContext'
 import { Calendar } from 'lucide-react'
 
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -38,6 +40,7 @@ function construirGrilla(anio, mes) {
 }
 
 export default function Calendario() {
+  const toast = useToast()
   const hoy = new Date()
   const [anio, setAnio] = useState(hoy.getFullYear())
   const [mes, setMes] = useState(hoy.getMonth())
@@ -75,6 +78,18 @@ export default function Calendario() {
   }
 
   useEffect(() => { cargar() }, [anio, mes])
+
+  async function aplicarSugerencia(conflicto) {
+    const { tabla, fecha_origen, fecha_destino } = conflicto.sugerencia.mover
+    const { error } = await supabase.from(tabla).update({ fecha: fecha_destino }).eq('fecha', fecha_origen).eq('estado', 'pendiente')
+    if (error) { toast('No se pudo mover: ' + error.message); return }
+    toast('Movido a ' + fecha_destino)
+    cargar()
+  }
+
+  const conflictos = detectarConflictosCalendario({ entrenamientos, gimnasio })
+  const conflictosPorFecha = {}
+  for (const c of conflictos) { (conflictosPorFecha[c.fecha] ||= []).push(c) }
 
   function cambiarMes(delta) {
     let nuevoMes = mes + delta
@@ -131,7 +146,25 @@ export default function Calendario() {
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-alert-red inline-block" /> Competencia</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-route inline-block" /> Mantenimiento</span>
         <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full border border-ink-faint inline-block" /> Plan sugerido</span>
+        <span className="flex items-center gap-1 text-alert-amber">⚠️ Posible conflicto</span>
       </div>
+
+      {conflictos.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {conflictos.map((c) => (
+            <div key={c.id} className="card border-alert-amber">
+              <span className="label-eyebrow text-alert-amber">⚠️ Posible conflicto</span>
+              <p className="text-sm mt-1.5">{c.mensaje}</p>
+              {c.sugerencia && (
+                <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-asphalt-700">
+                  <p className="text-ink-muted text-xs">{c.sugerencia.texto}</p>
+                  <button onClick={() => aplicarSugerencia(c)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg whitespace-nowrap ml-2">Aplicar sugerencia</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-7 gap-1">
         {DIAS_CORTOS.map((d) => (
@@ -148,14 +181,16 @@ export default function Calendario() {
             const { ents, gyms, comps, mants, sesionesPlanificadas, gymPlanificado } = itemsDelDia(dia.fecha, dia.diaSemanaId)
             const esHoy = dia.fecha === aFecha(hoy)
             const seleccionado = dia.fecha === diaSeleccionado
+            const tieneConflicto = !!conflictosPorFecha[dia.fecha]
             return (
               <button
                 key={dia.fecha}
                 onClick={() => setDiaSeleccionado(dia.fecha === diaSeleccionado ? null : dia.fecha)}
-                className={`aspect-square rounded-lg p-1 flex flex-col items-center justify-start border transition-colors ${
-                  seleccionado ? 'border-hiviz bg-asphalt-800' : 'border-asphalt-700'
+                className={`aspect-square rounded-lg p-1 flex flex-col items-center justify-start border transition-colors relative ${
+                  seleccionado ? 'border-hiviz bg-asphalt-800' : tieneConflicto ? 'border-alert-amber' : 'border-asphalt-700'
                 } ${dia.delMesActual ? '' : 'opacity-30'}`}
               >
+                {tieneConflicto && <span className="absolute top-0.5 right-0.5 text-[9px]">⚠️</span>}
                 <span className={`text-xs ${esHoy ? 'text-hiviz font-bold' : 'text-ink'}`}>{dia.diaMes}</span>
                 <div className="flex gap-0.5 mt-1 flex-wrap justify-center">
                   {ents.length > 0 && <i className="w-1.5 h-1.5 rounded-full bg-hiviz inline-block" />}
@@ -173,6 +208,23 @@ export default function Calendario() {
       {diaSeleccionado && infoSeleccionado && (
         <div className="card">
           <span className="label-eyebrow">{diaSeleccionado}</span>
+
+          {conflictosPorFecha[diaSeleccionado] && (
+            <div className="flex flex-col gap-2 mt-2.5">
+              {conflictosPorFecha[diaSeleccionado].map((c) => (
+                <div key={c.id} className="border border-alert-amber rounded-lg p-2.5">
+                  <p className="text-alert-amber text-xs font-semibold">⚠️ Posible conflicto</p>
+                  <p className="text-sm mt-1">{c.mensaje}</p>
+                  {c.sugerencia && (
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-asphalt-700">
+                      <p className="text-ink-muted text-xs">{c.sugerencia.texto}</p>
+                      <button onClick={() => aplicarSugerencia(c)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg whitespace-nowrap ml-2">Aplicar sugerencia</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {infoSeleccionado.ents.length === 0 && infoSeleccionado.gyms.length === 0 && infoSeleccionado.comps.length === 0 && infoSeleccionado.mants.length === 0 && infoSeleccionado.sesionesPlanificadas.length === 0 && !infoSeleccionado.gymPlanificado ? (
             <p className="text-ink-muted text-sm mt-2">Sin nada registrado ni planificado este día.</p>
