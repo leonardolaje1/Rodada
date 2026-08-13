@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
 import { buscarAlimentosUSDA } from '../lib/usdaFoodData'
+import { buscarAlimentosLocal } from '../lib/baseAlimentos'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
 import { Apple } from 'lucide-react'
@@ -903,16 +904,22 @@ function BuscadorAlimento({ onSeleccionar }) {
 
   async function buscar() {
     setError(''); setBuscando(true); setResultados([])
+    // Primero la base local: instantánea, sin red, cubre el uso diario.
+    const local = buscarAlimentosLocal(texto)
+    if (local.length >= 5) {
+      setResultados(local)
+      setBuscando(false)
+      return
+    }
+    // Si la base local no alcanza, se completa con USDA + Open Food Facts.
     try {
       const [usda, off] = await Promise.allSettled([
         buscarAlimentosUSDA(texto),
         buscarAlimentosPorTexto(texto)
       ])
-      // USDA primero: es donde vive la comida genérica (huevo, palta, arroz, pollo).
-      // Open Food Facts después: gana en productos envasados con marca.
       const resultadosUsda = usda.status === 'fulfilled' ? usda.value : []
       const resultadosOff = off.status === 'fulfilled' ? off.value : []
-      const combinados = [...resultadosUsda, ...resultadosOff]
+      const combinados = [...local, ...resultadosUsda, ...resultadosOff]
       if (combinados.length === 0) {
         const ambasFallaron = usda.status === 'rejected' && off.status === 'rejected'
         setError(ambasFallaron ? 'No se pudo buscar en ninguna base de datos.' : 'Sin resultados. Probá con otro nombre o cargá los macros a mano.')
