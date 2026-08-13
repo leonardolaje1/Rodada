@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
   --color-asphalt-900: 26 26 26;
   --color-asphalt-800: 34 34 34;
   --color-asphalt-700: 44 44 44;
