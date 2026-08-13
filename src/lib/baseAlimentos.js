@@ -5,7 +5,10 @@
 // de los casos de uso diarios. Para algo que no esté acá, el buscador cae
 // automáticamente a USDA FoodData Central / Open Food Facts.
 //
-// Formato: [nombre, categoria, kcal, proteínas(g), carbohidratos(g), grasas(g)]
+// Formato: [nombre, categoria, kcal, proteínas(g), carbohidratos(g), grasas(g), unidad?]
+// "unidad" es opcional: { etiqueta, gramos } para alimentos que se comen por
+// pieza (huevo, banana, palta...) en vez de pesarse. Si no está presente,
+// el alimento solo se carga por gramos.
 
 const DATA = [
   // ===== Cereales, granos y derivados =====
@@ -18,9 +21,9 @@ const DATA = [
   ['Pasta cocida', 'Cereales', 158, 5.8, 30.9, 0.9],
   ['Pan blanco', 'Cereales', 265, 9, 49, 3.2],
   ['Pan integral', 'Cereales', 247, 13, 41, 3.4],
-  ['Pan francés / baguette', 'Cereales', 274, 9.1, 55.4, 1.5],
-  ['Tostadas', 'Cereales', 407, 11, 76, 5.8],
-  ['Galletas de arroz', 'Cereales', 387, 8.2, 81.5, 2.8],
+  ['Pan francés / baguette', 'Cereales', 274, 9.1, 55.4, 1.5, { etiqueta: 'pan chico', gramos: 60 }],
+  ['Tostadas', 'Cereales', 407, 11, 76, 5.8, { etiqueta: 'tostada', gramos: 25 }],
+  ['Galletas de arroz', 'Cereales', 387, 8.2, 81.5, 2.8, { etiqueta: 'galleta', gramos: 9 }],
   ['Copos de maíz (corn flakes)', 'Cereales', 357, 7.5, 84, 0.4],
   ['Granola', 'Cereales', 471, 10, 64, 20],
   ['Harina de trigo', 'Cereales', 364, 10.3, 76.3, 1],
@@ -40,41 +43,41 @@ const DATA = [
   ['Hummus', 'Legumbres', 166, 7.9, 14.3, 9.6],
 
   // ===== Frutas =====
-  ['Banana', 'Frutas', 89, 1.1, 22.8, 0.3],
-  ['Manzana', 'Frutas', 52, 0.3, 13.8, 0.2],
-  ['Naranja', 'Frutas', 47, 0.9, 11.8, 0.1],
-  ['Palta (aguacate)', 'Frutas', 160, 2, 8.5, 14.7],
-  ['Frutilla', 'Frutas', 32, 0.7, 7.7, 0.3],
-  ['Uva', 'Frutas', 69, 0.7, 18.1, 0.2],
-  ['Pera', 'Frutas', 57, 0.4, 15.2, 0.1],
-  ['Kiwi', 'Frutas', 61, 1.1, 14.7, 0.5],
+  ['Banana', 'Frutas', 89, 1.1, 22.8, 0.3, { etiqueta: 'banana', gramos: 118 }],
+  ['Manzana', 'Frutas', 52, 0.3, 13.8, 0.2, { etiqueta: 'manzana', gramos: 182 }],
+  ['Naranja', 'Frutas', 47, 0.9, 11.8, 0.1, { etiqueta: 'naranja', gramos: 131 }],
+  ['Palta (aguacate)', 'Frutas', 160, 2, 8.5, 14.7, { etiqueta: 'palta', gramos: 200 }],
+  ['Frutilla', 'Frutas', 32, 0.7, 7.7, 0.3, { etiqueta: 'frutilla', gramos: 12 }],
+  ['Uva', 'Frutas', 69, 0.7, 18.1, 0.2, { etiqueta: 'grano', gramos: 5 }],
+  ['Pera', 'Frutas', 57, 0.4, 15.2, 0.1, { etiqueta: 'pera', gramos: 178 }],
+  ['Kiwi', 'Frutas', 61, 1.1, 14.7, 0.5, { etiqueta: 'kiwi', gramos: 76 }],
   ['Ananá (piña)', 'Frutas', 50, 0.5, 13.1, 0.1],
-  ['Mango', 'Frutas', 60, 0.8, 15, 0.4],
+  ['Mango', 'Frutas', 60, 0.8, 15, 0.4, { etiqueta: 'mango', gramos: 200 }],
   ['Melón', 'Frutas', 34, 0.8, 8.2, 0.2],
   ['Sandía', 'Frutas', 30, 0.6, 7.6, 0.2],
-  ['Durazno', 'Frutas', 39, 0.9, 9.5, 0.3],
-  ['Ciruela', 'Frutas', 46, 0.7, 11.4, 0.3],
+  ['Durazno', 'Frutas', 39, 0.9, 9.5, 0.3, { etiqueta: 'durazno', gramos: 150 }],
+  ['Ciruela', 'Frutas', 46, 0.7, 11.4, 0.3, { etiqueta: 'ciruela', gramos: 66 }],
   ['Arándanos', 'Frutas', 57, 0.7, 14.5, 0.3],
   ['Frutos secos deshidratados (mix)', 'Frutas', 350, 5, 75, 3],
-  ['Dátiles', 'Frutas', 282, 2.5, 75, 0.4],
+  ['Dátiles', 'Frutas', 282, 2.5, 75, 0.4, { etiqueta: 'dátil', gramos: 8 }],
   ['Pasas de uva', 'Frutas', 299, 3.1, 79.2, 0.5],
-  ['Higo fresco', 'Frutas', 74, 0.8, 19.2, 0.3],
-  ['Limón', 'Frutas', 29, 1.1, 9.3, 0.3],
+  ['Higo fresco', 'Frutas', 74, 0.8, 19.2, 0.3, { etiqueta: 'higo', gramos: 50 }],
+  ['Limón', 'Frutas', 29, 1.1, 9.3, 0.3, { etiqueta: 'limón', gramos: 58 }],
 
   // ===== Verduras =====
-  ['Papa cocida', 'Verduras', 87, 1.9, 20.1, 0.1],
-  ['Batata / boniato cocida', 'Verduras', 90, 2, 20.7, 0.1],
-  ['Zanahoria', 'Verduras', 41, 0.9, 9.6, 0.2],
-  ['Tomate', 'Verduras', 18, 0.9, 3.9, 0.2],
+  ['Papa cocida', 'Verduras', 87, 1.9, 20.1, 0.1, { etiqueta: 'papa mediana', gramos: 150 }],
+  ['Batata / boniato cocida', 'Verduras', 90, 2, 20.7, 0.1, { etiqueta: 'batata mediana', gramos: 150 }],
+  ['Zanahoria', 'Verduras', 41, 0.9, 9.6, 0.2, { etiqueta: 'zanahoria', gramos: 61 }],
+  ['Tomate', 'Verduras', 18, 0.9, 3.9, 0.2, { etiqueta: 'tomate', gramos: 123 }],
   ['Lechuga', 'Verduras', 15, 1.4, 2.9, 0.2],
-  ['Cebolla', 'Verduras', 40, 1.1, 9.3, 0.1],
+  ['Cebolla', 'Verduras', 40, 1.1, 9.3, 0.1, { etiqueta: 'cebolla', gramos: 110 }],
   ['Brócoli cocido', 'Verduras', 35, 2.4, 7.2, 0.4],
   ['Espinaca cruda', 'Verduras', 23, 2.9, 3.6, 0.4],
   ['Zapallo / calabaza cocida', 'Verduras', 26, 1, 6.5, 0.1],
-  ['Choclo (maíz) cocido', 'Verduras', 96, 3.4, 21, 1.5],
-  ['Zapallito / calabacín', 'Verduras', 17, 1.2, 3.1, 0.3],
+  ['Choclo (maíz) cocido', 'Verduras', 96, 3.4, 21, 1.5, { etiqueta: 'mazorca', gramos: 90 }],
+  ['Zapallito / calabacín', 'Verduras', 17, 1.2, 3.1, 0.3, { etiqueta: 'zapallito', gramos: 118 }],
   ['Pepino', 'Verduras', 15, 0.7, 3.6, 0.1],
-  ['Pimiento morrón', 'Verduras', 31, 1, 6, 0.3],
+  ['Pimiento morrón', 'Verduras', 31, 1, 6, 0.3, { etiqueta: 'morrón', gramos: 119 }],
   ['Berenjena cocida', 'Verduras', 33, 0.8, 8.1, 0.2],
   ['Champiñones', 'Verduras', 22, 3.1, 3.3, 0.3],
   ['Remolacha cocida', 'Verduras', 44, 1.7, 10, 0.2],
@@ -94,8 +97,8 @@ const DATA = [
   ['Atún al aceite (lata, escurrido)', 'Proteínas', 198, 23.6, 0, 10.9],
   ['Sardinas en lata', 'Proteínas', 208, 24.6, 0, 11.5],
   ['Camarones cocidos', 'Proteínas', 99, 24, 0.2, 0.3],
-  ['Huevo entero', 'Proteínas', 155, 12.6, 1.1, 10.6],
-  ['Clara de huevo', 'Proteínas', 52, 10.9, 0.7, 0.2],
+  ['Huevo entero', 'Proteínas', 155, 12.6, 1.1, 10.6, { etiqueta: 'huevo', gramos: 50 }],
+  ['Clara de huevo', 'Proteínas', 52, 10.9, 0.7, 0.2, { etiqueta: 'clara', gramos: 33 }],
   ['Jamón cocido', 'Proteínas', 145, 21, 1.5, 5.5],
   ['Pechuga de pavo', 'Proteínas', 135, 30, 0, 1],
   ['Hígado vacuno cocido', 'Proteínas', 175, 26.5, 3.9, 4.9],
@@ -130,9 +133,9 @@ const DATA = [
   ['Coco rallado', 'Grasas', 660, 6.9, 23.7, 64.5],
 
   // ===== Nutrición deportiva =====
-  ['Gel energético (genérico)', 'Nutrición deportiva', 260, 0, 65, 0],
-  ['Barra energética (genérica)', 'Nutrición deportiva', 380, 8, 65, 9],
-  ['Barra de proteína (genérica)', 'Nutrición deportiva', 350, 25, 35, 12],
+  ['Gel energético (genérico)', 'Nutrición deportiva', 260, 0, 65, 0, { etiqueta: 'gel', gramos: 40 }],
+  ['Barra energética (genérica)', 'Nutrición deportiva', 380, 8, 65, 9, { etiqueta: 'barra', gramos: 45 }],
+  ['Barra de proteína (genérica)', 'Nutrición deportiva', 350, 25, 35, 12, { etiqueta: 'barra', gramos: 60 }],
   ['Bebida isotónica (polvo, preparada)', 'Nutrición deportiva', 25, 0, 6, 0],
   ['Bebida isotónica comercial (lista)', 'Nutrición deportiva', 24, 0, 6, 0],
   ['Proteína whey (polvo)', 'Nutrición deportiva', 380, 78, 8, 6],
@@ -148,12 +151,12 @@ const DATA = [
   ['Azúcar', 'Otros', 387, 0, 100, 0],
   ['Chocolate con leche', 'Otros', 535, 7.7, 59.4, 29.7],
   ['Chocolate amargo (70%)', 'Otros', 598, 7.8, 45.9, 42.6],
-  ['Alfajor (genérico)', 'Otros', 430, 5, 60, 19],
-  ['Facturas / medialunas', 'Otros', 406, 7.8, 45.8, 21.5],
+  ['Alfajor (genérico)', 'Otros', 430, 5, 60, 19, { etiqueta: 'alfajor', gramos: 50 }],
+  ['Facturas / medialunas', 'Otros', 406, 7.8, 45.8, 21.5, { etiqueta: 'medialuna', gramos: 40 }],
   ['Bizcochuelo', 'Otros', 297, 6, 50, 8],
   ['Papas fritas (snack)', 'Otros', 536, 6.6, 53, 34.6],
-  ['Pizza (porción, genérica)', 'Otros', 266, 11, 33, 10],
-  ['Empanada (genérica, horneada)', 'Otros', 260, 9, 25, 13],
+  ['Pizza (porción, genérica)', 'Otros', 266, 11, 33, 10, { etiqueta: 'porción', gramos: 125 }],
+  ['Empanada (genérica, horneada)', 'Otros', 260, 9, 25, 13, { etiqueta: 'empanada', gramos: 90 }],
 
   // ===== Bebidas =====
   ['Agua', 'Bebidas', 0, 0, 0, 0],
@@ -165,8 +168,8 @@ const DATA = [
   ['Vino tinto', 'Bebidas', 85, 0.1, 2.6, 0],
 ]
 
-export const BASE_ALIMENTOS = DATA.map(([nombre, categoria, kcal100g, proteinas100g, carbohidratos100g, grasas100g]) => ({
-  nombre, categoria, kcal100g, proteinas100g, carbohidratos100g, grasas100g
+export const BASE_ALIMENTOS = DATA.map(([nombre, categoria, kcal100g, proteinas100g, carbohidratos100g, grasas100g, unidad]) => ({
+  nombre, categoria, kcal100g, proteinas100g, carbohidratos100g, grasas100g, unidad: unidad || null
 }))
 
 // Búsqueda instantánea (sin red): coincidencias por texto, con las que
