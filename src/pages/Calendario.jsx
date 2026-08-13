@@ -55,6 +55,7 @@ export default function Calendario() {
   const [planesGym, setPlanesGym] = useState([])
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [cargando, setCargando] = useState(true)
+  const [mostrarTodosConflictos, setMostrarTodosConflictos] = useState(false)
 
   // Datos para detectar oportunidades de mañana (independiente del mes que se esté mirando).
   const [entrenamientosHistorial, setEntrenamientosHistorial] = useState([])
@@ -190,16 +191,6 @@ export default function Calendario() {
         </div>
       </div>
 
-      <div className="flex gap-3 text-[11px] text-ink-muted flex-wrap">
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-hiviz inline-block" /> Entrenamiento</span>
-        <span className="flex items-center gap-1" style={{ color: undefined }}><i className="w-2 h-2 rounded-full inline-block" style={{ background: '#C34AF1' }} /> Gimnasio</span>
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-alert-red inline-block" /> Competencia</span>
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-route inline-block" /> Mantenimiento</span>
-        <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full border border-ink-faint inline-block" /> Plan sugerido</span>
-        <span className="flex items-center gap-1 text-alert-amber">⚠️ Posible conflicto</span>
-        <span className="flex items-center gap-1 text-hiviz">🟢 Oportunidad</span>
-      </div>
-
       {oportunidad && (
         <div className="card border-hiviz">
           <span className="text-hiviz font-semibold text-sm">🟢 Buena recuperación</span>
@@ -216,18 +207,17 @@ export default function Calendario() {
 
       {conflictos.length > 0 && (
         <div className="flex flex-col gap-2">
-          {conflictos.map((c) => (
-            <div key={c.id} className="card border-alert-amber">
-              <span className="label-eyebrow text-alert-amber">⚠️ Posible conflicto</span>
-              <p className="text-sm mt-1.5">{c.mensaje}</p>
-              {c.sugerencia && (
-                <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-asphalt-700">
-                  <p className="text-ink-muted text-xs">{c.sugerencia.texto}</p>
-                  <button onClick={() => aplicarSugerencia(c)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg whitespace-nowrap ml-2">Aplicar sugerencia</button>
-                </div>
-              )}
-            </div>
-          ))}
+          <ConflictoCard c={conflictos[0]} onAplicar={aplicarSugerencia} />
+          {conflictos.length > 1 && (
+            mostrarTodosConflictos ? (
+              <>
+                {conflictos.slice(1).map((c) => <ConflictoCard key={c.id} c={c} onAplicar={aplicarSugerencia} />)}
+                <button onClick={() => setMostrarTodosConflictos(false)} className="text-ink-muted text-xs self-start">Ver menos</button>
+              </>
+            ) : (
+              <button onClick={() => setMostrarTodosConflictos(true)} className="text-hiviz text-xs font-semibold self-start">+{conflictos.length - 1} más</button>
+            )
+          )}
         </div>
       )}
 
@@ -252,7 +242,7 @@ export default function Calendario() {
                 key={dia.fecha}
                 onClick={() => setDiaSeleccionado(dia.fecha === diaSeleccionado ? null : dia.fecha)}
                 className={`aspect-square rounded-lg p-1 flex flex-col items-center justify-start border transition-colors relative ${
-                  seleccionado ? 'border-hiviz bg-asphalt-800' : tieneConflicto ? 'border-alert-amber' : 'border-asphalt-700'
+                  seleccionado ? 'border-hiviz bg-asphalt-800' : 'border-asphalt-700'
                 } ${dia.delMesActual ? '' : 'opacity-30'}`}
               >
                 {tieneConflicto && <span className="absolute top-0.5 right-0.5 text-[9px]">⚠️</span>}
@@ -276,18 +266,7 @@ export default function Calendario() {
 
           {conflictosPorFecha[diaSeleccionado] && (
             <div className="flex flex-col gap-2 mt-2.5">
-              {conflictosPorFecha[diaSeleccionado].map((c) => (
-                <div key={c.id} className="border border-alert-amber rounded-lg p-2.5">
-                  <p className="text-alert-amber text-xs font-semibold">⚠️ Posible conflicto</p>
-                  <p className="text-sm mt-1">{c.mensaje}</p>
-                  {c.sugerencia && (
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-asphalt-700">
-                      <p className="text-ink-muted text-xs">{c.sugerencia.texto}</p>
-                      <button onClick={() => aplicarSugerencia(c)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg whitespace-nowrap ml-2">Aplicar sugerencia</button>
-                    </div>
-                  )}
-                </div>
-              ))}
+              {conflictosPorFecha[diaSeleccionado].map((c) => <ConflictoCard key={c.id} c={c} onAplicar={aplicarSugerencia} compacta />)}
             </div>
           )}
 
@@ -337,6 +316,21 @@ export default function Calendario() {
           )}
 
           <Link to="/entrenamientos" className="text-hiviz text-xs mt-3 inline-block">Ir a Entrenamientos →</Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConflictoCard({ c, onAplicar, compacta }) {
+  return (
+    <div className={compacta ? 'border border-alert-amber rounded-lg p-2.5' : 'card border-alert-amber'}>
+      <p className="text-alert-amber text-xs font-semibold">⚠️ Posible conflicto</p>
+      <p className="text-sm mt-1">{c.mensaje}</p>
+      {c.sugerencia && (
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-asphalt-700">
+          <p className="text-ink-muted text-xs">{c.sugerencia.texto}</p>
+          <button onClick={() => onAplicar(c)} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg whitespace-nowrap ml-2">Aplicar sugerencia</button>
         </div>
       )}
     </div>
