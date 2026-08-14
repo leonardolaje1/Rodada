@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
@@ -144,6 +145,14 @@ export default function Entrenamientos() {
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
+
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('nuevo') === '1') {
+      setVista('registro')
+      setMostrarForm(true)
+    }
+  }, [searchParams])
 
   async function crear(nuevo) {
     const tss = calcularTSS(nuevo)
