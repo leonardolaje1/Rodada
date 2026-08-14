@@ -74,9 +74,6 @@ export default function VerAtleta() {
     desde30.setDate(desde30.getDate() - 30)
     const fechaDesde = desde30.toISOString().slice(0, 10)
 
-    // Intenta traer nombre y avatar con la función nueva de Supabase (ver Paso A del plan).
-    // Si esa función todavía no existe en tu proyecto de Supabase, cae de vuelta a solo email
-    // sin romper la pantalla.
     const { data: perfilData, error: errorPerfil } = await supabase.rpc('perfil_de_vinculado', { p_user_id: atletaId })
     if (!errorPerfil && perfilData) {
       setEmail(perfilData.email || 'Atleta')
@@ -380,6 +377,14 @@ export default function VerAtleta() {
                           <MiniDato label="TSS" value={e.tss} accent />
                         </div>
                       </div>
+
+                      {e.comentarios && (
+                        <div className="mt-2.5 pt-2.5 border-t border-asphalt-700">
+                          <p className="text-ink-muted text-xs">
+                            <span className="text-ink-faint font-medium">El atleta escribió:</span> {e.comentarios}
+                          </p>
+                        </div>
+                      )}
 
                       {comentarios.length > 0 && (
                         <div className="flex flex-col gap-1.5 mt-2.5 pt-2.5 border-t border-asphalt-700">
