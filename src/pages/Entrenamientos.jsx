@@ -13,6 +13,7 @@ import { descargarWorkoutFit } from '../lib/generarWorkoutFit'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
+import { ZONAS_POTENCIA, ZONAS_FC } from '../lib/zonas'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -25,15 +26,6 @@ const TIPOS_OBJETIVO = [
   { id: 'km_anuales', label: 'Km acumulados', unidad: 'km' },
   { id: 'evento', label: 'Evento / competencia', unidad: '' },
   { id: 'otro', label: 'Otro', unidad: '' }
-]
-const ZONAS_POTENCIA = [
-  { zona: 'Z1', nombre: 'Recuperación activa', desde: 0, hasta: 0.55, color: '#8A8F9C' },
-  { zona: 'Z2', nombre: 'Resistencia', desde: 0.56, hasta: 0.75, color: '#4A9EFF' },
-  { zona: 'Z3', nombre: 'Tempo', desde: 0.76, hasta: 0.90, color: '#C4F135' },
-  { zona: 'Z4', nombre: 'Umbral', desde: 0.91, hasta: 1.05, color: '#F5A623' },
-  { zona: 'Z5', nombre: 'VO2 máx', desde: 1.06, hasta: 1.20, color: '#F14A4A' },
-  { zona: 'Z6', nombre: 'Capacidad anaeróbica', desde: 1.21, hasta: 1.50, color: '#C34AF1' },
-  { zona: 'Z7', nombre: 'Neuromuscular', desde: 1.51, hasta: null, color: '#7A4AF1' }
 ]
 const ESTILOS_SESION = [
   'Recuperación', 'Resistencia (Endurance)', 'Tempo', 'Sweet Spot', 'Umbral (Threshold)',
@@ -52,13 +44,6 @@ const TIPOS_TEST_FTP = [
   { id: '20min', label: '20 minutos' },
   { id: 'escalon', label: 'Test escalonado' },
   { id: 'otro', label: 'Otro' }
-]
-const ZONAS_FC = [
-  { zona: 'Z1', nombre: 'Recuperación activa', desde: 0, hasta: 0.68, color: '#8A8F9C' },
-  { zona: 'Z2', nombre: 'Resistencia', desde: 0.69, hasta: 0.83, color: '#4A9EFF' },
-  { zona: 'Z3', nombre: 'Tempo', desde: 0.84, hasta: 0.94, color: '#C4F135' },
-  { zona: 'Z4', nombre: 'Umbral', desde: 0.95, hasta: 1.05, color: '#F5A623' },
-  { zona: 'Z5', nombre: 'VO2 máx', desde: 1.06, hasta: null, color: '#F14A4A' }
 ]
 
 function diaIdDeHoy() { return DIA_POR_INDICE[new Date().getDay()] }
