@@ -14,6 +14,7 @@ const DIAS_SEMANA = [
 ]
 const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
 const METODOS_PRESCRIPCION = ['RPE', 'RIR', 'Peso fijo', '% de 1RM', 'Otro']
+const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function agruparPorFecha(items) {
   const grupos = {}
@@ -31,13 +32,6 @@ function recalcularPRs(sesiones) {
   }
   return marcados
 }
-function lunesDeSemana(fechaStr) {
-  const d = new Date(fechaStr + 'T12:00:00')
-  const dow = d.getDay()
-  const offset = dow === 0 ? -6 : 1 - dow
-  d.setDate(d.getDate() + offset)
-  return d
-}
 function crearParametrosSemanas() {
   return [1, 2, 3, 4].map(() => ({ series: '', reps: '', valor: '' }))
 }
@@ -47,29 +41,29 @@ function crearDiasVacios() {
     ejercicios: [{ ejercicio: 'Sentadilla', metodo: '', porSemana: crearParametrosSemanas() }]
   }))
 }
-function generarFilasDesdeDias(lunesBase, dias, mesociclo_gimnasio_id) {
+function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
   const filas = []
-  for (let si = 0; si < 4; si++) {
-    DIAS_SEMANA.forEach((diaInfo, oi) => {
-      const d = dias.find((x) => x.dia === diaInfo.id)
-      if (!d || !d.activo) return
-      const fecha = new Date(lunesBase)
-      fecha.setDate(fecha.getDate() + si * 7 + oi)
-      const fechaStr = fecha.toISOString().slice(0, 10)
-      for (const ej of d.ejercicios || []) {
-        if (!ej.ejercicio) continue
-        const p = ej.porSemana?.[si] || {}
-        filas.push({
-          fecha: fechaStr, ejercicio: ej.ejercicio,
-          series: p.series ? Number(p.series) : null,
-          reps: p.reps ? Number(p.reps) : null,
-          peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
-          metodo_prescrito: ej.metodo || null,
-          valor_prescrito: p.valor || null,
-          mesociclo_gimnasio_id
-        })
-      }
-    })
+  for (let offset = 0; offset < 28; offset++) {
+    const fecha = new Date(fechaInicioBase)
+    fecha.setDate(fecha.getDate() + offset)
+    const si = Math.floor(offset / 7)
+    const diaId = DIA_POR_INDICE[fecha.getDay()]
+    const d = dias.find((x) => x.dia === diaId)
+    if (!d || !d.activo) continue
+    const fechaStr = fecha.toISOString().slice(0, 10)
+    for (const ej of d.ejercicios || []) {
+      if (!ej.ejercicio) continue
+      const p = ej.porSemana?.[si] || {}
+      filas.push({
+        fecha: fechaStr, ejercicio: ej.ejercicio,
+        series: p.series ? Number(p.series) : null,
+        reps: p.reps ? Number(p.reps) : null,
+        peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
+        metodo_prescrito: ej.metodo || null,
+        valor_prescrito: p.valor || null,
+        mesociclo_gimnasio_id
+      })
+    }
   }
   return filas
 }
@@ -146,8 +140,8 @@ export default function Gimnasio() {
     const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias }).select().single()
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
-    const lunesBase = lunesDeSemana(meta.fecha_inicio)
-    const filasNuevas = generarFilasDesdeDias(lunesBase, dias, nuevo.id)
+    const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
+    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id)
     if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
 
     setFormMesoOpen(false); cargar()
@@ -168,8 +162,8 @@ export default function Gimnasio() {
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
-    const lunesBase = lunesDeSemana(meta.fecha_inicio)
-    const filasNuevas = generarFilasDesdeDias(lunesBase, dias, id)
+    const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
+    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, id)
     if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
 
     setMesoEditando(null); cargar()
@@ -558,11 +552,11 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
   return (
     <form className="card flex flex-col gap-3" onSubmit={(e) => {
       e.preventDefault()
-      const lunes = lunesDeSemana(fechaInicio)
-      const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + 27)
+      const inicio = new Date(fechaInicio + 'T12:00:00')
+      const fechaFin = new Date(inicio); fechaFin.setDate(fechaFin.getDate() + 27)
       onGuardar({
         nombre,
-        fecha_inicio: lunes.toISOString().slice(0, 10),
+        fecha_inicio: fechaInicio,
         fecha_fin: fechaFin.toISOString().slice(0, 10),
         notas,
         dias
@@ -570,7 +564,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
     }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre</span>
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder="Fuerza base / Hipertrofia" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Semana 1 empieza (lunes más cercano)</span>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha de inicio</span>
         <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Notas</span>
         <input value={notas} onChange={(e) => setNotas(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
