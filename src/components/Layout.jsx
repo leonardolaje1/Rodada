@@ -99,7 +99,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
+      <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8" style={{ paddingBottom: 'calc(8rem + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
