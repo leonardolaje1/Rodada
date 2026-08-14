@@ -432,11 +432,11 @@ export default function Nutricion() {
                   <div className="mt-2 -ml-4">
                     <ResponsiveContainer width="100%" height={160}>
                       <LineChart data={graficoPeso} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke="#262A33" vertical={false} />
-                        <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
-                        <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
-                        <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
-                        <Line type="monotone" dataKey="peso" stroke="#C4F135" strokeWidth={2} dot={{ r: 3 }} name="Peso (kg)" />
+                        <CartesianGrid stroke="rgb(var(--color-asphalt-700))" vertical={false} />
+                        <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={{ stroke: 'rgb(var(--color-asphalt-700))' }} />
+                        <YAxis tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
+                        <Tooltip contentStyle={{ background: 'rgb(var(--color-asphalt-800))', border: '1px solid rgb(var(--color-asphalt-700))', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                        <Line type="monotone" dataKey="peso" stroke="rgb(var(--color-state-success))" strokeWidth={2} dot={{ r: 3 }} name="Peso (kg)" />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -451,7 +451,7 @@ export default function Nutricion() {
               <>
                 <div className="flex gap-6 mt-2.5">
                   {ultimaComposicion.grasa_corporal_pct != null && (
-                    <div><span className="text-ink-muted text-xs">% Grasa</span><p className="readout text-2xl font-bold mt-0.5" style={{ color: '#F14A4A' }}>{ultimaComposicion.grasa_corporal_pct}</p></div>
+                    <div><span className="text-ink-muted text-xs">% Grasa</span><p className="readout text-2xl font-bold mt-0.5" style={{ color: 'rgb(var(--color-state-critical))' }}>{ultimaComposicion.grasa_corporal_pct}</p></div>
                   )}
                   {ultimaComposicion.masa_muscular_pct != null && (
                     <div><span className="text-ink-muted text-xs">% Músculo</span><p className="readout text-2xl font-bold mt-0.5 text-route">{ultimaComposicion.masa_muscular_pct}</p></div>
@@ -459,8 +459,8 @@ export default function Nutricion() {
                 </div>
                 {ultimaComposicion.grasa_corporal_pct != null && ultimaComposicion.masa_muscular_pct != null && (
                   <div className="flex h-1.5 rounded-full overflow-hidden mt-3 bg-asphalt-700">
-                    <div style={{ width: `${ultimaComposicion.grasa_corporal_pct}%`, background: '#F14A4A' }} />
-                    <div style={{ width: `${ultimaComposicion.masa_muscular_pct}%`, background: '#4A9EFF' }} />
+                    <div style={{ width: `${ultimaComposicion.grasa_corporal_pct}%`, background: 'rgb(var(--color-state-critical))' }} />
+                    <div style={{ width: `${ultimaComposicion.masa_muscular_pct}%`, background: 'rgb(var(--color-route))' }} />
                   </div>
                 )}
                 <p className="text-ink-faint text-xs mt-2">Último registro: {ultimaComposicion.fecha}</p>
@@ -493,10 +493,10 @@ export default function Nutricion() {
                 <div className="mt-2 -ml-4">
                   <ResponsiveContainer width="100%" height={160}>
                     <LineChart data={graficoAntropo} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke="#262A33" vertical={false} />
-                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
-                      <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
-                      <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                      <CartesianGrid stroke="rgb(var(--color-asphalt-700))" vertical={false} />
+                      <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={{ stroke: 'rgb(var(--color-asphalt-700))' }} />
+                      <YAxis tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 1', 'dataMax + 1']} />
+                      <Tooltip contentStyle={{ background: 'rgb(var(--color-asphalt-800))', border: '1px solid rgb(var(--color-asphalt-700))', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
                       <Line type="monotone" dataKey="valor" stroke={metricaActual.color} strokeWidth={2} dot={{ r: 3 }} name={metricaActual.label} />
                     </LineChart>
                   </ResponsiveContainer>
