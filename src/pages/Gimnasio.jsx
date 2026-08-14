@@ -47,6 +47,32 @@ function crearDiasVacios() {
     ejercicios: [{ ejercicio: 'Sentadilla', metodo: '', porSemana: crearParametrosSemanas() }]
   }))
 }
+function generarFilasDesdeDias(lunesBase, dias, mesociclo_gimnasio_id) {
+  const filas = []
+  for (let si = 0; si < 4; si++) {
+    DIAS_SEMANA.forEach((diaInfo, oi) => {
+      const d = dias.find((x) => x.dia === diaInfo.id)
+      if (!d || !d.activo) return
+      const fecha = new Date(lunesBase)
+      fecha.setDate(fecha.getDate() + si * 7 + oi)
+      const fechaStr = fecha.toISOString().slice(0, 10)
+      for (const ej of d.ejercicios || []) {
+        if (!ej.ejercicio) continue
+        const p = ej.porSemana?.[si] || {}
+        filas.push({
+          fecha: fechaStr, ejercicio: ej.ejercicio,
+          series: p.series ? Number(p.series) : null,
+          reps: p.reps ? Number(p.reps) : null,
+          peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
+          metodo_prescrito: ej.metodo || null,
+          valor_prescrito: p.valor || null,
+          mesociclo_gimnasio_id
+        })
+      }
+    })
+  }
+  return filas
+}
 
 export default function Gimnasio() {
   const toast = useToast()
@@ -121,37 +147,31 @@ export default function Gimnasio() {
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
-    const filasNuevas = []
-    for (let si = 0; si < 4; si++) {
-      DIAS_SEMANA.forEach((diaInfo, oi) => {
-        const d = dias.find((x) => x.dia === diaInfo.id)
-        if (!d || !d.activo) return
-        const fecha = new Date(lunesBase)
-        fecha.setDate(fecha.getDate() + si * 7 + oi)
-        const fechaStr = fecha.toISOString().slice(0, 10)
-        for (const ej of d.ejercicios || []) {
-          if (!ej.ejercicio) continue
-          const p = ej.porSemana?.[si] || {}
-          filasNuevas.push({
-            fecha: fechaStr, ejercicio: ej.ejercicio,
-            series: p.series ? Number(p.series) : null,
-            reps: p.reps ? Number(p.reps) : null,
-            peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
-            metodo_prescrito: ej.metodo || null,
-            valor_prescrito: p.valor || null,
-            mesociclo_gimnasio_id: nuevo.id
-          })
-        }
-      })
-    }
+    const filasNuevas = generarFilasDesdeDias(lunesBase, dias, nuevo.id)
     if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
 
     setFormMesoOpen(false); cargar()
   }
   async function actualizarMesociclo(id, form) {
-    const { semanas, ...meta } = form
-    const { error } = await supabase.from('mesociclos_gimnasio').update(meta).eq('id', id)
+    // Bug previo: acá se desestructuraba "semanas", una clave que este form nunca
+    // manda (manda "dias"), así que "dias" quedaba adentro de meta y el update
+    // fallaba porque mesociclos_gimnasio no tiene columna "dias" — bloqueaba
+    // cualquier edición, incluso solo cambiar el nombre.
+    const { dias, ...meta } = form
+    const ok = await confirmar(
+      'Al guardar, los ejercicios pendientes de este mesociclo se van a reemplazar según lo que dejes acá. Los ya realizados no se tocan.',
+      { destructivo: false }
+    )
+    if (!ok) return
+
+    const { error } = await supabase.from('mesociclos_gimnasio').update({ ...meta, semanas: dias }).eq('id', id)
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
+
+    await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
+    const lunesBase = lunesDeSemana(meta.fecha_inicio)
+    const filasNuevas = generarFilasDesdeDias(lunesBase, dias, id)
+    if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
+
     setMesoEditando(null); cargar()
   }
   async function eliminarMesociclo(id) {
@@ -551,19 +571,21 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre</span>
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder="Fuerza base / Hipertrofia" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Semana 1 empieza (lunes más cercano)</span>
-        <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required disabled={esEdicion} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink disabled:opacity-50" /></label>
+        <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Notas</span>
         <input value={notas} onChange={(e) => setNotas(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
 
-      {esEdicion ? (
-        <p className="text-ink-faint text-xs">Para cambiar el cronograma de ejercicios, borrá este mesociclo y creá uno nuevo.</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div>
-            <span className="label-eyebrow">Días y ejercicios</span>
-            <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las 4 semanas. Abajo cargás series/reps/valor de cada semana.</p>
-          </div>
-          {DIAS_SEMANA.map((diaInfo) => {
+      {esEdicion && (
+        <p className="text-alert-amber text-xs">
+          Al guardar, los ejercicios pendientes se reemplazan según lo que dejes acá. Los ya realizados quedan como historial, sin tocarse.
+        </p>
+      )}
+      <div className="flex flex-col gap-3">
+        <div>
+          <span className="label-eyebrow">Días y ejercicios</span>
+          <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las 4 semanas. Abajo cargás series/reps/valor de cada semana.</p>
+        </div>
+        {DIAS_SEMANA.map((diaInfo) => {
             const d = dias.find((x) => x.dia === diaInfo.id)
             return (
               <div key={diaInfo.id} className="border border-asphalt-700 rounded-lg p-2.5">
@@ -638,7 +660,6 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
             )
           })}
         </div>
-      )}
 
       <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
