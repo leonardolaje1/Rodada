@@ -80,7 +80,7 @@ function agruparPorFecha(items) {
 export default function Entrenamientos() {
   const toast = useToast()
   const { confirmar, alertar } = useConfirm()
-  const [vista, setVista] = useState('temporada')
+  const [vista, setVista] = useState('registro')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
   const [planes, setPlanes] = useState([])
@@ -540,11 +540,11 @@ export default function Entrenamientos() {
                   <div className="mt-2 -ml-4">
                     <ResponsiveContainer width="100%" height={180}>
                       <LineChart data={graficoFtp} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke="#262A33" vertical={false} />
-                        <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
-                        <YAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 10', 'dataMax + 10']} />
-                        <Tooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
-                        <Line type="monotone" dataKey="ftp" stroke="#C4F135" strokeWidth={2} dot={{ r: 3 }} name="FTP (W)" />
+                        <CartesianGrid stroke="rgb(var(--color-asphalt-700))" vertical={false} />
+                        <XAxis dataKey="fecha" tickFormatter={fmtFecha} tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={{ stroke: 'rgb(var(--color-asphalt-700))' }} />
+                        <YAxis tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={false} width={30} domain={['dataMin - 10', 'dataMax + 10']} />
+                        <Tooltip contentStyle={{ background: 'rgb(var(--color-asphalt-800))', border: '1px solid rgb(var(--color-asphalt-700))', borderRadius: 8, fontSize: 12 }} labelFormatter={fmtFecha} />
+                        <Line type="monotone" dataKey="ftp" stroke="rgb(var(--color-state-success))" strokeWidth={2} dot={{ r: 3 }} name="FTP (W)" />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -787,11 +787,11 @@ export default function Entrenamientos() {
               <div className="-ml-4">
                 <ReResponsiveContainer width="100%" height={200}>
                   <ReLineChart data={registrosPotencia.map((r) => ({ ...r, etiqueta: etiquetaDuracion(r.duracion_seg) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <ReCartesianGrid stroke="#262A33" vertical={false} />
-                    <ReXAxis dataKey="etiqueta" tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#262A33' }} />
-                    <ReYAxis tick={{ fill: '#8A8F9C', fontSize: 10 }} tickLine={false} axisLine={false} width={34} />
-                    <ReTooltip contentStyle={{ background: '#1C1F26', border: '1px solid #262A33', borderRadius: 8, fontSize: 12 }} />
-                    <ReLine type="monotone" dataKey="watts" stroke="#EB642A" strokeWidth={2} dot={{ r: 3 }} name="W" />
+                    <ReCartesianGrid stroke="rgb(var(--color-asphalt-700))" vertical={false} />
+                    <ReXAxis dataKey="etiqueta" tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={{ stroke: 'rgb(var(--color-asphalt-700))' }} />
+                    <ReYAxis tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 10 }} tickLine={false} axisLine={false} width={34} />
+                    <ReTooltip contentStyle={{ background: 'rgb(var(--color-asphalt-800))', border: '1px solid rgb(var(--color-asphalt-700))', borderRadius: 8, fontSize: 12 }} />
+                    <ReLine type="monotone" dataKey="watts" stroke="rgb(var(--color-hiviz))" strokeWidth={2} dot={{ r: 3 }} name="W" />
                   </ReLineChart>
                 </ReResponsiveContainer>
               </div>
