@@ -254,7 +254,7 @@ export default function VerAtleta() {
   const diasEsperadosTotal = diasEsperadosEntreno + diasEsperadosGym
   const diasCumplidosTotal = diasCumplidosEntreno + diasCumplidosGym
   const adherenciaPct = diasEsperadosTotal > 0 ? Math.round((diasCumplidosTotal / diasEsperadosTotal) * 100) : null
-  const colorAdherencia = adherenciaPct == null ? '#565B68' : adherenciaPct >= 80 ? '#C4F135' : adherenciaPct >= 50 ? '#F5A623' : '#F14A4A'
+  const colorAdherencia = adherenciaPct == null ? 'rgb(var(--color-state-neutral))' : adherenciaPct >= 80 ? 'rgb(var(--color-state-success))' : adherenciaPct >= 50 ? 'rgb(var(--color-state-warning))' : 'rgb(var(--color-state-critical))'
 
   return (
     <div className="flex flex-col gap-6">
