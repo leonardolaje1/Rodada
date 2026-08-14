@@ -12,8 +12,8 @@ export default defineConfig({
         name: 'HELU — Gestión de Ciclismo',
         short_name: 'HELU',
         description: 'Plataforma personal de gestión integral del ciclista',
-        theme_color: '#14161A',
-        background_color: '#14161A',
+        theme_color: '#1A1A1A',
+        background_color: '#1A1A1A',
         display: 'standalone',
         start_url: '/',
         icons: [
