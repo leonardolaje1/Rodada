@@ -61,6 +61,7 @@ export default function Recuperacion() {
   const [lesiones, setLesiones] = useState([])
   const [periodoDias, setPeriodoDias] = useState(30)
   const [formLesionOpen, setFormLesionOpen] = useState(false)
+    const [mostrarWearable, setMostrarWearable] = useState(false)
   const hoy = new Date().toISOString().slice(0, 10)
   const valoresVacios = {
     sueño_horas: '', sueño_score: '', calidad_sueño: 3,
@@ -267,28 +268,18 @@ export default function Recuperacion() {
         </label>
 
         <div>
-          <span className="label-eyebrow">Datos de wearable (Garmin, Whoop, etc.)</span>
+          <button
+            type="button"
+            onClick={() => setMostrarWearable((v) => !v)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <span className="label-eyebrow">Datos de wearable (Garmin, Whoop, etc.)</span>
+            <span className="text-hiviz text-xs font-semibold">{mostrarWearable ? 'Ocultar ▲' : 'Agregar ▼'}</span>
+          </button>
           <p className="text-ink-faint text-xs mt-0.5 mb-3">Cuando conectemos Garmin Connect, estos campos se van a completar solos.</p>
+          {mostrarWearable && (
           <div className="grid grid-cols-2 gap-3">
-            <Campo label="Sueño total (h)" type="number" step="0.5" {...campo('sueño_horas')} />
-            <Campo label="Sleep score (0-100)" type="number" min="0" max="100" {...campo('sueño_score')} />
-            <Campo label="Body Battery al despertar" type="number" min="0" max="100" {...campo('body_battery_manana')} />
-            <Campo label="Body Battery antes de dormir" type="number" min="0" max="100" {...campo('body_battery_noche')} />
-            <Campo label="Stress score (0-100)" type="number" min="0" max="100" {...campo('estres_score')} />
-            <Campo label="FC reposo" type="number" {...campo('fc_reposo')} />
-            <Campo label="HRV (ms)" type="number" {...campo('hrv')} />
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-ink-muted text-xs">Estado HRV</span>
-              <select {...campo('hrv_estado')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-                <option value="">—</option>
-                <option value="bajo">Bajo</option>
-                <option value="equilibrado">Equilibrado</option>
-                <option value="alto">Alto</option>
-              </select>
-            </label>
-            <Campo label="SpO2 (%)" type="number" {...campo('spo2')} />
-            <Campo label="Respiración (rpm)" type="number" {...campo('respiracion_rpm')} />
-          </div>
+
         </div>
 
         <div className="border-t border-asphalt-700 pt-3">
@@ -298,7 +289,10 @@ export default function Recuperacion() {
             <Escala label="Dolor muscular" value={form.dolor_muscular} onChange={(v) => setForm((f) => ({ ...f, dolor_muscular: v }))} />
             <Escala label="Fatiga" value={form.fatiga} onChange={(v) => setForm((f) => ({ ...f, fatiga: v }))} />
             <Escala label="Estrés percibido" value={form.estres} onChange={(v) => setForm((f) => ({ ...f, estres: v }))} />
-          </div>
+        </div>
+          )}
+        </div>
+
         </div>
 
         <div className="flex justify-end">
