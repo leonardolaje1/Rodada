@@ -5,6 +5,15 @@ import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Bike } from 'lucide-react'
 
+// Marcas comunes para sugerir con autocompletado — no restringe, el campo
+// sigue siendo de texto libre, esto solo ahorra tipeo.
+const MARCAS_COMUNES = [
+  'Trek', 'Specialized', 'Giant', 'Cannondale', 'Scott', 'Cervélo', 'Cube',
+  'Merida', 'Bianchi', 'Orbea', 'Canyon', 'BMC', 'Colnago', 'Pinarello', 'Wilier'
+]
+
+const RODADOS_COMUNES = ['700c', '650b', '29"', '27.5"', '26"']
+
 export default function Bicicletas() {
   const [bicicletas, setBicicletas] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -94,12 +103,13 @@ function FormBicicleta({ onGuardar, onCancelar }) {
     nombre: '',
     marca: '',
     modelo: '',
-    año: '',
-    rodado: '',
+    año: new Date().getFullYear(),
+    rodado: RODADOS_COMUNES[0],
     peso: '',
     nro_cuadro: '',
     valor: ''
   })
+  const [masDatos, setMasDatos] = useState(false)
 
   function campo(k) {
     return {
@@ -121,14 +131,41 @@ function FormBicicleta({ onGuardar, onCancelar }) {
         })
       }}
     >
-      <Campo label="Nombre" {...campo('nombre')} required />
-      <Campo label="Marca" {...campo('marca')} />
-      <Campo label="Modelo" {...campo('modelo')} />
+      <Campo label="Nombre" {...campo('nombre')} required placeholder="Ej: La naranja" />
+      <div className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Marca</span>
+        <input
+          {...campo('marca')}
+          list="marcas-comunes"
+          placeholder="Empezá a escribir…"
+          className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink focus:border-hiviz outline-none"
+        />
+        <datalist id="marcas-comunes">
+          {MARCAS_COMUNES.map((m) => <option key={m} value={m} />)}
+        </datalist>
+      </div>
       <Campo label="Año" type="number" {...campo('año')} />
-      <Campo label="Rodado" {...campo('rodado')} placeholder="700c / 650b / 29 pulgadas" />
-      <Campo label="Peso (kg)" type="number" step="0.1" {...campo('peso')} />
-      <Campo label="Número de cuadro" {...campo('nro_cuadro')} />
-      <Campo label="Valor" type="number" {...campo('valor')} />
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Rodado</span>
+        <select {...campo('rodado')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
+          {RODADOS_COMUNES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </label>
+
+      <div className="sm:col-span-2">
+        <button type="button" onClick={() => setMasDatos((v) => !v)} className="text-hiviz text-xs font-semibold">
+          {masDatos ? 'Ocultar más datos ▲' : 'Más datos (opcional) ▼'}
+        </button>
+      </div>
+
+      {masDatos && (
+        <>
+          <Campo label="Modelo" {...campo('modelo')} />
+          <Campo label="Peso (kg)" type="number" step="0.1" {...campo('peso')} />
+          <Campo label="Número de cuadro" {...campo('nro_cuadro')} />
+          <Campo label="Valor" type="number" {...campo('valor')} />
+        </>
+      )}
 
       <div className="sm:col-span-2 flex gap-2 justify-end mt-2">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">
