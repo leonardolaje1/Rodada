@@ -1,24 +1,8 @@
 import { useEffect, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
+import { ZONAS_POTENCIA, ZONAS_FC } from '../lib/zonas'
 
-const ZONAS_POTENCIA = [
-  { zona: 'Z1', nombre: 'Recuperación activa', desde: 0, hasta: 0.55, color: '#8A8F9C' },
-  { zona: 'Z2', nombre: 'Resistencia', desde: 0.56, hasta: 0.75, color: '#4A9EFF' },
-  { zona: 'Z3', nombre: 'Tempo', desde: 0.76, hasta: 0.90, color: '#C4F135' },
-  { zona: 'Z4', nombre: 'Umbral', desde: 0.91, hasta: 1.05, color: '#F5A623' },
-  { zona: 'Z5', nombre: 'VO2 máx', desde: 1.06, hasta: 1.20, color: '#F14A4A' },
-  { zona: 'Z6', nombre: 'Capacidad anaeróbica', desde: 1.21, hasta: 1.50, color: '#C34AF1' },
-  { zona: 'Z7', nombre: 'Neuromuscular', desde: 1.51, hasta: null, color: '#7A4AF1' }
-]
-
-const ZONAS_FC = [
-  { zona: 'Z1', nombre: 'Recuperación activa', desde: 0, hasta: 0.68, color: '#8A8F9C' },
-  { zona: 'Z2', nombre: 'Resistencia', desde: 0.69, hasta: 0.83, color: '#4A9EFF' },
-  { zona: 'Z3', nombre: 'Tempo', desde: 0.84, hasta: 0.94, color: '#C4F135' },
-  { zona: 'Z4', nombre: 'Umbral', desde: 0.95, hasta: 1.05, color: '#F5A623' },
-  { zona: 'Z5', nombre: 'VO2 máx', desde: 1.06, hasta: null, color: '#F14A4A' }
-]
 
 function fmtFecha(f) {
   const [, m, d] = f.split('-')
