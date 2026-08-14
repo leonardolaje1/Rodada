@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { buscarAlimentosPorTexto, buscarAlimentoPorCodigoBarras } from '../lib/openFoodFacts'
 import { buscarAlimentosUSDA } from '../lib/usdaFoodData'
-import { buscarAlimentosLocal } from '../lib/baseAlimentos'
+import { buscarAlimentosLocal, BASE_ALIMENTOS } from '../lib/baseAlimentos'
+import { PLATOS_PRECARGADOS } from '../lib/platosPrecargados'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
 import { Apple } from 'lucide-react'
@@ -41,6 +42,28 @@ function agruparPorFecha(items) {
   return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+
+function round1(n) { return Math.round(n * 10) / 10 }
+function nuevoIdItem() { return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }
+
+// Resuelve un ingrediente de un plato precargado (nombre + gramos) contra la
+// base local de alimentos y lo escala a un ítem listo para sumar al plato.
+function itemDesdeAlimento(nombreAlimento, gramos) {
+  const alimento = BASE_ALIMENTOS.find((a) => a.nombre === nombreAlimento)
+  if (!alimento) return null
+  const escala = gramos / 100
+  return {
+    id: nuevoIdItem(),
+    nombre: `${alimento.nombre} — ${gramos}g`,
+    kcal: Math.round(alimento.kcal100g * escala),
+    proteinas: round1(alimento.proteinas100g * escala),
+    carbohidratos: round1(alimento.carbohidratos100g * escala),
+    grasas: round1(alimento.grasas100g * escala),
+  }
+}
+function itemsDesdePlato(plato) {
+  return plato.ingredientes.map((i) => itemDesdeAlimento(i.alimento, i.gramos)).filter(Boolean)
+}
 
 export default function Nutricion() {
   const toast = useToast()
@@ -352,7 +375,13 @@ export default function Nutricion() {
                           <FormComida key={c.id} valoresIniciales={c} onGuardar={(n) => actualizarComida(c.id, n)} onCancelar={() => setComidaEditando(null)} />
                         ) : (
                           <div key={c.id} className="card flex items-center justify-between">
-                            <div><p className="font-medium text-sm">{c.tipo}{c.descripcion ? ` — ${c.descripcion}` : ''}</p><p className="text-ink-muted text-xs">{c.hora || ''}</p></div>
+                            <div>
+                              <p className="font-medium text-sm">{c.tipo}{c.descripcion ? ` — ${c.descripcion}` : ''}</p>
+                              <p className="text-ink-muted text-xs">{c.hora || ''}</p>
+                              {c.items?.length > 1 && (
+                                <p className="text-ink-faint text-[11px] mt-0.5">{c.items.map((it) => it.nombre.split(' — ')[0]).join(' · ')}</p>
+                              )}
+                            </div>
                             <div className="flex items-center gap-3">
                               <div className="flex gap-3 text-right"><MiniDato label="kcal" value={c.kcal} color="text-hiviz" /><MiniDato label="P" value={c.proteinas} /><MiniDato label="C" value={c.carbohidratos} /><MiniDato label="G" value={c.grasas} /></div>
                               <div className="flex gap-1">
@@ -859,36 +888,122 @@ function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
 }
 
 function FormComida({ onGuardar, onCancelar, valoresIniciales }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), hora: new Date().toTimeString().slice(0, 5), tipo: 'Desayuno', descripcion: '', kcal: '', proteinas: '', carbohidratos: '', grasas: '', ...valoresIniciales })
+  const itemsIniciales = valoresIniciales?.items?.length
+    ? valoresIniciales.items
+    : (valoresIniciales?.descripcion || valoresIniciales?.kcal)
+      ? [{
+          id: nuevoIdItem(),
+          nombre: valoresIniciales.descripcion || valoresIniciales.tipo || 'Ítem',
+          kcal: Number(valoresIniciales.kcal) || 0,
+          proteinas: Number(valoresIniciales.proteinas) || 0,
+          carbohidratos: Number(valoresIniciales.carbohidratos) || 0,
+          grasas: Number(valoresIniciales.grasas) || 0,
+        }]
+      : []
+
+  const [form, setForm] = useState({
+    fecha: valoresIniciales?.fecha || new Date().toISOString().slice(0, 10),
+    hora: valoresIniciales?.hora || new Date().toTimeString().slice(0, 5),
+    tipo: valoresIniciales?.tipo || 'Desayuno',
+    nombre: valoresIniciales?.descripcion || '',
+  })
+  const [items, setItems] = useState(itemsIniciales)
   const [buscadorAbierto, setBuscadorAbierto] = useState(false)
+  const [platosAbierto, setPlatosAbierto] = useState(false)
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
 
-  function aplicarAlimento({ descripcion, kcal, proteinas, carbohidratos, grasas }) {
-    setForm((f) => ({ ...f, descripcion: descripcion || f.descripcion, kcal, proteinas, carbohidratos, grasas }))
+  const totales = items.reduce((acc, it) => ({
+    kcal: acc.kcal + (Number(it.kcal) || 0),
+    proteinas: round1(acc.proteinas + (Number(it.proteinas) || 0)),
+    carbohidratos: round1(acc.carbohidratos + (Number(it.carbohidratos) || 0)),
+    grasas: round1(acc.grasas + (Number(it.grasas) || 0)),
+  }), { kcal: 0, proteinas: 0, carbohidratos: 0, grasas: 0 })
+
+  function agregarItem({ descripcion, kcal, proteinas, carbohidratos, grasas }) {
+    setItems((prev) => [...prev, {
+      id: nuevoIdItem(), nombre: descripcion,
+      kcal: Number(kcal) || 0, proteinas: Number(proteinas) || 0, carbohidratos: Number(carbohidratos) || 0, grasas: Number(grasas) || 0,
+    }])
     setBuscadorAbierto(false)
+  }
+  function quitarItem(id) { setItems((prev) => prev.filter((it) => it.id !== id)) }
+  function aplicarPlato(plato) {
+    setItems((prev) => [...prev, ...itemsDesdePlato(plato)])
+    setForm((f) => ({ ...f, nombre: f.nombre || plato.nombre, tipo: f.nombre ? f.tipo : plato.tipo }))
+    setPlatosAbierto(false)
   }
 
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
-      <div className="col-span-2">
-        <button type="button" onClick={() => setBuscadorAbierto((v) => !v)} className="border border-asphalt-700 text-hiviz font-semibold text-sm px-3 py-2 rounded-lg w-full">
-          {buscadorAbierto ? 'Cerrar buscador' : '🔍 Buscar alimento (autocompleta macros)'}
-        </button>
+    <form className="card flex flex-col gap-3" onSubmit={(e) => {
+      e.preventDefault()
+      onGuardar({ fecha: form.fecha, hora: form.hora, tipo: form.tipo, descripcion: form.nombre, items, ...totales })
+    }}>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Hora</span><input type="time" {...campo('hora')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+        <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Tipo</span><select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{TIPOS_COMIDA.map((t) => <option key={t}>{t}</option>)}</select></label>
+        <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Plato</span><input {...campo('nombre')} placeholder="Ej: Pollo con arroz" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       </div>
-      {buscadorAbierto && (
-        <div className="col-span-2">
-          <BuscadorAlimento onSeleccionar={aplicarAlimento} />
+
+      <div className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2.5 flex items-center justify-between">
+        <span className="readout text-lg font-bold text-hiviz">{totales.kcal.toFixed(0)} kcal</span>
+        <span className="readout text-xs text-ink-muted">P {totales.proteinas.toFixed(0)} · C {totales.carbohidratos.toFixed(0)} · G {totales.grasas.toFixed(0)}</span>
+      </div>
+
+      <div>
+        <span className="text-ink-muted text-xs">Componentes ({items.length})</span>
+        {items.length === 0 ? (
+          <p className="text-ink-faint text-xs border border-dashed border-asphalt-700 rounded-lg px-3 py-2.5 text-center mt-1">
+            Todavía no agregaste ingredientes a este plato.
+          </p>
+        ) : (
+          <div className="flex flex-col mt-1">
+            {items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-asphalt-700 last:border-b-0">
+                <span className="text-sm truncate">{it.nombre}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="readout text-xs text-ink-muted">{it.kcal} kcal</span>
+                  <button type="button" onClick={() => quitarItem(it.id)} className="text-ink-faint hover:text-alert-red text-xs px-1">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {!buscadorAbierto && !platosAbierto && (
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setPlatosAbierto(true)} className="flex-1 border border-asphalt-700 text-ink-muted font-semibold text-xs px-3 py-2.5 rounded-lg">🍽️ Plato precargado</button>
+          <button type="button" onClick={() => setBuscadorAbierto(true)} className="flex-1 border border-dashed border-asphalt-600 text-hiviz font-semibold text-xs px-3 py-2.5 rounded-lg">+ Agregar ingrediente</button>
         </div>
       )}
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span><input type="date" {...campo('fecha')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Hora</span><input type="time" {...campo('hora')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Tipo</span><select {...campo('tipo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{TIPOS_COMIDA.map((t) => <option key={t}>{t}</option>)}</select></label>
-      <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Descripción</span><input {...campo('descripcion')} placeholder="Avena con banana y miel" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Kcal</span><input type="number" {...campo('kcal')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Proteínas (g)</span><input type="number" {...campo('proteinas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Carbohidratos (g)</span><input type="number" {...campo('carbohidratos')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Grasas (g)</span><input type="number" {...campo('grasas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
+
+      {platosAbierto && (
+        <div className="border border-asphalt-700 rounded-lg p-2.5 flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-ink-muted text-xs">Elegí un plato para precargar sus ingredientes</span>
+            <button type="button" onClick={() => setPlatosAbierto(false)} className="text-ink-faint text-xs shrink-0 ml-2">Cerrar</button>
+          </div>
+          {PLATOS_PRECARGADOS.map((p) => (
+            <button key={p.nombre} type="button" onClick={() => aplicarPlato(p)} className="text-left border border-asphalt-700 rounded-lg px-2.5 py-2 hover:border-hiviz">
+              <p className="text-xs font-medium">{p.nombre}</p>
+              <p className="text-ink-faint text-[10px]">{p.ingredientes.map((i) => i.alimento).join(' · ')}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {buscadorAbierto && (
+        <div>
+          <div className="flex justify-end mb-1"><button type="button" onClick={() => setBuscadorAbierto(false)} className="text-ink-faint text-xs">Cerrar buscador</button></div>
+          <BuscadorAlimento onSeleccionar={agregarItem} />
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mt-1">
+        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
+        <button type="submit" disabled={items.length === 0} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">Guardar</button>
+      </div>
     </form>
   )
 }
