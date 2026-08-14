@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
+import Avatar from '../components/Avatar'
 import { Users } from 'lucide-react'
 
 const ROLES = [
@@ -184,6 +185,32 @@ export default function Equipo() {
       </div>
 
       {formOpen && <FormInvitar onGuardar={invitar} onCancelar={() => setFormOpen(false)} error={error} />}
+
+      {misProfesionales.length > 0 && (
+        <div className="card">
+          <span className="label-eyebrow">Tu equipo</span>
+          <div className="flex flex-col gap-2.5 mt-2.5">
+            {ROLES.map((rol) => {
+              const vinculo = misProfesionales.find((v) => v.rol === rol.id)
+              return (
+                <div key={rol.id} className="flex items-center gap-2.5">
+                  <Avatar url={null} nombre={vinculo ? emails[vinculo.profesional_id] : '?'} size={32} />
+                  <div>
+                    {vinculo ? (
+                      <>
+                        <p className="text-sm font-medium">{emails[vinculo.profesional_id] || '…'}</p>
+                        <p className="text-ink-faint text-xs">Tu {rol.label.toLowerCase()}</p>
+                      </>
+                    ) : (
+                      <p className="text-ink-faint text-sm">Todavía no tenés {rol.label.toLowerCase()}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <span className="label-eyebrow">¿Todavía no tiene HELU?</span>
