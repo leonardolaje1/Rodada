@@ -272,7 +272,7 @@ export default function Equipo() {
             {misAtletas.map((v) => {
               const resumen = resumenAtletas[v.atleta_id]
               const dias = resumen ? diasDesde(resumen.ultimaFecha) : null
-              const color = dias == null ? '#565B68' : dias === 0 ? '#C4F135' : dias >= 7 ? '#F14A4A' : dias >= 3 ? '#F5A623' : '#C4F135'
+              const color = dias == null ? 'rgb(var(--color-state-neutral))' : dias === 0 ? 'rgb(var(--color-state-success))' : dias >= 7 ? 'rgb(var(--color-state-critical))' : dias >= 3 ? 'rgb(var(--color-state-warning))' : 'rgb(var(--color-state-success))'
               const textoEstado = dias == null
                 ? 'Sin entrenamientos registrados'
                 : dias === 0
