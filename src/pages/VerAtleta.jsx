@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS } from '../lib/tss'
+import Avatar from '../components/Avatar'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
@@ -42,6 +43,8 @@ export default function VerAtleta() {
   const esEntrenador = rol === 'entrenador'
 
   const [email, setEmail] = useState('')
+  const [nombreAtleta, setNombreAtleta] = useState('')
+  const [avatarAtleta, setAvatarAtleta] = useState('')
   const [entrenamientos, setEntrenamientos] = useState([])
   const [gimnasio, setGimnasio] = useState([])
   const [comidas, setComidas] = useState([])
@@ -71,8 +74,18 @@ export default function VerAtleta() {
     desde30.setDate(desde30.getDate() - 30)
     const fechaDesde = desde30.toISOString().slice(0, 10)
 
-    const { data: emailData } = await supabase.rpc('email_de_vinculado', { p_user_id: atletaId })
-    setEmail(emailData || 'Atleta')
+    // Intenta traer nombre y avatar con la función nueva de Supabase (ver Paso A del plan).
+    // Si esa función todavía no existe en tu proyecto de Supabase, cae de vuelta a solo email
+    // sin romper la pantalla.
+    const { data: perfilData, error: errorPerfil } = await supabase.rpc('perfil_de_vinculado', { p_user_id: atletaId })
+    if (!errorPerfil && perfilData) {
+      setEmail(perfilData.email || 'Atleta')
+      setNombreAtleta(perfilData.nombre || '')
+      setAvatarAtleta(perfilData.avatar_url || '')
+    } else {
+      const { data: emailData } = await supabase.rpc('email_de_vinculado', { p_user_id: atletaId })
+      setEmail(emailData || 'Atleta')
+    }
 
     const [{ data: ents }, { data: gym }, { data: plsE }, { data: plsG }] = await Promise.all([
       supabase.from('entrenamientos').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde).order('fecha', { ascending: false }),
@@ -261,7 +274,10 @@ export default function VerAtleta() {
       <Link to="/equipo" className="text-ink-muted text-sm">← Equipo</Link>
 
       <div>
-        <h1 className="text-2xl font-bold">{email}</h1>
+        <div className="flex items-center gap-3">
+          <Avatar url={avatarAtleta} nombre={nombreAtleta || email} size={40} />
+          <h1 className="text-2xl font-bold">{nombreAtleta || email}</h1>
+        </div>
         <p className="text-ink-muted text-sm mt-1">Sos su {rol} · últimos 30 días</p>
       </div>
 
