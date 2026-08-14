@@ -56,6 +56,34 @@ function lunesDeSemana(fechaStr) {
   return d
 }
 function escaparXml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id) {
+  const sesiones = []
+  semanas.forEach((semana, si) => {
+    DIAS_SEMANA.forEach((diaInfo, oi) => {
+      const d = (semana.dias || []).find((x) => x.dia === diaInfo.id)
+      if (!d || !d.activo) return
+      const fecha = new Date(lunesBase)
+      fecha.setDate(fecha.getDate() + si * 7 + oi)
+      sesiones.push({
+        fecha: fecha.toISOString().slice(0, 10),
+        tipo: d.tipo,
+        duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
+        comentarios: d.descripcion || null,
+        estado: 'pendiente',
+        es_clave: !!d.es_clave,
+        mesociclo_id,
+        estilo_sesion: d.estilo_sesion || null,
+        zona_objetivo: d.zona_objetivo || null,
+        watts_kg_objetivo: d.watts_kg_objetivo ? Number(d.watts_kg_objetivo) : null,
+        series_objetivo: d.series_objetivo ? Number(d.series_objetivo) : null,
+        repeticiones_objetivo: d.repeticiones_objetivo ? Number(d.repeticiones_objetivo) : null,
+        tiempo_trabajo_objetivo: d.tiempo_trabajo_objetivo || null,
+        pausa_objetivo: d.pausa_objetivo || null
+      })
+    })
+  })
+  return sesiones
+}
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
@@ -248,39 +276,27 @@ export default function Entrenamientos() {
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
-    const sesionesNuevas = []
-    semanas.forEach((semana, si) => {
-      DIAS_SEMANA.forEach((diaInfo, oi) => {
-        const d = (semana.dias || []).find((x) => x.dia === diaInfo.id)
-        if (!d || !d.activo) return
-        const fecha = new Date(lunesBase)
-        fecha.setDate(fecha.getDate() + si * 7 + oi)
-        sesionesNuevas.push({
-          fecha: fecha.toISOString().slice(0, 10),
-          tipo: d.tipo,
-          duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
-          comentarios: d.descripcion || null,
-          estado: 'pendiente',
-          es_clave: !!d.es_clave,
-          mesociclo_id: nuevo.id,
-          estilo_sesion: d.estilo_sesion || null,
-          zona_objetivo: d.zona_objetivo || null,
-          watts_kg_objetivo: d.watts_kg_objetivo ? Number(d.watts_kg_objetivo) : null,
-          series_objetivo: d.series_objetivo ? Number(d.series_objetivo) : null,
-          repeticiones_objetivo: d.repeticiones_objetivo ? Number(d.repeticiones_objetivo) : null,
-          tiempo_trabajo_objetivo: d.tiempo_trabajo_objetivo || null,
-          pausa_objetivo: d.pausa_objetivo || null
-        })
-      })
-    })
+    const sesionesNuevas = generarSesionesDesdeSemanas(lunesBase, semanas, nuevo.id)
     if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
 
     setFormMesoOpen(false); cargar()
   }
   async function actualizarMesociclo(id, form) {
     const { semanas, ...meta } = form
-    const { error } = await supabase.from('mesociclos').update(meta).eq('id', id)
+    const ok = await confirmar(
+      'Al guardar, las sesiones pendientes de este mesociclo se van a reemplazar según el nuevo cronograma. Las sesiones ya realizadas no se tocan.',
+      { destructivo: false }
+    )
+    if (!ok) return
+
+    const { error } = await supabase.from('mesociclos').update({ ...meta, semanas }).eq('id', id)
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
+
+    await supabase.from('entrenamientos').delete().eq('mesociclo_id', id).eq('estado', 'pendiente')
+    const lunesBase = lunesDeSemana(meta.fecha_inicio)
+    const sesionesNuevas = generarSesionesDesdeSemanas(lunesBase, semanas, id)
+    if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
+
     setMesoEditando(null); cargar()
   }
   async function eliminarMesociclo(id) {
@@ -1087,7 +1103,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
             {TIPOS_MESOCICLO.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select></label>
         <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Semana 1 empieza (lunes más cercano)</span>
-          <input type="date" {...campo('fecha_inicio')} required disabled={esEdicion} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink disabled:opacity-50" /></label>
+          <input type="date" {...campo('fecha_inicio')} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       </div>
       {competencias.length > 0 && (
         <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Competencia objetivo (opcional)</span>
@@ -1103,12 +1119,14 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Notas</span>
         <input {...campo('notas')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
 
-      {esEdicion ? (
-        <p className="text-ink-faint text-xs">Para cambiar el cronograma de sesiones, borrá este mesociclo y creá uno nuevo.</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <span className="label-eyebrow">Cronograma — 4 semanas</span>
-          {semanas.map((semana, si) => (
+      {esEdicion && (
+        <p className="text-alert-amber text-xs">
+          Al guardar, las sesiones pendientes se reemplazan según lo que dejes acá. Las sesiones ya realizadas quedan como historial, sin tocarse.
+        </p>
+      )}
+      <div className="flex flex-col gap-3">
+        <span className="label-eyebrow">Cronograma — 4 semanas</span>
+        {semanas.map((semana, si) => (
             <div key={si} className="border border-asphalt-700 rounded-lg p-2.5">
               <p className="text-sm font-semibold mb-2">Semana {semana.semana}</p>
               <div className="flex flex-col gap-2">
@@ -1166,7 +1184,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
             </div>
           ))}
         </div>
-      )}
+      </div>
 
       <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
