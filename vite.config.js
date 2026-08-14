@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'BikeIQ — Gestión de Ciclismo',
-        short_name: 'BikeIQ',
+        name: 'HELU — Gestión de Ciclismo',
+        short_name: 'HELU',
         description: 'Plataforma personal de gestión integral del ciclista',
         theme_color: '#14161A',
         background_color: '#14161A',
