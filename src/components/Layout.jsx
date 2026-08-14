@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import Avatar from './Avatar'
+import BotonFlotanteGlobal from './BotonFlotanteGlobal'
 
 const NAV = [
   { to: '/', label: 'Panel', Icon: Gauge, end: true },
@@ -101,6 +102,8 @@ export default function Layout() {
       <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
+
+      <BotonFlotanteGlobal />
 
       {masAbierto && (
         <div className="md:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMasAbierto(false)}>
