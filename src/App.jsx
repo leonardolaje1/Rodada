@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import ActualizarPassword from './pages/ActualizarPassword'
 import Dashboard from './pages/Dashboard'
@@ -23,44 +24,40 @@ import { ConfirmProvider } from './lib/ConfirmContext'
 export default function App() {
   const { session, cargando, modoRecuperacion, setModoRecuperacion } = useAuth()
 
-  if (cargando) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="text-ink-muted text-sm">Cargando…</span>
-      </div>
-    )
-  }
-
-  if (modoRecuperacion) {
-    return <ActualizarPassword onListo={() => setModoRecuperacion(false)} />
-  }
-
-  if (!session) {
-    return <Login />
-  }
-
   return (
-    <ToastProvider>
-      <ConfirmProvider>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/calendario" element={<Calendario />} />
-          <Route path="/entrenamientos" element={<Entrenamientos />} />
-          <Route path="/bicicletas" element={<Bicicletas />} />
-          <Route path="/bicicletas/:id" element={<BicicletaDetalle />} />
-          <Route path="/nutricion" element={<Nutricion />} />
-          <Route path="/recuperacion" element={<Recuperacion />} />
-          <Route path="/competencias" element={<Competencias />} />
-          <Route path="/gimnasio" element={<Gimnasio />} />
-          <Route path="/analitica" element={<Analitica />} />
-          <Route path="/reportes" element={<Reportes />} />
-          <Route path="/equipo" element={<Equipo />} />
-          <Route path="/equipo/:id" element={<VerAtleta />} />
-          <Route path="/configuracion" element={<Configuracion />} />
-        </Route>
-      </Routes>
-      </ConfirmProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      {cargando ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <span className="text-ink-muted text-sm">Cargando…</span>
+        </div>
+      ) : modoRecuperacion ? (
+        <ActualizarPassword onListo={() => setModoRecuperacion(false)} />
+      ) : !session ? (
+        <Login />
+      ) : (
+        <ToastProvider>
+          <ConfirmProvider>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/calendario" element={<Calendario />} />
+                <Route path="/entrenamientos" element={<Entrenamientos />} />
+                <Route path="/bicicletas" element={<Bicicletas />} />
+                <Route path="/bicicletas/:id" element={<BicicletaDetalle />} />
+                <Route path="/nutricion" element={<Nutricion />} />
+                <Route path="/recuperacion" element={<Recuperacion />} />
+                <Route path="/competencias" element={<Competencias />} />
+                <Route path="/gimnasio" element={<Gimnasio />} />
+                <Route path="/analitica" element={<Analitica />} />
+                <Route path="/reportes" element={<Reportes />} />
+                <Route path="/equipo" element={<Equipo />} />
+                <Route path="/equipo/:id" element={<VerAtleta />} />
+                <Route path="/configuracion" element={<Configuracion />} />
+              </Route>
+            </Routes>
+          </ConfirmProvider>
+        </ToastProvider>
+      )}
+    </ErrorBoundary>
   )
 }
