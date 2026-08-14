@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -17,12 +18,17 @@ import Reportes from './pages/Reportes'
 import Equipo from './pages/Equipo'
 import VerAtleta from './pages/VerAtleta'
 import Configuracion from './pages/Configuracion'
+import Onboarding from './pages/Onboarding'
 import { useAuth } from './lib/useAuth'
 import { ToastProvider } from './lib/ToastContext'
 import { ConfirmProvider } from './lib/ConfirmContext'
 
 export default function App() {
   const { session, cargando, modoRecuperacion, setModoRecuperacion } = useAuth()
+  const [onboardingListo, setOnboardingListo] = useState(false)
+
+  const usuario = session?.user ?? null
+  const onboardingCompletado = Boolean(usuario?.user_metadata?.onboarding_completado)
 
   return (
     <ErrorBoundary>
@@ -34,6 +40,8 @@ export default function App() {
         <ActualizarPassword onListo={() => setModoRecuperacion(false)} />
       ) : !session ? (
         <Login />
+      ) : !onboardingCompletado && !onboardingListo ? (
+        <Onboarding usuario={usuario} onFinish={() => setOnboardingListo(true)} />
       ) : (
         <ToastProvider>
           <ConfirmProvider>
