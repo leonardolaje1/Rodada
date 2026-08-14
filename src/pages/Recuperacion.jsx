@@ -23,7 +23,7 @@ const CAUSAS_LESION = [
 const DIAS_ALERTA_BIKEFIT = 5
 
 function estadoRecuperacion(r) {
-  if (!r) return { color: '#565B68', texto: 'Sin datos' }
+    if (!r) return { color: 'rgb(var(--color-state-neutral))', texto: 'Sin datos' }
   const señales = []
   if (r.body_battery_manana != null && r.body_battery_manana !== '') {
     const bb = Number(r.body_battery_manana)
@@ -43,9 +43,9 @@ function estadoRecuperacion(r) {
   señales.push(subjetivo <= 2 ? 0 : subjetivo <= 3.5 ? 1 : 2)
 
   const promedio = señales.reduce((a, b) => a + b, 0) / señales.length
-  if (promedio < 0.66) return { color: '#C4F135', texto: 'Buen estado — listo para exigir' }
-  if (promedio < 1.33) return { color: '#F5A623', texto: 'Moderado — controlar la carga' }
-  return { color: '#F14A4A', texto: 'Fatiga alta — priorizar descanso' }
+  if (promedio < 0.66) return { color: 'rgb(var(--color-state-success))', texto: 'Buen estado — listo para exigir' }
+  if (promedio < 1.33) return { color: 'rgb(var(--color-state-warning))', texto: 'Moderado — controlar la carga' }
+  return { color: 'rgb(var(--color-state-critical))', texto: 'Fatiga alta — priorizar descanso' }
 }
 
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
