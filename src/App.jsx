@@ -19,6 +19,7 @@ import Equipo from './pages/Equipo'
 import VerAtleta from './pages/VerAtleta'
 import Configuracion from './pages/Configuracion'
 import Onboarding from './pages/Onboarding'
+import NoEncontrado from './pages/NoEncontrado'
 import { useAuth } from './lib/useAuth'
 import { ToastProvider } from './lib/ToastContext'
 import { ConfirmProvider } from './lib/ConfirmContext'
@@ -61,6 +62,7 @@ export default function App() {
                 <Route path="/equipo" element={<Equipo />} />
                 <Route path="/equipo/:id" element={<VerAtleta />} />
                 <Route path="/configuracion" element={<Configuracion />} />
+                <Route path="*" element={<NoEncontrado />} />
               </Route>
             </Routes>
           </ConfirmProvider>
