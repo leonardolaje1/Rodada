@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
@@ -122,6 +123,15 @@ export default function Nutricion() {
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
+
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('nuevo') === '1') {
+      setTab('comidas')
+      setComidaEditando(null)
+      setFormComida(true)
+    }
+  }, [searchParams])
 
   async function guardarPerfil(next) {
     setPerfil(next)
