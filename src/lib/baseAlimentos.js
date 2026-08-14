@@ -138,12 +138,24 @@ const DATA = [
   ['Barra de proteína (genérica)', 'Nutrición deportiva', 350, 25, 35, 12, { etiqueta: 'barra', gramos: 60 }],
   ['Bebida isotónica (polvo, preparada)', 'Nutrición deportiva', 25, 0, 6, 0],
   ['Bebida isotónica comercial (lista)', 'Nutrición deportiva', 24, 0, 6, 0],
-  ['Proteína whey (polvo)', 'Nutrición deportiva', 380, 78, 8, 6],
+  ['Proteína whey (polvo, genérica)', 'Nutrición deportiva', 380, 78, 8, 6],
   ['Maltodextrina (polvo)', 'Nutrición deportiva', 380, 0, 95, 0],
   ['Electrolitos (pastilla/sobre, sin kcal)', 'Nutrición deportiva', 5, 0, 1, 0],
   ['Cafeína (cápsula, sin kcal relevante)', 'Nutrición deportiva', 0, 0, 0, 0],
   ['Barrita de cereal', 'Nutrición deportiva', 400, 6, 70, 12],
   ['Recovery drink (polvo, genérico)', 'Nutrición deportiva', 380, 20, 60, 5],
+
+  // ===== Proteínas en polvo y barras — marcas reales (AR + mundo) =====
+  // Valores normalizados a 100g a partir de la porción declarada en el
+  // envase/sitio oficial de cada marca. "unidad" refleja la porción real
+  // de venta (scoop o barra) para que el buscador pueda cargarla en 1 tap.
+  ['ENA 100% Whey Protein (polvo)', 'Nutrición deportiva', 403, 55.6, 33.3, 5.3, { etiqueta: 'scoop', gramos: 36 }],
+  ['GenTech Whey Protein 7900 AFA (polvo)', 'Nutrición deportiva', 427, 73.3, 11, 9.7, { etiqueta: 'scoop', gramos: 30 }],
+  ['Star Nutrition Platinum Whey (polvo)', 'Nutrición deportiva', 423, 83.3, 8.7, 6, { etiqueta: 'scoop', gramos: 30 }],
+  ['Optimum Nutrition Gold Standard 100% Whey (polvo)', 'Nutrición deportiva', 395, 78.9, 9.9, 3.3, { etiqueta: 'scoop', gramos: 30 }],
+  ['MyProtein Impact Whey Protein (polvo)', 'Nutrición deportiva', 392, 78.4, 6, 6.8, { etiqueta: 'scoop', gramos: 25 }],
+  ['ENA Protein Bar (barrita)', 'Nutrición deportiva', 428, 32.6, 52.2, 10.9, { etiqueta: 'barrita', gramos: 46 }],
+  ['Quest Bar (barrita)', 'Nutrición deportiva', 333, 33.3, 35, 13.3, { etiqueta: 'barrita', gramos: 60 }],
 
   // ===== Panificados, dulces y otros =====
   ['Miel', 'Otros', 304, 0.3, 82.4, 0],
