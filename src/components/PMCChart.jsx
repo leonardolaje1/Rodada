@@ -18,35 +18,35 @@ export default function PMCChart({ data }) {
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <ComposedChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-          <CartesianGrid stroke="#262A33" vertical={false} />
+          <CartesianGrid stroke="rgb(var(--color-asphalt-700))" vertical={false} />
           <XAxis
             dataKey="fecha"
-            tick={{ fill: '#8A8F9C', fontSize: 11 }}
+            tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 11 }}
             tickLine={false}
-            axisLine={{ stroke: '#262A33' }}
+            axisLine={{ stroke: 'rgb(var(--color-asphalt-700))' }}
             minTickGap={30}
           />
-          <YAxis tick={{ fill: '#8A8F9C', fontSize: 11 }} tickLine={false} axisLine={false} />
+          <YAxis tick={{ fill: 'rgb(var(--color-ink-faint))', fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip
             contentStyle={{
-              background: '#1C1F26',
-              border: '1px solid #262A33',
+              background: 'rgb(var(--color-asphalt-800))',
+              border: '1px solid rgb(var(--color-asphalt-700))',
               borderRadius: 8,
               fontSize: 12
             }}
-            labelStyle={{ color: '#8A8F9C' }}
+            labelStyle={{ color: 'rgb(var(--color-ink-faint))' }}
           />
           <Area
             type="monotone"
             dataKey="tsb"
-            fill="#4A9EFF22"
+            fill="rgb(var(--color-route) / 0.13)"
             stroke="none"
             name="TSB (forma)"
           />
           <Line
             type="monotone"
             dataKey="ctl"
-            stroke="#C4F135"
+            stroke="rgb(var(--color-state-success))"
             strokeWidth={2}
             dot={false}
             name="CTL (fitness)"
@@ -54,7 +54,7 @@ export default function PMCChart({ data }) {
           <Line
             type="monotone"
             dataKey="atl"
-            stroke="#F14A4A"
+            stroke="rgb(var(--color-state-critical))"
             strokeWidth={1.5}
             dot={false}
             name="ATL (fatiga)"
