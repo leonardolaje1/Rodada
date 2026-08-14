@@ -1184,7 +1184,6 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
             </div>
           ))}
         </div>
-      </div>
 
       <div className="flex justify-end gap-2 mt-1">
         <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
