@@ -222,6 +222,23 @@ export function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id, us
   return sesiones
 }
 
+// Las columnas series/reps son numéricas en Supabase. Si el valor prescrito
+// trae texto ("10-12", "10 c/lado"), NUNCA lo mandamos crudo a esas columnas
+// -- un insert masivo con un solo valor no numérico en una columna numérica
+// falla completo y en silencio si no se chequea el error. Extraemos el primer
+// entero para la columna numérica, y guardamos el texto completo (si difiere)
+// en valor_prescrito para no perder precisión.
+function enteroSeguro(v) {
+  if (v === '' || v === null || v === undefined) return null
+  const m = String(v).match(/\d+/)
+  return m ? Number(m[0]) : null
+}
+function textoSiDistinto(v, entero) {
+  if (v === '' || v === null || v === undefined) return null
+  const s = String(v).trim()
+  return s === String(entero) ? null : s
+}
+
 export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id, userId) {
   const filas = []
   for (let offset = 0; offset < 28; offset++) {
@@ -235,13 +252,18 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
     for (const ej of d.ejercicios || []) {
       if (!ej.ejercicio) continue
       const p = ej.porSemana?.[si] || {}
+      const seriesNum = enteroSeguro(p.series)
+      const repsNum = enteroSeguro(p.reps)
+      const repsTexto = textoSiDistinto(p.reps, repsNum)
+      const seriesTexto = textoSiDistinto(p.series, seriesNum)
+      const notaReps = [seriesTexto ? `series ${seriesTexto}` : null, repsTexto ? `reps ${repsTexto}` : null].filter(Boolean).join(' · ')
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
-        series: p.series ? (Number.isFinite(Number(p.series)) ? Number(p.series) : p.series) : null,
-        reps: p.reps ? (Number.isFinite(Number(p.reps)) ? Number(p.reps) : p.reps) : null,
+        series: seriesNum,
+        reps: repsNum,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
-        valor_prescrito: p.valor || null,
+        valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
         ...(userId ? { user_id: userId } : {})
       })
