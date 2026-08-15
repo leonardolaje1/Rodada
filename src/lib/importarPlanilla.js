@@ -185,6 +185,129 @@ export async function parsearPlanillaBici(file) {
   }
 }
 
+// ---------------- Generación de filas (compartida con el flujo de Equipo) ----------------
+// Mismas funciones que generarSesionesDesdeSemanas (Entrenamientos.jsx) y
+// generarFilasDesdeDias (Gimnasio.jsx), con un parámetro extra opcional "userId"
+// para cuando un profesional crea el mesociclo a nombre de un atleta vinculado
+// (si no se pasa, el user_id lo completa el default de la tabla en Supabase).
+const DIAS_SEMANA_ORDEN = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom']
+
+export function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id, userId) {
+  const sesiones = []
+  semanas.forEach((semana, si) => {
+    DIAS_SEMANA_ORDEN.forEach((diaId, oi) => {
+      const d = (semana.dias || []).find((x) => x.dia === diaId)
+      if (!d || !d.activo) return
+      const fecha = new Date(lunesBase)
+      fecha.setDate(fecha.getDate() + si * 7 + oi)
+      sesiones.push({
+        fecha: fecha.toISOString().slice(0, 10),
+        tipo: d.tipo,
+        duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
+        comentarios: d.descripcion || null,
+        estado: 'pendiente',
+        es_clave: !!d.es_clave,
+        mesociclo_id,
+        estilo_sesion: d.estilo_sesion || null,
+        zona_objetivo: d.zona_objetivo || null,
+        watts_kg_objetivo: d.watts_kg_objetivo ? Number(d.watts_kg_objetivo) : null,
+        series_objetivo: d.series_objetivo ? Number(d.series_objetivo) : null,
+        repeticiones_objetivo: d.repeticiones_objetivo ? Number(d.repeticiones_objetivo) : null,
+        tiempo_trabajo_objetivo: d.tiempo_trabajo_objetivo || null,
+        pausa_objetivo: d.pausa_objetivo || null,
+        ...(userId ? { user_id: userId } : {})
+      })
+    })
+  })
+  return sesiones
+}
+
+export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id, userId) {
+  const filas = []
+  for (let offset = 0; offset < 28; offset++) {
+    const fecha = new Date(fechaInicioBase)
+    fecha.setDate(fecha.getDate() + offset)
+    const si = Math.floor(offset / 7)
+    const diaId = DIAS_SEMANA_ORDEN[(fecha.getDay() + 6) % 7]
+    const d = dias.find((x) => x.dia === diaId)
+    if (!d || !d.activo) continue
+    const fechaStr = fecha.toISOString().slice(0, 10)
+    for (const ej of d.ejercicios || []) {
+      if (!ej.ejercicio) continue
+      const p = ej.porSemana?.[si] || {}
+      filas.push({
+        fecha: fechaStr, ejercicio: ej.ejercicio,
+        series: p.series ? Number(p.series) : null,
+        reps: p.reps ? Number(p.reps) : null,
+        peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
+        metodo_prescrito: ej.metodo || null,
+        valor_prescrito: p.valor || null,
+        mesociclo_gimnasio_id,
+        ...(userId ? { user_id: userId } : {})
+      })
+    }
+  }
+  return filas
+}
+
+// ---------------- Plantillas descargables ----------------
+// Generan un .xlsx vacío (con una fila de ejemplo) en el formato exacto que
+// parsearPlanillaBici / parsearPlanillaGimnasio esperan, para que el
+// profesional lo complete en Excel/Sheets y lo vuelva a subir.
+async function construirLibro(XLSX, hojaMeta, filasMeta, hojaDatos, headers, filasEjemplo) {
+  const wb = XLSX.utils.book_new()
+  const wsMeta = XLSX.utils.aoa_to_sheet(filasMeta)
+  wsMeta['!cols'] = [{ wch: 16 }, { wch: 60 }]
+  XLSX.utils.book_append_sheet(wb, wsMeta, hojaMeta)
+  const wsDatos = XLSX.utils.aoa_to_sheet([headers, ...filasEjemplo])
+  wsDatos['!cols'] = headers.map(() => ({ wch: 16 }))
+  XLSX.utils.book_append_sheet(wb, wsDatos, hojaDatos)
+  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  return new Blob([out], { type: 'application/octet-stream' })
+}
+
+export async function generarPlantillaBici() {
+  const XLSX = await import('xlsx')
+  const filasMeta = [
+    ['Nombre', 'Nombre del mesociclo'],
+    ['Tipo', 'base'],
+    ['Fecha_inicio', '2026-01-05'],
+    ['CTL_objetivo', ''],
+    ['Notas', '']
+  ]
+  const headers = ['Semana', 'Dia', 'Tipo', 'Duracion_min', 'Descripcion', 'Clave', 'Estilo_sesion', 'Zona', 'Series', 'Repeticiones', 'Tiempo_trabajo', 'Pausa']
+  const ejemplo = [
+    [1, 'Lun', 'Rodillo', 60, 'Base Z2 continua', '', 'Resistencia (Endurance)', 'Z2', '', '', '', ''],
+    [1, 'Mie', 'Ruta', 90, 'Z2 con 3x8 SS', 'x', 'Sweet Spot', 'Z3', '', '', '8min', '5min']
+  ]
+  return construirLibro(XLSX, 'Meta', filasMeta, 'Sesiones', headers, ejemplo)
+}
+
+export async function generarPlantillaGimnasio() {
+  const XLSX = await import('xlsx')
+  const filasMeta = [
+    ['Nombre', 'Nombre del mesociclo'],
+    ['Fecha_inicio', '2026-01-05'],
+    ['Notas', '']
+  ]
+  const headers = ['Semana', 'Dia', 'Clave', 'Ejercicio', 'Metodo', 'Series', 'Reps', 'Valor']
+  const ejemplo = [
+    [1, 'Mar', '', 'Sentadilla trasera', 'RPE', 3, 12, 6],
+    [2, 'Mar', '', 'Sentadilla trasera', 'RPE', 4, 10, '6-7']
+  ]
+  return construirLibro(XLSX, 'Meta', filasMeta, 'Ejercicios', headers, ejemplo)
+}
+
+export function descargarBlob(blob, nombreArchivo) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombreArchivo
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 // ---------------- GIMNASIO ----------------
 const ALIAS_META_GYM = {
   nombre: ['nombre', 'name', 'titulo'],
