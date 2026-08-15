@@ -263,7 +263,7 @@ export default function Gimnasio() {
 
       {vista === 'planificacion' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <input ref={inputMesocicloRef} type="file" accept=".json,application/json,.xlsx,.xls,.csv" className="hidden" onChange={importarMesociclo} />
             <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (Excel/JSON)</button>
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
