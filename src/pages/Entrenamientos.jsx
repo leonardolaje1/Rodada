@@ -117,6 +117,7 @@ export default function Entrenamientos() {
   const [formMesoOpen, setFormMesoOpen] = useState(false)
   const [mesoEditando, setMesoEditando] = useState(null)
   const inputArchivoRef = useRef(null)
+  const inputMesocicloRef = useRef(null)
 
   async function cargar() {
     setCargando(true)
@@ -280,6 +281,23 @@ export default function Entrenamientos() {
     if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
 
     setFormMesoOpen(false); cargar()
+  }
+
+  async function importarMesociclo(e) {
+    const file = e.target.files[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const texto = await file.text()
+      const json = JSON.parse(texto)
+      if (!json.nombre || !Array.isArray(json.semanas)) {
+        alertar('El JSON debe tener al menos "nombre" y "semanas" (array de 4 semanas con "dias").')
+        return
+      }
+      await crearMesociclo(json)
+      toast('Plan importado')
+    } catch (err) {
+      alertar('No se pudo leer el archivo: ' + err.message)
+    }
   }
   async function actualizarMesociclo(id, form) {
     const { semanas, ...meta } = form
@@ -610,7 +628,9 @@ export default function Entrenamientos() {
 
       {vista === 'temporada' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <input ref={inputMesocicloRef} type="file" accept=".json,application/json" className="hidden" onChange={importarMesociclo} />
+            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (JSON)</button>
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
           </div>
           {formMesoOpen && <FormMesociclo competencias={competencias} onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
