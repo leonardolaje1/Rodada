@@ -172,7 +172,10 @@ export default function VerAtleta() {
       if (error) { alert('No se pudo asignar el mesociclo: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos" todavía no tiene la política que deja a un profesional vinculado crear bloques a nombre de su atleta — hay que agregarla en Supabase.'); return }
       const lunes = new Date(meta.fecha_inicio + 'T12:00:00')
       const sesiones = generarSesionesDesdeSemanas(lunes, semanas, nuevo.id, atletaId)
-      if (sesiones.length > 0) await supabase.from('entrenamientos').insert(sesiones)
+      if (sesiones.length > 0) {
+        const { error: errorSesiones } = await supabase.from('entrenamientos').insert(sesiones)
+        if (errorSesiones) { alert('El mesociclo se creó, pero las sesiones no se pudieron cargar: ' + errorSesiones.message); return }
+      }
       alert(`Mesociclo "${json.nombre}" asignado a ${nombreAtleta || email}.`)
       cargar()
     } catch (err) {
@@ -193,7 +196,10 @@ export default function VerAtleta() {
       if (error) { alert('No se pudo asignar la rutina: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos_gimnasio" todavía no tiene la política que deja a un profesional vinculado crear rutinas a nombre de su atleta — hay que agregarla en Supabase.'); return }
       const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
       const filas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id, atletaId)
-      if (filas.length > 0) await supabase.from('gimnasio').insert(filas)
+      if (filas.length > 0) {
+        const { error: errorFilas } = await supabase.from('gimnasio').insert(filas)
+        if (errorFilas) { alert('La rutina se creó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
+      }
       alert(`Rutina "${json.nombre}" asignada a ${nombreAtleta || email}.`)
       cargar()
     } catch (err) {
