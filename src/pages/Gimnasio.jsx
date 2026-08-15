@@ -30,8 +30,7 @@ const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
 const METODOS_PRESCRIPCION = ['RPE', 'RIR', 'Peso fijo', '% de 1RM', 'Otro']
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
-function agruparPorFecha(items) {
-  const grupos = {}
+function agruparPorFecha(items) {  const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
   return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
@@ -72,6 +71,23 @@ function crearDiasVacios() {
     ejercicios: [{ ejercicio: 'Sentadilla', metodo: '', porSemana: crearParametrosSemanas() }]
   }))
 }
+// Las columnas series/reps son numéricas en Supabase. Si el valor prescrito
+// trae texto ("10-12", "10 c/lado"), NUNCA lo mandamos crudo a esas columnas
+// -- un insert masivo con un solo valor no numérico en una columna numérica
+// falla completo y en silencio si no se chequea el error. Extraemos el primer
+// entero para la columna numérica, y guardamos el texto completo (si difiere)
+// en valor_prescrito para no perder precisión.
+function enteroSeguro(v) {
+  if (v === '' || v === null || v === undefined) return null
+  const m = String(v).match(/\d+/)
+  return m ? Number(m[0]) : null
+}
+function textoSiDistinto(v, entero) {
+  if (v === '' || v === null || v === undefined) return null
+  const s = String(v).trim()
+  return s === String(entero) ? null : s
+}
+
 function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
   const filas = []
   for (let offset = 0; offset < 28; offset++) {
@@ -85,13 +101,18 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
     for (const ej of d.ejercicios || []) {
       if (!ej.ejercicio) continue
       const p = ej.porSemana?.[si] || {}
+      const seriesNum = enteroSeguro(p.series)
+      const repsNum = enteroSeguro(p.reps)
+      const repsTexto = textoSiDistinto(p.reps, repsNum)
+      const seriesTexto = textoSiDistinto(p.series, seriesNum)
+      const notaReps = [seriesTexto ? `series ${seriesTexto}` : null, repsTexto ? `reps ${repsTexto}` : null].filter(Boolean).join(' · ')
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
-        series: p.series ? (Number.isFinite(Number(p.series)) ? Number(p.series) : p.series) : null,
-        reps: p.reps ? (Number.isFinite(Number(p.reps)) ? Number(p.reps) : p.reps) : null,
+        series: seriesNum,
+        reps: repsNum,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
-        valor_prescrito: p.valor || null,
+        valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id
       })
     }
@@ -174,7 +195,10 @@ export default function Gimnasio() {
 
     const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
     const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id)
-    if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
+    if (filasNuevas.length > 0) {
+      const { error: errorFilas } = await supabase.from('gimnasio').insert(filasNuevas)
+      if (errorFilas) { alertar('El mesociclo se creó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
+    }
 
     setFormMesoOpen(false); cargar()
   }
@@ -221,7 +245,10 @@ export default function Gimnasio() {
     await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
     const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
     const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, id)
-    if (filasNuevas.length > 0) await supabase.from('gimnasio').insert(filasNuevas)
+    if (filasNuevas.length > 0) {
+      const { error: errorFilas } = await supabase.from('gimnasio').insert(filasNuevas)
+      if (errorFilas) { alertar('El mesociclo se actualizó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
+    }
 
     setMesoEditando(null); cargar()
   }
@@ -554,8 +581,18 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
   const hecha = s.estado === 'realizado'
   const metodo = s.metodo_prescrito
   const esNota = !metodo || metodo === 'Otro'
-  const chipTexto = !esNota && s.valor_prescrito ? `${metodo} ${s.valor_prescrito}` : metodo
+  // valor_prescrito puede traer "6 · reps 10-12" (valor del método + calificador de
+  // series/reps que no entraba en la columna numérica) — el chip solo muestra el
+  // primer segmento cuando hay método; el resto (o todo, si no hay método) va como nota.
+  const partes = (s.valor_prescrito || '').split(' · ').filter(Boolean)
+  const valorCore = !esNota ? partes[0] : null
+  const notaPartes = esNota ? partes : partes.slice(1)
+  const nota = notaPartes.length > 0 ? notaPartes.join(' · ') : null
+  const chipTexto = !esNota ? (valorCore ? `${metodo} ${valorCore}` : metodo) : null
   const seriesReps = [s.series, s.reps].filter((v) => v !== null && v !== undefined && v !== '').join('x')
+  const pesosTxt = Array.isArray(s.pesos_series) && s.pesos_series.length > 0
+    ? s.pesos_series.join('/') + 'kg'
+    : (s.peso ? `${s.peso}kg` : '')
 
   return (
     <div className="flex items-center gap-2 py-1.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 transition-colors">
@@ -565,8 +602,8 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
         <span className="w-1.5 h-1.5 rounded-full bg-asphalt-600 flex-shrink-0 mx-1.5" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium truncate">{s.ejercicio}{seriesReps ? ` — ${seriesReps}` : ''}{hecha && s.peso ? ` @ ${s.peso}kg` : ''}</p>
-        {esNota && s.valor_prescrito && <p className="text-ink-faint text-[10px] truncate">{s.valor_prescrito}</p>}
+        <p className="text-xs font-medium truncate">{s.ejercicio}{seriesReps ? ` — ${seriesReps}` : ''}{hecha && pesosTxt ? ` @ ${pesosTxt}` : ''}</p>
+        {nota && <p className="text-ink-faint text-[10px] truncate">{nota}</p>}
       </div>
       {hecha ? (
         <span className="text-hiviz text-[11px] flex-shrink-0">{s.pr ? '🏆 PR' : '✓'}</span>
@@ -580,8 +617,37 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
 function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', estado: 'realizado', es_clave: false, ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
+
+  // Peso por serie: un input por cada serie (en vez de un único "Peso" para todo
+  // el ejercicio). Si el ejercicio ya trae pesos_series cargados, arranca de ahí;
+  // si no, usa la cantidad de series prescritas (o 1) con el peso simple como valor inicial.
+  const [pesosSeries, setPesosSeries] = useState(() => {
+    if (Array.isArray(valoresIniciales?.pesos_series) && valoresIniciales.pesos_series.length > 0) {
+      return valoresIniciales.pesos_series.map(String)
+    }
+    const n = Math.max(1, Math.min(20, parseInt(valoresIniciales?.series) || 1))
+    return Array.from({ length: n }, () => (valoresIniciales?.peso != null ? String(valoresIniciales.peso) : ''))
+  })
+  function actualizarPesoSerie(i, valor) {
+    setPesosSeries((prev) => prev.map((p, j) => (j === i ? valor : p)))
+  }
+  function ajustarCantidadSeries(cantidadStr) {
+    const cantidad = Math.max(1, Math.min(20, parseInt(cantidadStr) || 1))
+    setPesosSeries((prev) => {
+      const copia = [...prev]
+      while (copia.length < cantidad) copia.push('')
+      while (copia.length > cantidad) copia.pop()
+      return copia
+    })
+  }
+
   return (
-    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
+    <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => {
+      e.preventDefault()
+      const numeros = pesosSeries.map((p) => (p === '' ? null : Number(p))).filter((n) => n !== null && !isNaN(n))
+      const pesoMax = numeros.length > 0 ? Math.max(...numeros) : (form.peso === '' ? null : Number(form.peso))
+      onGuardar({ ...form, peso: pesoMax, pesos_series: numeros.length > 0 ? numeros : null })
+    }}>
       {form.metodo_prescrito && (
         <div className="col-span-2 bg-asphalt-900 border border-hiviz-dim rounded-lg px-3 py-2 text-xs text-ink-muted">
           Prescrito por tu entrenador: <span className="text-hiviz font-semibold">{form.metodo_prescrito} {form.valor_prescrito}</span>
@@ -601,9 +667,26 @@ function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
         <input type="checkbox" checked={!!form.es_clave} onChange={(e) => setForm((f) => ({ ...f, es_clave: e.target.checked }))} />
         <span className="text-ink-muted text-xs">Sesión clave</span>
       </label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Series</span><input type="number" {...campo('series')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-ink-muted text-xs">Series</span>
+        <input type="number" min="1" max="20" value={form.series ?? ''} onChange={(e) => { setForm((f) => ({ ...f, series: e.target.value })); ajustarCantidadSeries(e.target.value) }} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+      </label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Reps</span><input type="number" {...campo('reps')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso (kg)</span><input type="number" {...campo('peso')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+      <div className="col-span-2 flex flex-col gap-1.5">
+        <span className="text-ink-muted text-xs">Peso por serie (kg)</span>
+        <div className="flex flex-wrap gap-2">
+          {pesosSeries.map((p, i) => (
+            <label key={i} className="flex flex-col items-center gap-0.5">
+              <span className="text-ink-faint text-[10px]">S{i + 1}</span>
+              <input
+                type="number" step="0.5" value={p}
+                onChange={(e) => actualizarPesoSerie(i, e.target.value)}
+                className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink w-16 text-center"
+              />
+            </label>
+          ))}
+        </div>
+      </div>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">RPE (1-10)</span><input type="number" min="1" max="10" {...campo('rpe')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
     </form>
