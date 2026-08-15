@@ -655,7 +655,7 @@ export default function VerAtleta() {
           <div className="card">
             <p className="font-semibold text-sm">Ciclismo</p>
             <p className="text-ink-muted text-xs mt-0.5">Mesociclo de 4 semanas (sesiones día a día, zonas, series).</p>
-            <div className="flex gap-2 mt-3">
+            <div className="flex flex-wrap gap-2 mt-3">
               <button onClick={bajarPlantillaBici} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Descargar plantilla</button>
               <input ref={inputBiciRef} type="file" accept=".xlsx,.xls,.csv,.json,application/json" className="hidden" onChange={importarBloqueBici} />
               <button onClick={() => inputBiciRef.current?.click()} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Subir planilla completada</button>
@@ -665,7 +665,7 @@ export default function VerAtleta() {
           <div className="card">
             <p className="font-semibold text-sm">Gimnasio</p>
             <p className="text-ink-muted text-xs mt-0.5">Mesociclo de 4 semanas (ejercicios por día, series/reps/RPE por semana).</p>
-            <div className="flex gap-2 mt-3">
+            <div className="flex flex-wrap gap-2 mt-3">
               <button onClick={bajarPlantillaGym} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Descargar plantilla</button>
               <input ref={inputGymRef} type="file" accept=".xlsx,.xls,.csv,.json,application/json" className="hidden" onChange={importarBloqueGym} />
               <button onClick={() => inputGymRef.current?.click()} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Subir planilla completada</button>
