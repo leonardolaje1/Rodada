@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
 import { calcularTSS } from '../lib/tss'
 import Avatar from '../components/Avatar'
+import {
+  parsearPlanillaBici, parsearPlanillaGimnasio, generarPlantillaBici, generarPlantillaGimnasio,
+  descargarBlob, generarSesionesDesdeSemanas, generarFilasDesdeDias
+} from '../lib/importarPlanilla'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
@@ -50,7 +54,9 @@ export default function VerAtleta() {
   const [comidas, setComidas] = useState([])
   const [planesEntreno, setPlanesEntreno] = useState([])
   const [planesGimnasio, setPlanesGimnasio] = useState([])
-  const [seccion, setSeccion] = useState('resumen') // 'resumen' | 'planes-entreno' | 'planes-gym'
+  const [seccion, setSeccion] = useState('resumen') // 'resumen' | 'planes-entreno' | 'planes-gym' | 'plan-bloques'
+  const inputBiciRef = useRef(null)
+  const inputGymRef = useRef(null)
   const [formPlanEntrenoOpen, setFormPlanEntrenoOpen] = useState(false)
   const [planEntrenoEditando, setPlanEntrenoEditando] = useState(null)
   const [formPlanGymOpen, setFormPlanGymOpen] = useState(false)
@@ -152,6 +158,52 @@ export default function VerAtleta() {
     setPlanGymEditando(null)
     cargar()
   }
+
+  async function importarBloqueBici(e) {
+    const file = e.target.files[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const json = /\.(xlsx|xls|csv)$/i.test(file.name)
+        ? await parsearPlanillaBici(file)
+        : JSON.parse(await file.text())
+      if (!json.nombre || !Array.isArray(json.semanas)) { alert('El archivo no tiene el formato esperado (falta "nombre" o "semanas").'); return }
+      const { semanas, ...meta } = json
+      const { data: nuevo, error } = await supabase.from('mesociclos').insert({ ...meta, semanas, user_id: atletaId }).select().single()
+      if (error) { alert('No se pudo asignar el mesociclo: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos" todavía no tiene la política que deja a un profesional vinculado crear bloques a nombre de su atleta — hay que agregarla en Supabase.'); return }
+      const lunes = new Date(meta.fecha_inicio + 'T12:00:00')
+      const sesiones = generarSesionesDesdeSemanas(lunes, semanas, nuevo.id, atletaId)
+      if (sesiones.length > 0) await supabase.from('entrenamientos').insert(sesiones)
+      alert(`Mesociclo "${json.nombre}" asignado a ${nombreAtleta || email}.`)
+      cargar()
+    } catch (err) {
+      alert('No se pudo importar: ' + err.message)
+    }
+  }
+
+  async function importarBloqueGym(e) {
+    const file = e.target.files[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const json = /\.(xlsx|xls|csv)$/i.test(file.name)
+        ? await parsearPlanillaGimnasio(file)
+        : JSON.parse(await file.text())
+      if (!json.nombre || !Array.isArray(json.dias)) { alert('El archivo no tiene el formato esperado (falta "nombre" o "dias").'); return }
+      const { dias, ...meta } = json
+      const { data: nuevo, error } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias, user_id: atletaId }).select().single()
+      if (error) { alert('No se pudo asignar la rutina: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos_gimnasio" todavía no tiene la política que deja a un profesional vinculado crear rutinas a nombre de su atleta — hay que agregarla en Supabase.'); return }
+      const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
+      const filas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id, atletaId)
+      if (filas.length > 0) await supabase.from('gimnasio').insert(filas)
+      alert(`Rutina "${json.nombre}" asignada a ${nombreAtleta || email}.`)
+      cargar()
+    } catch (err) {
+      alert('No se pudo importar: ' + err.message)
+    }
+  }
+
+  async function bajarPlantillaBici() { descargarBlob(await generarPlantillaBici(), 'plantilla_bici.xlsx') }
+  async function bajarPlantillaGym() { descargarBlob(await generarPlantillaGimnasio(), 'plantilla_gimnasio.xlsx') }
+
   async function crearFeedback(entrenamientoId, comentario) {
     if (!comentario.trim()) return
     const { data: userData } = await supabase.auth.getUser()
@@ -282,7 +334,7 @@ export default function VerAtleta() {
         <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
           {[
             ['resumen', 'Resumen'],
-            ...(esEntrenador ? [['planes-entreno', 'Planes de entrenamiento'], ['planes-gym', 'Rutinas de gimnasio']] : []),
+            ...(esEntrenador ? [['planes-entreno', 'Planes de entrenamiento'], ['planes-gym', 'Rutinas de gimnasio'], ['plan-bloques', 'Plan por bloques (Excel)']] : []),
             ...(esNutricionista ? [['planes-nutricion', 'Planes de nutrición'], ['documentos-nutricion', 'Documentos']] : [])
           ].map(([id, label]) => (
             <button
@@ -591,6 +643,38 @@ export default function VerAtleta() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {seccion === 'plan-bloques' && esEntrenador && (
+        <div className="flex flex-col gap-4">
+          <p className="text-ink-muted text-sm">
+            Bloques de 4 semanas (bici o gimnasio) desde una planilla de Excel/Google Sheets. Bajá la plantilla, completala con el plan de {nombreAtleta || 'tu atleta'} y subila acá — se carga directo en su cuenta, sin que tenga que hacer nada.
+          </p>
+
+          <div className="card">
+            <p className="font-semibold text-sm">Ciclismo</p>
+            <p className="text-ink-muted text-xs mt-0.5">Mesociclo de 4 semanas (sesiones día a día, zonas, series).</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={bajarPlantillaBici} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Descargar plantilla</button>
+              <input ref={inputBiciRef} type="file" accept=".xlsx,.xls,.csv,.json,application/json" className="hidden" onChange={importarBloqueBici} />
+              <button onClick={() => inputBiciRef.current?.click()} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Subir planilla completada</button>
+            </div>
+          </div>
+
+          <div className="card">
+            <p className="font-semibold text-sm">Gimnasio</p>
+            <p className="text-ink-muted text-xs mt-0.5">Mesociclo de 4 semanas (ejercicios por día, series/reps/RPE por semana).</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={bajarPlantillaGym} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-3 py-1.5">Descargar plantilla</button>
+              <input ref={inputGymRef} type="file" accept=".xlsx,.xls,.csv,.json,application/json" className="hidden" onChange={importarBloqueGym} />
+              <button onClick={() => inputGymRef.current?.click()} className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg">Subir planilla completada</button>
+            </div>
+          </div>
+
+          <p className="text-ink-faint text-[11px]">
+            El bloque queda visible para {nombreAtleta || 'el atleta'} en su propia app (Entrenamientos → Mesociclo / Gimnasio → Planificación). Si subís uno nuevo no borra bloques anteriores.
+          </p>
         </div>
       )}
 
