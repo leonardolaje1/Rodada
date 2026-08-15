@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { SkeletonList } from '../components/Skeleton'
 import { useToast } from '../lib/ToastContext'
@@ -7,7 +7,20 @@ import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
 
-const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
+// Antes era una lista cerrada de 7 nombres (un <select>), lo que impedía cargar
+// planes reales con ejercicios de máquina/adaptados. Ahora es solo la lista de
+// sugerencias de un <input list="..."> de texto libre — el usuario puede escribir
+// cualquier ejercicio y no queda atado a esta lista.
+const EJERCICIOS_COMUNES = [
+  'Sentadilla', 'Sentadilla trasera', 'Sentadilla en máquina guiada (Hack/Smith)', 'Peso muerto',
+  'Peso muerto rumano (RDL)', 'Press banca', 'Press militar máquina', 'Zancadas',
+  'Zancada caminando con chaleco lastrado', 'Sentadilla búlgara con chaleco lastrado/mochila',
+  'Prensa 45°', 'Extensión de cuádriceps en máquina', 'Curl femoral en máquina',
+  'Abducción de cadera en máquina', 'Hip Thrust en máquina', 'Patada de glúteo en máquina/polea',
+  'Extensión de cadera en polea con tobillera', 'Elevación de pantorrilla en máquina',
+  'Elevación de pantorrilla unilateral', 'Pallof Press unilateral en polea',
+  'Dead Bug (sin peso en manos)', 'Plancha frontal', 'Core / plancha', 'Otro'
+]
 const DIAS_SEMANA = [
   { id: 'lun', label: 'Lun' }, { id: 'mar', label: 'Mar' }, { id: 'mie', label: 'Mié' },
   { id: 'jue', label: 'Jue' }, { id: 'vie', label: 'Vie' }, { id: 'sab', label: 'Sáb' }, { id: 'dom', label: 'Dom' }
@@ -82,6 +95,7 @@ export default function Gimnasio() {
   const [mesoEditando, setMesoEditando] = useState(null)
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
   const [cargando, setCargando] = useState(true)
+  const inputMesocicloRef = useRef(null)
 
   async function cargar() {
     setCargando(true)
@@ -146,6 +160,23 @@ export default function Gimnasio() {
 
     setFormMesoOpen(false); cargar()
   }
+
+  async function importarMesociclo(e) {
+    const file = e.target.files[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const texto = await file.text()
+      const json = JSON.parse(texto)
+      if (!json.nombre || !Array.isArray(json.dias)) {
+        alertar('El JSON debe tener al menos "nombre" y "dias" (array de días con ejercicios y "porSemana").')
+        return
+      }
+      await crearMesociclo(json)
+      toast('Plan importado')
+    } catch (err) {
+      alertar('No se pudo leer el archivo: ' + err.message)
+    }
+  }
   async function actualizarMesociclo(id, form) {
     // Bug previo: acá se desestructuraba "semanas", una clave que este form nunca
     // manda (manda "dias"), así que "dias" quedaba adentro de meta y el update
@@ -206,7 +237,9 @@ export default function Gimnasio() {
 
       {vista === 'planificacion' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <input ref={inputMesocicloRef} type="file" accept=".json,application/json" className="hidden" onChange={importarMesociclo} />
+            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (JSON)</button>
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
           </div>
           {formMesoOpen && <FormMesociclo onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
@@ -481,7 +514,9 @@ function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
           <option value="pendiente">Pendiente</option>
         </select></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Ejercicio</span>
-        <select {...campo('ejercicio')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">{EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}</select></label>
+        <input {...campo('ejercicio')} list="ejercicios-sugeridos" placeholder="Escribí o elegí de la lista" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+        <datalist id="ejercicios-sugeridos">{EJERCICIOS_COMUNES.map((e) => <option key={e} value={e} />)}</datalist>
+      </label>
       <label className="flex items-center gap-2 text-sm mt-6">
         <input type="checkbox" checked={!!form.es_clave} onChange={(e) => setForm((f) => ({ ...f, es_clave: e.target.checked }))} />
         <span className="text-ink-muted text-xs">Sesión clave</span>
@@ -501,10 +536,10 @@ function FormObjetivo({ onGuardar, onCancelar, ejercicios }) {
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, ejercicio_objetivo: form.ejercicio_objetivo || null }) }}>
       <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Título</span><input {...campo('titulo')} required placeholder="Sentadilla a 100 kg" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Ejercicio (opcional, auto)</span>
-        <select {...campo('ejercicio_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-          <option value="">Manual</option>{ejercicios.map((e) => <option key={e}>{e}</option>)}
-        </select></label>
+      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Ejercicio (opcional, auto — vacío = manual)</span>
+        <input {...campo('ejercicio_objetivo')} list="ejercicios-sugeridos-objetivo" placeholder="Manual" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
+        <datalist id="ejercicios-sugeridos-objetivo">{ejercicios.map((e) => <option key={e} value={e} />)}</datalist>
+      </label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Peso objetivo (kg)</span><input type="number" {...campo('valor_objetivo')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm col-span-2"><span className="text-ink-muted text-xs">Fecha límite</span><input type="date" {...campo('fecha_limite')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <div className="col-span-2 flex justify-end gap-2 mt-1"><button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button><button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar</button></div>
@@ -579,6 +614,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
           <span className="label-eyebrow">Días y ejercicios</span>
           <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las 4 semanas. Abajo cargás series/reps/valor de cada semana.</p>
         </div>
+        <datalist id="ejercicios-sugeridos">{EJERCICIOS_COMUNES.map((e) => <option key={e} value={e} />)}</datalist>
         {DIAS_SEMANA.map((diaInfo) => {
             const d = dias.find((x) => x.dia === diaInfo.id)
             return (
@@ -598,9 +634,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
                     {d.ejercicios.map((ej, ejIdx) => (
                       <div key={ejIdx} className="flex flex-col gap-1.5 pb-2 border-b border-asphalt-800 last:border-0">
                         <div className="flex gap-1.5 items-center">
-                          <select value={ej.ejercicio} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { ejercicio: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1">
-                            {EJERCICIOS_COMUNES.map((e) => <option key={e}>{e}</option>)}
-                          </select>
+                          <input value={ej.ejercicio} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { ejercicio: e.target.value })} list="ejercicios-sugeridos" placeholder="Ejercicio" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1" />
                           <select value={ej.metodo} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { metodo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-28">
                             <option value="">Sin método</option>
                             {METODOS_PRESCRIPCION.map((m) => <option key={m}>{m}</option>)}
