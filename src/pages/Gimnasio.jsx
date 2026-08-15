@@ -87,8 +87,8 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
       const p = ej.porSemana?.[si] || {}
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
-        series: p.series ? Number(p.series) : null,
-        reps: p.reps ? Number(p.reps) : null,
+        series: p.series ? (Number.isFinite(Number(p.series)) ? Number(p.series) : p.series) : null,
+        reps: p.reps ? (Number.isFinite(Number(p.reps)) ? Number(p.reps) : p.reps) : null,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
         valor_prescrito: p.valor || null,
@@ -329,30 +329,20 @@ export default function Gimnasio() {
                                 return (
                                   <div key={fecha}>
                                     {nuevaSemana && (
-                                      <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1.5`}>
+                                      <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1`}>
                                         <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
                                         <p className="text-ink-faint text-[11px]">{fechasSemana.length} sesiones · {ejerciciosSemana} ejercicios</p>
                                       </div>
                                     )}
-                                    <div className="flex items-center gap-1.5 mb-1">
-                                      <span className="text-ink-muted text-[11px]">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</span>
-                                      {items[0]?.es_clave && <span className="text-hiviz text-[11px]" title="Día clave">★</span>}
-                                    </div>
-                                    <div className="flex flex-col">
-                                      {items.map((s) =>
-                                        editandoId === s.id ? (
-                                          <div key={s.id} className="pb-1.5">
-                                            <FormGimnasio valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s} onGuardar={(datos) => actualizar(s.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
-                                          </div>
-                                        ) : (
-                                          <SesionMesocicloGymRow
-                                            key={s.id}
-                                            s={s}
-                                            onCargarDatos={() => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
-                                          />
-                                        )
-                                      )}
-                                    </div>
+                                    <BloqueDiaGym
+                                      fecha={fecha}
+                                      items={items}
+                                      editandoId={editandoId}
+                                      valoresEdicion={valoresEdicion}
+                                      onGuardarEdicion={(id, datos) => actualizar(id, datos)}
+                                      onCancelarEdicion={() => { setEditandoId(null); setValoresEdicion(null) }}
+                                      onCargarDatos={(s) => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                    />
                                   </div>
                                 )
                               })
@@ -525,24 +515,63 @@ function MiniDato({ label, value, color = 'text-ink' }) {
   return <div><p className={`readout text-sm font-semibold ${color}`}>{value}</p><p className="text-ink-muted text-[10px] uppercase">{label}</p></div>
 }
 
+function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
+  const [abierto, setAbierto] = useState(false)
+  const hechos = items.filter((s) => s.estado === 'realizado').length
+  const todosHechos = hechos === items.length
+  return (
+    <div className="border-b border-asphalt-800 last:border-0">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full flex items-center gap-2 py-2.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors text-left">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: todosHechos ? '#C4F135' : hechos > 0 ? '#F5A623' : '#565B68' }} />
+        <span className="text-xs font-medium">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</span>
+        {items[0]?.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Día clave">★</span>}
+        <span className="flex-1" />
+        <span className="text-ink-faint text-[11px] flex-shrink-0">{hechos}/{items.length} ejercicios</span>
+        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+      </button>
+      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
+        <div className="collapse-inner pl-3 pb-2 flex flex-col">
+          {items.map((s) =>
+            editandoId === s.id ? (
+              <div key={s.id} className="py-1.5">
+                <FormGimnasio
+                  valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
+                  onGuardar={(datos) => onGuardarEdicion(s.id, datos)}
+                  onCancelar={onCancelarEdicion}
+                />
+              </div>
+            ) : (
+              <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} />
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SesionMesocicloGymRow({ s, onCargarDatos }) {
   const hecha = s.estado === 'realizado'
   const metodo = s.metodo_prescrito
+  const esNota = !metodo || metodo === 'Otro'
+  const chipTexto = !esNota && s.valor_prescrito ? `${metodo} ${s.valor_prescrito}` : metodo
+  const seriesReps = [s.series, s.reps].filter((v) => v !== null && v !== undefined && v !== '').join('x')
+
   return (
     <div className="flex items-center gap-2 py-1.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 transition-colors">
-      {metodo ? (
-        <span className="text-[9px] font-bold w-11 h-5 flex-shrink-0 flex items-center justify-center rounded-md text-center leading-none" style={{ background: `${colorMetodo(metodo)}26`, color: colorMetodo(metodo) }}>{metodo}</span>
+      {chipTexto ? (
+        <span className="text-[10px] font-bold px-1.5 h-5 flex-shrink-0 flex items-center justify-center rounded-md whitespace-nowrap" style={{ background: `${colorMetodo(metodo)}26`, color: colorMetodo(metodo) }}>{chipTexto}</span>
       ) : (
-        <span className="w-11 h-5 flex-shrink-0" />
+        <span className="w-1.5 h-1.5 rounded-full bg-asphalt-600 flex-shrink-0 mx-1.5" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium truncate">{s.ejercicio}{hecha ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : s.series || s.reps ? ` — ${s.series || '—'}x${s.reps || '—'}` : ''}</p>
-        {!hecha && metodo && <p className="text-ink-faint text-[10px]">{metodo}: {s.valor_prescrito || '—'}</p>}
+        <p className="text-xs font-medium truncate">{s.ejercicio}{seriesReps ? ` — ${seriesReps}` : ''}{hecha && s.peso ? ` @ ${s.peso}kg` : ''}</p>
+        {esNota && s.valor_prescrito && <p className="text-ink-faint text-[10px] truncate">{s.valor_prescrito}</p>}
       </div>
       {hecha ? (
-        <span className="text-hiviz text-[11px] flex-shrink-0">{s.pr ? '🏆 PR' : '✓ hecho'}</span>
+        <span className="text-hiviz text-[11px] flex-shrink-0">{s.pr ? '🏆 PR' : '✓'}</span>
       ) : (
-        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">Cargar resultado</button>
+        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">Cargar</button>
       )}
     </div>
   )
