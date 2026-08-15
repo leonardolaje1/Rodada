@@ -237,8 +237,8 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
       const p = ej.porSemana?.[si] || {}
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
-        series: p.series ? Number(p.series) : null,
-        reps: p.reps ? Number(p.reps) : null,
+        series: p.series ? (Number.isFinite(Number(p.series)) ? Number(p.series) : p.series) : null,
+        reps: p.reps ? (Number.isFinite(Number(p.reps)) ? Number(p.reps) : p.reps) : null,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
         valor_prescrito: p.valor || null,
