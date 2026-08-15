@@ -289,7 +289,10 @@ export default function Entrenamientos() {
 
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
     const sesionesNuevas = generarSesionesDesdeSemanas(lunesBase, semanas, nuevo.id)
-    if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
+    if (sesionesNuevas.length > 0) {
+      const { error: errorSesiones } = await supabase.from('entrenamientos').insert(sesionesNuevas)
+      if (errorSesiones) { alertar('El mesociclo se creó, pero las sesiones no se pudieron cargar: ' + errorSesiones.message); return }
+    }
 
     setFormMesoOpen(false); cargar()
   }
@@ -332,7 +335,10 @@ export default function Entrenamientos() {
     await supabase.from('entrenamientos').delete().eq('mesociclo_id', id).eq('estado', 'pendiente')
     const lunesBase = lunesDeSemana(meta.fecha_inicio)
     const sesionesNuevas = generarSesionesDesdeSemanas(lunesBase, semanas, id)
-    if (sesionesNuevas.length > 0) await supabase.from('entrenamientos').insert(sesionesNuevas)
+    if (sesionesNuevas.length > 0) {
+      const { error: errorSesiones } = await supabase.from('entrenamientos').insert(sesionesNuevas)
+      if (errorSesiones) { alertar('El mesociclo se actualizó, pero las sesiones no se pudieron cargar: ' + errorSesiones.message); return }
+    }
 
     setMesoEditando(null); cargar()
   }
