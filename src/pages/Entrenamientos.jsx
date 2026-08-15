@@ -48,6 +48,16 @@ const TIPOS_TEST_FTP = [
 
 function diaIdDeHoy() { return DIA_POR_INDICE[new Date().getDay()] }
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+function diaLabelDeFecha(f) {
+  const idx = new Date(f + 'T12:00:00').getDay()
+  return DIAS_SEMANA.find((d) => d.id === DIA_POR_INDICE[idx])?.label || ''
+}
+function semanaIndice(fecha, fechaInicioMeso) {
+  return Math.floor((new Date(fecha + 'T12:00:00') - new Date(fechaInicioMeso + 'T12:00:00')) / 86400000 / 7)
+}
+function colorZona(zona) {
+  return ZONAS_POTENCIA.find((z) => z.zona === zona)?.color || '#8A8F9C'
+}
 function lunesDeSemana(fechaStr) {
   const d = new Date(fechaStr + 'T12:00:00')
   const dow = d.getDay()
@@ -698,26 +708,41 @@ export default function Entrenamientos() {
                         )}
 
                         {sesionesMeso.length > 0 && (
-                          <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
-                            {sesionesMeso.map((s) =>
-                              editandoId === s.id ? (
-                                <FormEntrenamiento
-                                  key={s.id}
-                                  bicicletas={bicicletas}
-                                  planes={planes}
-                                  valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
-                                  onGuardar={(datos) => actualizar(s.id, datos)}
-                                  onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }}
-                                />
-                              ) : (
-                                <SesionMesocicloRow
-                                  key={s.id}
-                                  s={s}
-                                  onCargarDatos={() => { setMostrarForm(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
-                                  onDescargarReloj={() => descargarParaReloj(s)}
-                                />
+                          <div className="flex flex-col mt-3 pt-3 border-t border-asphalt-700">
+                            {sesionesMeso.map((s, i) => {
+                              const semanaActual = semanaIndice(s.fecha, m.fecha_inicio)
+                              const semanaAnterior = i > 0 ? semanaIndice(sesionesMeso[i - 1].fecha, m.fecha_inicio) : null
+                              const nuevaSemana = semanaActual !== semanaAnterior
+                              const sesionesSemana = nuevaSemana ? sesionesMeso.filter((x) => semanaIndice(x.fecha, m.fecha_inicio) === semanaActual) : null
+                              const horasSemana = nuevaSemana ? (sesionesSemana.reduce((acc, x) => acc + (x.duracion_min || 0), 0) / 60).toFixed(1) : null
+                              return (
+                                <div key={s.id}>
+                                  {nuevaSemana && (
+                                    <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1`}>
+                                      <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                      <p className="text-ink-faint text-[11px]">{fmtFecha(sesionesSemana[0].fecha)}–{fmtFecha(sesionesSemana[sesionesSemana.length - 1].fecha)} · {horasSemana} h</p>
+                                    </div>
+                                  )}
+                                  {editandoId === s.id ? (
+                                    <div className="pb-1.5">
+                                      <FormEntrenamiento
+                                        bicicletas={bicicletas}
+                                        planes={planes}
+                                        valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
+                                        onGuardar={(datos) => actualizar(s.id, datos)}
+                                        onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <SesionMesocicloRow
+                                      s={s}
+                                      onCargarDatos={() => { setMostrarForm(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                      onDescargarReloj={() => descargarParaReloj(s)}
+                                    />
+                                  )}
+                                </div>
                               )
-                            )}
+                            })}
                           </div>
                         )}
                       </div>
@@ -1214,25 +1239,46 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
 }
 
 function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
+  const [abierto, setAbierto] = useState(false)
+  const hecha = s.estado === 'realizado'
+  const zona = s.zona_objetivo
+  const zColor = zona ? colorZona(zona) : null
+  const detalle = hecha
+    ? [s.km ? `${s.km} km` : null, s.duracion_min ? `${s.duracion_min} min` : null, s.tss ? `${s.tss} TSS` : null].filter(Boolean).join(' · ')
+    : s.duracion_min ? `${s.duracion_min}'` : null
+
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1.5">
-        {s.es_clave && <span className="text-hiviz text-xs" title="Sesión clave">★</span>}
-        <div>
-          <p className="text-xs font-medium">{s.fecha} · {s.tipo}{s.comentarios ? ` — ${s.comentarios}` : ''}</p>
-          {s.estado === 'realizado' && (
-            <p className="text-ink-faint text-[11px]">{s.km ? `${s.km} km · ` : ''}{s.duracion_min ? `${s.duracion_min} min · ` : ''}{s.tss ? `${s.tss} TSS` : ''}</p>
-          )}
+    <div className="border-b border-asphalt-800 last:border-0">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full flex items-center gap-2 py-2 text-left rounded-lg hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors -mx-1 px-1">
+        {zona ? (
+          <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md" style={{ background: `${zColor}26`, color: zColor }}>{zona}</span>
+        ) : (
+          <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md bg-asphalt-700 text-ink-faint">{s.tipo.slice(0, 2).toUpperCase()}</span>
+        )}
+        <span className="text-ink-muted text-[11px] w-14 flex-shrink-0">{diaLabelDeFecha(s.fecha)} {fmtFecha(s.fecha)}</span>
+        <span className="text-xs font-medium truncate min-w-0">{s.tipo}{s.comentarios ? ` — ${s.comentarios}` : ''}</span>
+        <span className="flex-1" />
+        {s.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Sesión clave">★</span>}
+        {detalle && <span className="text-ink-faint text-[11px] flex-shrink-0 hidden sm:inline">{detalle}</span>}
+        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+      </button>
+
+      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
+        <div className="collapse-inner pl-10 pb-2.5 flex flex-col gap-1.5">
+          {s.comentarios && <p className="text-ink-muted text-[11px] leading-relaxed">{s.comentarios}</p>}
+          {hecha && detalle && <p className="text-ink-faint text-[11px] sm:hidden">{detalle}</p>}
+          <div className="flex items-center gap-3">
+            {s.estado === 'pendiente' ? (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); onDescargarReloj() }} className="text-ink-muted text-[11px]">⌚ Reloj</button>
+                <button onClick={(e) => { e.stopPropagation(); onCargarDatos() }} className="text-hiviz text-[11px] font-semibold">Cargar datos</button>
+              </>
+            ) : (
+              <span className="text-hiviz text-[11px]">✓ hecha</span>
+            )}
+          </div>
         </div>
       </div>
-      {s.estado === 'pendiente' ? (
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={onDescargarReloj} className="text-ink-muted text-[11px] whitespace-nowrap">⌚ Reloj</button>
-          <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar datos</button>
-        </div>
-      ) : (
-        <span className="text-hiviz text-[11px]">✓ hecha</span>
-      )}
     </div>
   )
 }
