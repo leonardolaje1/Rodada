@@ -34,6 +34,23 @@ function agruparPorFecha(items) {
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
   return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
+function agruparPorFechaAsc(items) {
+  const grupos = {}
+  for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
+  return Object.entries(grupos).sort((a, b) => a[0].localeCompare(b[0]))
+}
+function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
+function diaLabelDeFecha(f) {
+  const idx = new Date(f + 'T12:00:00').getDay()
+  return DIAS_SEMANA.find((d) => d.id === DIA_POR_INDICE[idx])?.label || ''
+}
+function semanaIndice(fecha, fechaInicioMeso) {
+  return Math.floor((new Date(fecha + 'T12:00:00') - new Date(fechaInicioMeso + 'T12:00:00')) / 86400000 / 7)
+}
+const COLOR_METODO = {
+  'RPE': '#F5A623', 'RIR': '#4A9EFF', '% de 1RM': '#C4F135', 'Peso fijo': '#8A8F9C', 'Otro': '#8A8F9C'
+}
+function colorMetodo(metodo) { return COLOR_METODO[metodo] || '#8A8F9C' }
 function recalcularPRs(sesiones) {
   const realizadas = sesiones.filter((s) => (s.estado || 'realizado') === 'realizado')
   const ordenadas = [...realizadas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.id).localeCompare(String(b.id)))
@@ -291,23 +308,46 @@ export default function Gimnasio() {
                         )}
 
                         {filasMeso.length > 0 && (
-                          <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-asphalt-700">
-                            {agruparPorFecha(filasMeso).map(([fecha, items]) => (
-                              <div key={fecha} className="flex flex-col gap-1">
-                                <p className="text-ink-faint text-[10px] uppercase">{fecha}</p>
-                                {items.map((s) =>
-                                  editandoId === s.id ? (
-                                    <FormGimnasio key={s.id} valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s} onGuardar={(datos) => actualizar(s.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
-                                  ) : (
-                                    <SesionMesocicloGymRow
-                                      key={s.id}
-                                      s={s}
-                                      onCargarDatos={() => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
-                                    />
-                                  )
-                                )}
-                              </div>
-                            ))}
+                          <div className="flex flex-col mt-3 pt-3 border-t border-asphalt-700">
+                            {(() => {
+                              const porFecha = agruparPorFechaAsc(filasMeso)
+                              return porFecha.map(([fecha, items], i) => {
+                                const semanaActual = semanaIndice(fecha, m.fecha_inicio)
+                                const semanaAnterior = i > 0 ? semanaIndice(porFecha[i - 1][0], m.fecha_inicio) : null
+                                const nuevaSemana = semanaActual !== semanaAnterior
+                                const fechasSemana = nuevaSemana ? porFecha.filter(([f]) => semanaIndice(f, m.fecha_inicio) === semanaActual).map(([f]) => f) : null
+                                const ejerciciosSemana = nuevaSemana ? fechasSemana.reduce((acc, f) => acc + filasMeso.filter((x) => x.fecha === f).length, 0) : null
+                                return (
+                                  <div key={fecha}>
+                                    {nuevaSemana && (
+                                      <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1.5`}>
+                                        <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                        <p className="text-ink-faint text-[11px]">{fechasSemana.length} sesiones · {ejerciciosSemana} ejercicios</p>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span className="text-ink-muted text-[11px]">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</span>
+                                      {items[0]?.es_clave && <span className="text-hiviz text-[11px]" title="Día clave">★</span>}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      {items.map((s) =>
+                                        editandoId === s.id ? (
+                                          <div key={s.id} className="pb-1.5">
+                                            <FormGimnasio valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s} onGuardar={(datos) => actualizar(s.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
+                                          </div>
+                                        ) : (
+                                          <SesionMesocicloGymRow
+                                            key={s.id}
+                                            s={s}
+                                            onCargarDatos={() => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                          />
+                                        )
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })
+                            })()}
                           </div>
                         )}
                       </div>
@@ -477,21 +517,23 @@ function MiniDato({ label, value, color = 'text-ink' }) {
 }
 
 function SesionMesocicloGymRow({ s, onCargarDatos }) {
+  const hecha = s.estado === 'realizado'
+  const metodo = s.metodo_prescrito
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1.5">
-        {s.es_clave && <span className="text-hiviz text-xs" title="Sesión clave">★</span>}
-        <div>
-          <p className="text-xs font-medium">{s.ejercicio}{s.estado === 'realizado' ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : s.series || s.reps ? ` — ${s.series || '—'}x${s.reps || '—'}` : ''}</p>
-          {s.estado === 'pendiente' && s.metodo_prescrito && (
-            <p className="text-ink-faint text-[10px]">{s.metodo_prescrito}: {s.valor_prescrito || '—'}</p>
-          )}
-        </div>
-      </div>
-      {s.estado === 'pendiente' ? (
-        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold whitespace-nowrap">Cargar resultado</button>
+    <div className="flex items-center gap-2 py-1.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 transition-colors">
+      {metodo ? (
+        <span className="text-[9px] font-bold w-11 h-5 flex-shrink-0 flex items-center justify-center rounded-md text-center leading-none" style={{ background: `${colorMetodo(metodo)}26`, color: colorMetodo(metodo) }}>{metodo}</span>
       ) : (
-        <span className="text-hiviz text-[11px]">✓ hecho</span>
+        <span className="w-11 h-5 flex-shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium truncate">{s.ejercicio}{hecha ? ` — ${s.series}x${s.reps} @ ${s.peso}kg` : s.series || s.reps ? ` — ${s.series || '—'}x${s.reps || '—'}` : ''}</p>
+        {!hecha && metodo && <p className="text-ink-faint text-[10px]">{metodo}: {s.valor_prescrito || '—'}</p>}
+      </div>
+      {hecha ? (
+        <span className="text-hiviz text-[11px] flex-shrink-0">{s.pr ? '🏆 PR' : '✓ hecho'}</span>
+      ) : (
+        <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">Cargar resultado</button>
       )}
     </div>
   )
