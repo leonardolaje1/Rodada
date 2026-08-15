@@ -6,6 +6,7 @@ import { useConfirm } from '../lib/ConfirmContext'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
+import { parsearPlanillaGimnasio } from '../lib/importarPlanilla'
 
 // Antes era una lista cerrada de 7 nombres (un <select>), lo que impedía cargar
 // planes reales con ejercicios de máquina/adaptados. Ahora es solo la lista de
@@ -182,16 +183,24 @@ export default function Gimnasio() {
     const file = e.target.files[0]; e.target.value = ''
     if (!file) return
     try {
-      const texto = await file.text()
-      const json = JSON.parse(texto)
-      if (!json.nombre || !Array.isArray(json.dias)) {
-        alertar('El JSON debe tener al menos "nombre" y "dias" (array de días con ejercicios y "porSemana").')
+      let json
+      if (/\.(xlsx|xls|csv)$/i.test(file.name)) {
+        json = await parsearPlanillaGimnasio(file)
+      } else if (/\.json$/i.test(file.name)) {
+        const texto = await file.text()
+        json = JSON.parse(texto)
+        if (!json.nombre || !Array.isArray(json.dias)) {
+          alertar('El JSON debe tener al menos "nombre" y "dias" (array de días con ejercicios y "porSemana").')
+          return
+        }
+      } else {
+        alertar('Formato no reconocido. Subí un .xlsx, .csv o .json.')
         return
       }
       await crearMesociclo(json)
       toast('Plan importado')
     } catch (err) {
-      alertar('No se pudo leer el archivo: ' + err.message)
+      alertar('No se pudo importar: ' + err.message)
     }
   }
   async function actualizarMesociclo(id, form) {
@@ -255,8 +264,8 @@ export default function Gimnasio() {
       {vista === 'planificacion' && (
         <div className="flex flex-col gap-3">
           <div className="flex justify-end gap-2">
-            <input ref={inputMesocicloRef} type="file" accept=".json,application/json" className="hidden" onChange={importarMesociclo} />
-            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (JSON)</button>
+            <input ref={inputMesocicloRef} type="file" accept=".json,application/json,.xlsx,.xls,.csv" className="hidden" onChange={importarMesociclo} />
+            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (Excel/JSON)</button>
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
           </div>
           {formMesoOpen && <FormMesociclo onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
