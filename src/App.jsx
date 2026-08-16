@@ -23,6 +23,7 @@ import NoEncontrado from './pages/NoEncontrado'
 import { useAuth } from './lib/useAuth'
 import { ToastProvider } from './lib/ToastContext'
 import { ConfirmProvider } from './lib/ConfirmContext'
+import ActualizacionDisponible from './components/ActualizacionDisponible'
 
 export default function App() {
   const { session, cargando, modoRecuperacion, setModoRecuperacion } = useAuth()
@@ -33,6 +34,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <ActualizacionDisponible />
       {cargando ? (
         <div className="min-h-screen flex items-center justify-center">
           <span className="text-ink-muted text-sm">Cargando…</span>
