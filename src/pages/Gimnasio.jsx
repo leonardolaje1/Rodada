@@ -535,11 +535,11 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
           <span className="text-[9px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full flex-shrink-0">{prsDelDia} PR{prsDelDia > 1 ? 's' : ''}</span>
         )}
         <span className="flex-1" />
-        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+        <span className="text-ink-faint text-[10px] flex-shrink-0">{abierto ? '▲' : '▼'}</span>
       </button>
 
-      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
-        <div className="collapse-inner px-4 pb-3 border-t border-asphalt-700 flex flex-col">
+      {abierto && (
+        <div className="px-4 pb-3 border-t border-asphalt-700 flex flex-col">
           {items.map((g) =>
             editandoId === g.id ? (
               <div key={g.id} className="py-2">
@@ -576,7 +576,7 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -593,13 +593,13 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
         {items[0]?.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Día clave">★</span>}
         <span className="flex-1" />
         <span className="text-ink-faint text-[11px] flex-shrink-0">{hechos}/{items.length} ejercicios</span>
-        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+        <span className="text-ink-faint text-[10px] flex-shrink-0">{abierto ? '▲' : '▼'}</span>
       </button>
-      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
-        <div className="collapse-inner pl-3 pb-2 flex flex-col">
+      {abierto && (
+        <div className="pl-3 pb-3 flex flex-col">
           {items.map((s) =>
             editandoId === s.id ? (
-              <div key={s.id} className="py-1.5">
+              <div key={s.id} className="py-2">
                 <FormGimnasio
                   valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
                   onGuardar={(datos) => onGuardarEdicion(s.id, datos)}
@@ -611,7 +611,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
             )
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
