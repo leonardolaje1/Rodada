@@ -56,6 +56,7 @@ export default function Calendario() {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null)
   const [cargando, setCargando] = useState(true)
   const [mostrarTodosConflictos, setMostrarTodosConflictos] = useState(false)
+  const [itemMoviendo, setItemMoviendo] = useState(null) // { id, tabla, fechaOrigen, label, color }
 
   // Datos para detectar oportunidades de mañana (independiente del mes que se esté mirando).
   const [entrenamientosHistorial, setEntrenamientosHistorial] = useState([])
@@ -122,6 +123,25 @@ export default function Calendario() {
     cargar()
   }
 
+  // Reprogramar manualmente: a diferencia de aplicarSugerencia (que solo actúa
+  // cuando el motor de conflictos detectó algo), esto lo puede disparar el
+  // usuario en cualquier momento desde cualquier ítem real (no desde sesiones
+  // planificadas por plantilla, que no tienen fila propia en la base).
+  function abrirMover(item, tabla, label, color) {
+    setItemMoviendo({ id: item.id, tabla, fechaOrigen: item.fecha, label, color })
+  }
+  function cerrarMover() { setItemMoviendo(null) }
+
+  async function moverItem(fechaDestino) {
+    if (!itemMoviendo) return
+    const { error } = await supabase.from(itemMoviendo.tabla).update({ fecha: fechaDestino }).eq('id', itemMoviendo.id)
+    if (error) { toast('No se pudo mover: ' + error.message); return }
+    toast('Movido a ' + fechaDestino)
+    setDiaSeleccionado(fechaDestino)
+    setItemMoviendo(null)
+    cargar()
+  }
+
   const conflictos = detectarConflictosCalendario({ entrenamientos, gimnasio })
   const conflictosPorFecha = {}
   for (const c of conflictos) { (conflictosPorFecha[c.fecha] ||= []).push(c) }
@@ -173,6 +193,27 @@ export default function Calendario() {
   const infoSeleccionado = diaSeleccionado
     ? itemsDelDia(diaSeleccionado, DIA_POR_INDICE[new Date(diaSeleccionado + 'T12:00:00').getDay()])
     : null
+
+  // Próximos N días desde fechaOrigen, marcando si ya tienen algo cargado.
+  // Nota: la ocupación solo es precisa dentro del rango ya cargado por
+  // cargar() (el mes visible + semanas de relleno); fuera de ese rango
+  // simplemente no muestra el aviso, no bloquea el movimiento.
+  function proximosDias(fechaOrigen, n = 14) {
+    const inicio = new Date(fechaOrigen + 'T12:00:00')
+    const out = []
+    for (let i = 0; i < n; i++) {
+      const d = new Date(inicio); d.setDate(d.getDate() + i)
+      const fecha = aFecha(d)
+      const { ents, gyms, comps, mants } = itemsDelDia(fecha, DIA_POR_INDICE[d.getDay()])
+      out.push({
+        fecha,
+        dow: DIAS_CORTOS[d.getDay()],
+        diaMes: d.getDate(),
+        ocupado: ents.length + gyms.length + comps.length + mants.length > 0
+      })
+    }
+    return out
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -277,13 +318,15 @@ export default function Calendario() {
               {infoSeleccionado.ents.map((e) => (
                 <div key={e.id} className="flex items-center gap-2">
                   <i className="w-2 h-2 rounded-full bg-hiviz inline-block flex-shrink-0" />
-                  <p className="text-sm">{e.tipo}{e.ruta ? ` — ${e.ruta}` : ''} {e.km ? `· ${e.km} km` : ''}</p>
+                  <p className="text-sm flex-1 min-w-0">{e.tipo}{e.ruta ? ` — ${e.ruta}` : ''} {e.km ? `· ${e.km} km` : ''}</p>
+                  <button onClick={() => abrirMover(e, 'entrenamientos', e.tipo, '#EB642A')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
                 </div>
               ))}
               {infoSeleccionado.gyms.map((g) => (
                 <div key={g.id} className="flex items-center gap-2">
                   <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: '#C34AF1' }} />
-                  <p className="text-sm">{g.ejercicio}{g.estado === 'pendiente' ? ' · Pendiente' : g.peso ? ` · ${g.peso} kg` : ''}</p>
+                  <p className="text-sm flex-1 min-w-0">{g.ejercicio}{g.estado === 'pendiente' ? ' · Pendiente' : g.peso ? ` · ${g.peso} kg` : ''}</p>
+                  <button onClick={() => abrirMover(g, 'gimnasio', g.ejercicio, '#C34AF1')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
                 </div>
               ))}
               {infoSeleccionado.gymPlanificado && (
@@ -301,7 +344,8 @@ export default function Calendario() {
               {infoSeleccionado.mants.map((m) => (
                 <div key={m.id} className="flex items-center gap-2">
                   <i className="w-2 h-2 rounded-full bg-route inline-block flex-shrink-0" />
-                  <p className="text-sm">{m.tipo}</p>
+                  <p className="text-sm flex-1 min-w-0">{m.tipo}</p>
+                  <button onClick={() => abrirMover(m, 'mantenimientos', m.tipo, '#4A9EFF')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
                 </div>
               ))}
               {infoSeleccionado.sesionesPlanificadas.map((s, i) => (
@@ -316,6 +360,43 @@ export default function Calendario() {
           )}
 
           <Link to="/entrenamientos" className="text-hiviz text-xs mt-3 inline-block">Ir a Entrenamientos →</Link>
+        </div>
+      )}
+
+      {itemMoviendo && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={cerrarMover}>
+          <div className="card w-full sm:max-w-sm rounded-b-none sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="label-eyebrow">Mover sesión</span>
+                <p className="text-sm font-semibold mt-1 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: itemMoviendo.color }} />
+                  {itemMoviendo.label}
+                </p>
+              </div>
+              <button onClick={cerrarMover} className="text-ink-faint text-lg leading-none">✕</button>
+            </div>
+            <div className="grid grid-cols-7 gap-1.5 mt-4">
+              {proximosDias(itemMoviendo.fechaOrigen).map((d) => {
+                const esOrigen = d.fecha === itemMoviendo.fechaOrigen
+                return (
+                  <button
+                    key={d.fecha}
+                    disabled={esOrigen}
+                    onClick={() => moverItem(d.fecha)}
+                    className={`relative border rounded-lg py-2 flex flex-col items-center gap-0.5 border-asphalt-700 ${esOrigen ? 'opacity-30 cursor-default' : 'hover:border-hiviz transition-colors'}`}
+                  >
+                    <span className="text-[9px] uppercase text-ink-faint">{d.dow}</span>
+                    <span className="text-sm font-semibold">{d.diaMes}</span>
+                    {d.ocupado && !esOrigen && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-alert-amber" />}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-ink-faint text-[11px] mt-3 leading-relaxed">
+              Tocá el día al que querés moverla. <span className="text-alert-amber">●</span> = ese día ya tiene algo planificado — no bloquea, es solo un aviso.
+            </p>
+          </div>
         </div>
       )}
     </div>
