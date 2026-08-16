@@ -558,7 +558,6 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
       </button>
       <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
         <div className="collapse-inner pl-3 pb-2 flex flex-col">
-          <p className="text-alert-red text-[10px] font-mono">DEBUG items={items.length} ids={JSON.stringify(items.map((s) => s.id))} primero={items[0] ? JSON.stringify({ ejercicio: items[0].ejercicio, estado: items[0].estado }) : 'N/A'}</p>
           {items.map((s) =>
             editandoId === s.id ? (
               <div key={s.id} className="py-1.5">
