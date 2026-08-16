@@ -415,45 +415,22 @@ export default function Gimnasio() {
               descripcion="Cargá un ejercicio suelto o registrá desde tu planificación."
             />
           ) : (
-            <div className="flex flex-col gap-5">
-              {porDia.map(([fecha, items]) => (
-                <div key={fecha}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold">{fecha}</span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {items.map((g) =>
-                      editandoId === g.id ? (
-                        <FormGimnasio key={g.id} valoresIniciales={valoresEdicion && valoresEdicion.id === g.id ? valoresEdicion : g} onGuardar={(datos) => actualizar(g.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
-                      ) : (
-                        <div key={g.id} className={`card flex items-center justify-between ${g.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
-                          <div className="flex items-center gap-2">
-                            {g.estado === 'pendiente' && <i className="w-2 h-2 rounded-full border border-ink-faint inline-block flex-shrink-0" title="Pendiente" />}
-                            {g.es_clave && <span className="text-hiviz" title="Sesión clave">★</span>}
-                            <div>
-                              <p className="font-medium text-sm">{g.ejercicio} {prsPorId[g.id] && <span className="text-[10px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1">PR</span>}</p>
-                              {g.estado === 'pendiente' && <p className="text-ink-faint text-[11px]">Pendiente</p>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {g.estado === 'realizado' && (
-                              <div className="flex gap-3 text-right">
-                                <MiniDato label="series" value={g.series} /><MiniDato label="reps" value={g.reps} /><MiniDato label="kg" value={g.peso} color="text-hiviz" />
-                              </div>
-                            )}
-                            <div className="flex gap-1">
-                              {g.estado === 'pendiente' && (
-                                <button onClick={() => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }} className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1">Cargar resultado</button>
-                              )}
-                              <button onClick={() => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                              <button onClick={async () => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(g.id) }} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
+            <div className="flex flex-col gap-2">
+              {porDia.map(([fecha, items], i) => (
+                <BloqueDiaRegistro
+                  key={fecha}
+                  fecha={fecha}
+                  items={items}
+                  abiertoPorDefecto={i === 0}
+                  prsPorId={prsPorId}
+                  editandoId={editandoId}
+                  valoresEdicion={valoresEdicion}
+                  onGuardarEdicion={(id, datos) => actualizar(id, datos)}
+                  onCancelarEdicion={() => { setEditandoId(null); setValoresEdicion(null) }}
+                  onCargarResultado={(g) => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }}
+                  onEditar={(g) => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }}
+                  onBorrar={async (id) => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(id) }}
+                />
               ))}
             </div>
           )}
@@ -540,6 +517,77 @@ export default function Gimnasio() {
 
 function MiniDato({ label, value, color = 'text-ink' }) {
   return <div><p className={`readout text-sm font-semibold ${color}`}>{value}</p><p className="text-ink-muted text-[10px] uppercase">{label}</p></div>
+}
+
+// Un día de Registro, colapsado por defecto (salvo el más reciente). Antes cada
+// ejercicio se pintaba como su propia .card completa — con 5-6 ejercicios por
+// sesión eso competía visualmente al mismo nivel que el día. Acá el día es el
+// contenedor colapsable y los ejercicios son filas compactas adentro.
+function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarResultado, onEditar, onBorrar }) {
+  const [abierto, setAbierto] = useState(!!abiertoPorDefecto)
+  const hechos = items.filter((g) => g.estado === 'realizado').length
+  const todosHechos = hechos === items.length
+  const pendientes = items.filter((g) => g.estado === 'pendiente')
+  const prsDelDia = items.filter((g) => prsPorId[g.id]).length
+  const esClave = items.some((g) => g.es_clave)
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors">
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: todosHechos ? '#C4F135' : hechos > 0 ? '#F5A623' : '#565B68' }} />
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm font-semibold">{fecha}</span>
+          <span className="text-ink-faint text-[11px]">{hechos}/{items.length} ejercicios{esClave ? ' · día clave' : ''}</span>
+        </div>
+        {esClave && <span className="text-hiviz text-xs flex-shrink-0" title="Día clave">★</span>}
+        {prsDelDia > 0 && (
+          <span className="text-[9px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full flex-shrink-0">{prsDelDia} PR{prsDelDia > 1 ? 's' : ''}</span>
+        )}
+        <span className="flex-1" />
+        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+      </button>
+
+      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
+        <div className="collapse-inner px-4 pb-3 border-t border-asphalt-700 flex flex-col">
+          {items.map((g) =>
+            editandoId === g.id ? (
+              <div key={g.id} className="py-2">
+                <FormGimnasio valoresIniciales={valoresEdicion && valoresEdicion.id === g.id ? valoresEdicion : g} onGuardar={(datos) => onGuardarEdicion(g.id, datos)} onCancelar={onCancelarEdicion} />
+              </div>
+            ) : (
+              <div key={g.id} className="flex items-center gap-2.5 py-2 border-b border-asphalt-700/60 last:border-0">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate">
+                    {g.ejercicio}
+                    {prsPorId[g.id] && <span className="text-[9px] font-bold text-asphalt-950 bg-hiviz px-1.5 py-0.5 rounded-full ml-1.5 align-middle">PR</span>}
+                  </p>
+                  {g.estado === 'pendiente' && <p className="text-ink-faint text-[10px] mt-0.5">Pendiente</p>}
+                </div>
+                {g.estado === 'realizado' ? (
+                  <div className="flex gap-2.5 text-right flex-shrink-0">
+                    <MiniDato label="series" value={g.series} /><MiniDato label="reps" value={g.reps} /><MiniDato label="kg" value={g.peso} color="text-hiviz" />
+                  </div>
+                ) : (
+                  <button onClick={() => onCargarResultado(g)} className="text-hiviz text-[11px] font-semibold border border-hiviz rounded-lg px-2 py-1 flex-shrink-0">Cargar resultado</button>
+                )}
+                <div className="flex gap-1 flex-shrink-0">
+                  <button onClick={() => onEditar(g)} title="Editar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted">✎</button>
+                  <button onClick={() => onBorrar(g.id)} title="Borrar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-alert-red hover:border-alert-red">🗑</button>
+                </div>
+              </div>
+            )
+          )}
+          {pendientes.length > 0 && (
+            <div className="flex justify-end pt-2">
+              <button onClick={() => onCargarResultado(pendientes[0])} className="text-ink-muted text-[11px] font-semibold border border-dashed border-asphalt-600 rounded-lg px-2.5 py-1.5 hover:text-hiviz hover:border-hiviz">
+                Marcar día completo ({pendientes.length} pendiente{pendientes.length > 1 ? 's' : ''})
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
