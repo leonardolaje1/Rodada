@@ -520,36 +520,24 @@ function MiniDato({ label, value, color = 'text-ink' }) {
 }
 
 function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
-  const [abierto, setAbierto] = useState(false)
-  const hechos = items.filter((s) => s.estado === 'realizado').length
-  const todosHechos = hechos === items.length
   return (
-    <div className="border-b border-asphalt-800 last:border-0">
-      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full flex items-center gap-2 py-2.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors text-left">
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: todosHechos ? '#C4F135' : hechos > 0 ? '#F5A623' : '#565B68' }} />
-        <span className="text-xs font-medium">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</span>
-        {items[0]?.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Día clave">★</span>}
-        <span className="flex-1" />
-        <span className="text-ink-faint text-[11px] flex-shrink-0">{hechos}/{items.length} ejercicios</span>
-        <span className="text-ink-faint text-[10px] flex-shrink-0">{abierto ? '▲' : '▼'}</span>
-      </button>
-      {abierto && (
-        <div className="pl-3 pb-3 flex flex-col">
-          {items.map((s) =>
-            editandoId === s.id ? (
-              <div key={s.id} className="py-2">
-                <FormGimnasio
-                  valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
-                  onGuardar={(datos) => onGuardarEdicion(s.id, datos)}
-                  onCancelar={onCancelarEdicion}
-                />
-              </div>
-            ) : (
-              <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} />
-            )
-          )}
-        </div>
-      )}
+    <div className="border-b border-asphalt-800 last:border-0 py-2">
+      <p className="text-xs font-medium px-1">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</p>
+      <div className="pl-1 pt-1 flex flex-col">
+        {items.map((s) =>
+          editandoId === s.id ? (
+            <div key={s.id} className="py-2">
+              <FormGimnasio
+                valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
+                onGuardar={(datos) => onGuardarEdicion(s.id, datos)}
+                onCancelar={onCancelarEdicion}
+              />
+            </div>
+          ) : (
+            <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} />
+          )
+        )}
+      </div>
     </div>
   )
 }
