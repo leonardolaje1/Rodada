@@ -4,6 +4,7 @@ import { usePremium } from '../lib/usePremium'
 import Avatar from '../components/Avatar'
 import IconoInsignia from '../components/IconoInsignia'
 import { Settings } from 'lucide-react'
+import { useToast } from '../lib/ToastContext'
 
 const TABLAS = [
   'bicicletas',
@@ -12,16 +13,24 @@ const TABLAS = [
   'bike_fitting',
   'entrenamientos',
   'planes_entrenamiento',
+  'mesociclos',
+  'registros_potencia',
   'metricas_diarias',
+  'insights_historial',
   'mantenimientos',
   'objetivos',
   'competencias',
   'perfil_nutricional',
+  'peso_historial',
+  'antropometria',
   'comidas',
   'hidratacion',
   'suplementos',
+  'planes_nutricion',
+  'documentos_nutricion',
   'gimnasio',
-  'planes_gimnasio'
+  'planes_gimnasio',
+  'mesociclos_gimnasio'
 ]
 
 // Orden de restauración: las tablas que otras referencian van primero,
@@ -30,23 +39,49 @@ const ORDEN_RESTAURAR = [
   'bicicletas',
   'planes_entrenamiento',
   'planes_gimnasio',
+  'competencias',
+  'mesociclos',
+  'mesociclos_gimnasio',
   'componentes',
   'desgaste_componentes',
   'bike_fitting',
   'entrenamientos',
   'gimnasio',
+  'registros_potencia',
   'mantenimientos',
   'metricas_diarias',
+  'insights_historial',
   'comidas',
   'hidratacion',
   'suplementos',
+  'peso_historial',
+  'antropometria',
+  'planes_nutricion',
+  'documentos_nutricion',
   'perfil_nutricional',
-  'objetivos',
-  'competencias'
+  'objetivos'
 ]
 
 export default function Configuracion() {
+  const toast = useToast()
   const { plan, esPremium, cargando: cargandoPlan } = usePremium()
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [confirmarPassword, setConfirmarPassword] = useState('')
+  const [cambiandoPassword, setCambiandoPassword] = useState(false)
+  const [errorPassword, setErrorPassword] = useState('')
+
+  async function cambiarPassword(e) {
+    e.preventDefault()
+    setErrorPassword('')
+    if (nuevaPassword.length < 6) { setErrorPassword('La contraseña tiene que tener al menos 6 caracteres.'); return }
+    if (nuevaPassword !== confirmarPassword) { setErrorPassword('Las contraseñas no coinciden.'); return }
+    setCambiandoPassword(true)
+    const { error } = await supabase.auth.updateUser({ password: nuevaPassword })
+    setCambiandoPassword(false)
+    if (error) { setErrorPassword(error.message); return }
+    setNuevaPassword(''); setConfirmarPassword('')
+    toast('Contraseña actualizada')
+  }
   const [usuario, setUsuario] = useState(null)
   const [subiendoAvatar, setSubiendoAvatar] = useState(false)
   const [errorAvatar, setErrorAvatar] = useState('')
@@ -265,6 +300,39 @@ export default function Configuracion() {
           </div>
         </div>
         {errorAvatar && <p className="text-alert-red text-xs mt-2.5">{errorAvatar}</p>}
+      </div>
+
+      <div className="card">
+        <span className="label-eyebrow">Cambiar contraseña</span>
+        <form onSubmit={cambiarPassword} className="flex flex-col gap-3 mt-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink-muted text-xs">Nueva contraseña</span>
+            <input
+              type="password"
+              value={nuevaPassword}
+              onChange={(e) => setNuevaPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-ink-muted text-xs">Repetir contraseña</span>
+            <input
+              type="password"
+              value={confirmarPassword}
+              onChange={(e) => setConfirmarPassword(e.target.value)}
+              className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink"
+            />
+          </label>
+          {errorPassword && <p className="text-alert-red text-xs">{errorPassword}</p>}
+          <button
+            type="submit"
+            disabled={cambiandoPassword}
+            className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg self-start disabled:opacity-60"
+          >
+            {cambiandoPassword ? 'Guardando…' : 'Actualizar contraseña'}
+          </button>
+        </form>
       </div>
 
       <div className="card">
