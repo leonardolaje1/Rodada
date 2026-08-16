@@ -1253,6 +1253,30 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
   )
 }
 
+// El texto de comentarios suele seguir el patrón "<tramo> → <tramo> → <tramo>. <notas>."
+// generado al importar/crear el mesociclo (ej: "10' Z1 progresivo → 30' Z1 continuo → 5'
+// vuelta calma. Cadencia 90-95 rpm. RPE objetivo 1-2."). Esta función separa la cadena de
+// tramos (para mostrarla como pasos) de las notas técnicas que vienen después. Si el texto
+// no tiene flechas (comentario libre), devuelve pasos vacío y todo el texto queda en notas.
+function extraerPasosSesion(comentarios) {
+  if (!comentarios) return { pasos: [], notas: '' }
+  const idxUltimaFlecha = comentarios.lastIndexOf('→')
+  if (idxUltimaFlecha === -1) return { pasos: [], notas: comentarios }
+  const idxFinCadena = comentarios.indexOf('. ', idxUltimaFlecha)
+  const finCadena = idxFinCadena === -1 ? comentarios.length : idxFinCadena + 1
+  const cadena = comentarios.slice(0, finCadena)
+  const notas = comentarios.slice(finCadena).trim()
+  const pasos = cadena.replace(/\.$/, '').split('→').map((p) => p.trim()).filter(Boolean)
+  return { pasos, notas }
+}
+
+// Separa el tramo en duración (chip, ej. "10'" o "2×8'") y descripción, cuando el tramo
+// arranca con ese patrón. Si no matchea (ej. "resto Z2 hasta completar"), no hay chip.
+function partirTramo(paso) {
+  const m = paso.match(/^([0-9]+(?:[×x][0-9]+)?')\s*(.*)$/)
+  return m ? { dur: m[1], texto: m[2] } : { dur: null, texto: paso }
+}
+
 function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
   const [abierto, setAbierto] = useState(false)
   const hecha = s.estado === 'realizado'
@@ -1261,6 +1285,8 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
   const detalle = hecha
     ? [s.km ? `${s.km} km` : null, s.duracion_min ? `${s.duracion_min} min` : null, s.tss ? `${s.tss} TSS` : null].filter(Boolean).join(' · ')
     : s.duracion_min ? `${s.duracion_min}'` : null
+  const { pasos, notas } = extraerPasosSesion(s.comentarios)
+  const resumen = pasos.length > 0 ? partirTramo(pasos[0]).texto : s.comentarios
 
   return (
     <div className="border-b border-asphalt-800 last:border-0">
@@ -1271,16 +1297,40 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
           <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md bg-asphalt-700 text-ink-faint">{s.tipo.slice(0, 2).toUpperCase()}</span>
         )}
         <span className="text-ink-muted text-[11px] w-14 flex-shrink-0">{diaLabelDeFecha(s.fecha)} {fmtFecha(s.fecha)}</span>
-        <span className="text-xs font-medium truncate min-w-0">{s.tipo}{s.comentarios ? ` — ${s.comentarios}` : ''}</span>
-        <span className="flex-1" />
+        <span className="min-w-0 flex-1 flex items-baseline gap-1.5">
+          <span className="text-xs font-medium flex-shrink-0">{s.tipo}</span>
+          {resumen && <span className="text-ink-faint text-[11px] truncate">{resumen}{pasos.length > 1 ? ` +${pasos.length - 1}` : ''}</span>}
+        </span>
         {s.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Sesión clave">★</span>}
         {detalle && <span className="text-ink-faint text-[11px] flex-shrink-0 hidden sm:inline">{detalle}</span>}
         <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
       </button>
 
       <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
-        <div className="collapse-inner pl-10 pb-2.5 flex flex-col gap-1.5">
-          {s.comentarios && <p className="text-ink-muted text-[11px] leading-relaxed">{s.comentarios}</p>}
+        <div className="collapse-inner pl-10 pb-2.5 flex flex-col gap-2">
+          {pasos.length > 0 ? (
+            <div className="flex flex-col">
+              {pasos.map((paso, i) => {
+                const { dur, texto } = partirTramo(paso)
+                return (
+                  <div key={i} className="flex gap-2.5">
+                    <div className="flex flex-col items-center flex-shrink-0 w-9">
+                      {dur ? (
+                        <span className="text-hiviz font-mono text-[10px] font-semibold leading-tight">{dur}</span>
+                      ) : (
+                        <span className="w-1 h-1 rounded-full bg-asphalt-600 mt-1.5" />
+                      )}
+                      {i < pasos.length - 1 && <span className="w-px flex-1 bg-asphalt-700 mt-1 mb-0.5" />}
+                    </div>
+                    <p className="text-ink-muted text-[11px] leading-snug pb-2">{texto}</p>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            s.comentarios && <p className="text-ink-muted text-[11px] leading-relaxed">{s.comentarios}</p>
+          )}
+          {pasos.length > 0 && notas && <p className="text-ink-faint text-[10px] leading-relaxed">{notas}</p>}
           {hecha && detalle && <p className="text-ink-faint text-[11px] sm:hidden">{detalle}</p>}
           <div className="flex items-center gap-3">
             {s.estado === 'pendiente' ? (
