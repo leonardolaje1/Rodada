@@ -259,7 +259,8 @@ export default function Gimnasio() {
     cargar()
   }
 
-  const porDia = agruparPorFecha(sesiones)
+  const sueltos = sesiones.filter((s) => !s.mesociclo_gimnasio_id)
+  const porDia = agruparPorFecha(sueltos)
   const hoy = new Date().toISOString().slice(0, 10)
   const hoyStr = hoy
 
@@ -283,25 +284,42 @@ export default function Gimnasio() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['planificacion', 'Planificación'], ['registro', 'Registro'], ['objetivos', 'Objetivos'], ['records', 'Récords']].map(([id, label]) => (
+        {[['planificacion', 'Planificación'], ['objetivos', 'Objetivos'], ['records', 'Récords']].map(([id, label]) => (
           <button key={id} onClick={() => setVista(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${vista === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>{label}</button>
         ))}
       </div>
 
       {vista === 'planificacion' && (
         <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {PRS_DESTACADOS.map((ej) => {
+              const info = pesosMaximosPorEjercicio[ej]
+              return (
+                <div key={ej} className="card border-hiviz">
+                  <span className="label-eyebrow">{ej}</span>
+                  <p className="readout text-xl font-bold text-hiviz mt-1">{info ? `${info.peso} kg` : '—'}</p>
+                  {info && <p className="text-ink-faint text-xs mt-0.5">{info.fecha}</p>}
+                </div>
+              )
+            })}
+          </div>
+
           <div className="flex flex-wrap justify-end gap-2">
             <input ref={inputMesocicloRef} type="file" accept=".json,application/json,.xlsx,.xls,.csv" className="hidden" onChange={importarMesociclo} />
-            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => inputMesocicloRef.current?.click()}>Importar plan (Excel/JSON)</button>
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
+            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => { setFormOpen(false); inputMesocicloRef.current?.click() }}>Importar plan (Excel/JSON)</button>
+            <button className="text-ink-muted text-sm px-4 py-2 border border-asphalt-700 rounded-lg" onClick={() => { setFormMesoOpen(false); setEditandoId(null); setValoresEdicion(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
+            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setFormOpen(false); setMesoEditando(null); setFormMesoOpen((v) => !v) }}>+ Mesociclo</button>
           </div>
           {formMesoOpen && <FormMesociclo onGuardar={crearMesociclo} onCancelar={() => setFormMesoOpen(false)} />}
+          {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
 
-          {mesociclos.length === 0 ? (
+          {cargando ? (
+            <SkeletonList rows={4} />
+          ) : mesociclos.length === 0 ? (
             <EstadoVacio
               Icono={Dumbbell}
               titulo="Sin mesociclos todavía"
-              descripcion="Armá tu bloque de 4 semanas con los días y ejercicios de cada uno."
+              descripcion="Armá tu bloque de 4 semanas con los días y ejercicios de cada uno, o cargá un ejercicio suelto arriba."
             />
           ) : (
             <div className="flex flex-col gap-2">
@@ -369,6 +387,8 @@ export default function Gimnasio() {
                                       onGuardarEdicion={(id, datos) => actualizar(id, datos)}
                                       onCancelarEdicion={() => { setEditandoId(null); setValoresEdicion(null) }}
                                       onCargarDatos={(s) => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
+                                      onEditar={(s) => { setFormOpen(false); setValoresEdicion(null); setEditandoId(s.id) }}
+                                      onBorrar={async (id) => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(id) }}
                                     />
                                   </div>
                                 )
@@ -383,45 +403,16 @@ export default function Gimnasio() {
               )}
             </div>
           )}
-        </div>
-      )}
 
-      {vista === 'registro' && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {PRS_DESTACADOS.map((ej) => {
-              const info = pesosMaximosPorEjercicio[ej]
-              return (
-                <div key={ej} className="card border-hiviz">
-                  <span className="label-eyebrow">{ej}</span>
-                  <p className="readout text-xl font-bold text-hiviz mt-1">{info ? `${info.peso} kg` : '—'}</p>
-                  {info && <p className="text-ink-faint text-xs mt-0.5">{info.fecha}</p>}
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setEditandoId(null); setValoresEdicion(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
-          </div>
-          {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
-
-          {cargando ? (
-            <SkeletonList rows={4} />
-          ) : porDia.length === 0 ? (
-            <EstadoVacio
-              Icono={Dumbbell}
-              titulo="Sin sesiones registradas"
-              descripcion="Cargá un ejercicio suelto o registrá desde tu planificación."
-            />
-          ) : (
-            <div className="flex flex-col gap-2">
+          {porDia.length > 0 && (
+            <div className="flex flex-col gap-2 mt-2">
+              <span className="label-eyebrow">Ejercicios sueltos (sin mesociclo)</span>
               {porDia.map(([fecha, items], i) => (
                 <BloqueDiaRegistro
                   key={fecha}
                   fecha={fecha}
                   items={items}
-                  abiertoPorDefecto={i === 0}
+                  abiertoPorDefecto={i === 0 && mesociclos.length === 0}
                   prsPorId={prsPorId}
                   editandoId={editandoId}
                   valoresEdicion={valoresEdicion}
@@ -434,7 +425,7 @@ export default function Gimnasio() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {vista === 'objetivos' && (
@@ -590,7 +581,7 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
   )
 }
 
-function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
+function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos, onEditar, onBorrar }) {
   const [abierto, setAbierto] = useState(false)
   const hechos = items.filter((s) => s.estado === 'realizado').length
   const todosHechos = hechos === items.length
@@ -616,7 +607,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
                 />
               </div>
             ) : (
-              <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} />
+              <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} onEditar={() => onEditar(s)} onBorrar={() => onBorrar(s.id)} />
             )
           )}
         </div>
@@ -625,7 +616,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
   )
 }
 
-function SesionMesocicloGymRow({ s, onCargarDatos }) {
+function SesionMesocicloGymRow({ s, onCargarDatos, onEditar, onBorrar }) {
   const hecha = s.estado === 'realizado'
   const metodo = s.metodo_prescrito
   const esNota = !metodo || metodo === 'Otro'
@@ -658,6 +649,10 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
       ) : (
         <button onClick={onCargarDatos} className="text-hiviz text-[11px] font-semibold flex-shrink-0 whitespace-nowrap">Cargar</button>
       )}
+      <div className="flex gap-1 flex-shrink-0">
+        <button onClick={onEditar} title="Editar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted">✎</button>
+        <button onClick={onBorrar} title="Borrar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-alert-red hover:border-alert-red">🗑</button>
+      </div>
     </div>
   )
 }
