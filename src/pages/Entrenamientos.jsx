@@ -47,7 +47,6 @@ const TIPOS_TEST_FTP = [
   { id: 'otro', label: 'Otro' }
 ]
 
-function diaIdDeHoy() { return DIA_POR_INDICE[new Date().getDay()] }
 function fmtFecha(f) { const [, m, d] = f.split('-'); return `${d}/${m}` }
 function diaLabelDeFecha(f) {
   const idx = new Date(f + 'T12:00:00').getDay()
@@ -107,7 +106,6 @@ export default function Entrenamientos() {
   const [vista, setVista] = useState('registro')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
-  const [planes, setPlanes] = useState([])
   const [objetivos, setObjetivos] = useState([])
   const [ftpHistorial, setFtpHistorial] = useState([])
   const [cargando, setCargando] = useState(true)
@@ -116,8 +114,6 @@ export default function Entrenamientos() {
   const [valoresEdicion, setValoresEdicion] = useState(null)
   const [valoresImportados, setValoresImportados] = useState(null)
   const [errorImport, setErrorImport] = useState('')
-  const [formPlanOpen, setFormPlanOpen] = useState(false)
-  const [planEditando, setPlanEditando] = useState(null)
   const [formObjetivoOpen, setFormObjetivoOpen] = useState(false)
   const [formFtpOpen, setFormFtpOpen] = useState(false)
   const [ftpEditando, setFtpEditando] = useState(null)
@@ -132,10 +128,9 @@ export default function Entrenamientos() {
 
   async function cargar() {
     setCargando(true)
-    const [{ data: ents }, { data: bicis }, { data: pls }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
+    const [{ data: ents }, { data: bicis }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
       supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
       supabase.from('bicicletas').select('id, nombre'),
-      supabase.from('planes_entrenamiento').select('*').eq('activo', true).order('created_at', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'entrenamiento').order('created_at', { ascending: false }),
       supabase.from('ftp_historial').select('*').order('fecha', { ascending: true }),
       supabase.from('mesociclos').select('*').order('fecha_inicio', { ascending: true }),
@@ -144,7 +139,6 @@ export default function Entrenamientos() {
     ])
     setLista(ents || [])
     setBicicletas(bicis || [])
-    setPlanes(pls || [])
     setObjetivos(objs || [])
     setFtpHistorial(ftps || [])
     setMesociclos(mesos || [])
@@ -261,15 +255,6 @@ export default function Entrenamientos() {
     } catch (err) { setErrorImport(err.message) }
   }
 
-  async function crearPlan(form) { await supabase.from('planes_entrenamiento').insert(form); setFormPlanOpen(false); cargar() }
-  async function actualizarPlan(id, form) { await supabase.from('planes_entrenamiento').update(form).eq('id', id); setPlanEditando(null); cargar() }
-  async function borrarPlan(id) { await supabase.from('planes_entrenamiento').update({ activo: false }).eq('id', id); cargar() }
-
-  function registrarSesionDeHoy(plan, sesion) {
-    setValoresImportados({ tipo: sesion.tipo, duracion_min: sesion.duracion_min, comentarios: sesion.descripcion || '', plan_id: plan.id, estado: 'realizado' })
-    setEditandoId(null); setMostrarForm(true)
-  }
-
   async function crearObjetivo(form) {
     await supabase.from('objetivos').insert({ ...form, categoria: 'entrenamiento', estado: 'activo', valor_actual: 0 })
     setFormObjetivoOpen(false); cargar()
@@ -350,10 +335,7 @@ export default function Entrenamientos() {
   }
 
   const nombreBici = (id) => bicicletas.find((b) => b.id === id)?.nombre || null
-  const nombrePlan = (id) => planes.find((p) => p.id === id)?.nombre || null
   const porDia = agruparPorFecha(lista)
-  const hoyId = diaIdDeHoy()
-  const sesionesHoy = planes.flatMap((p) => (p.sesiones || []).filter((s) => s.dia === hoyId).map((s) => ({ plan: p, sesion: s })))
 
   const realizados = lista.filter((e) => e.estado === 'realizado')
   const kmAnualesActual = realizados
@@ -388,7 +370,7 @@ export default function Entrenamientos() {
       </div>
 
       <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-        {[['temporada', 'Mesociclo'], ['planes', 'Planes'], ['registro', 'Registro'], ['ftp', 'FTP y zonas'], ['records', 'Récords']].map(([id, label]) => (
+        {[['temporada', 'Mesociclo'], ['registro', 'Registro'], ['ftp', 'FTP y zonas'], ['records', 'Récords']].map(([id, label]) => (
           <button key={id} onClick={() => setVista(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${vista === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
             {label}
           </button>
@@ -397,23 +379,6 @@ export default function Entrenamientos() {
 
       {vista === 'registro' && (
         <>
-          {sesionesHoy.length > 0 && (
-            <div className="card">
-              <span className="label-eyebrow">Plan de hoy</span>
-              <div className="flex flex-col gap-2 mt-2.5">
-                {sesionesHoy.map(({ plan, sesion }, i) => (
-                  <button key={i} onClick={() => registrarSesionDeHoy(plan, sesion)} className="flex items-center justify-between border border-asphalt-700 rounded-lg px-3 py-2 text-left hover:border-hiviz">
-                    <div>
-                      <p className="text-sm font-medium">{sesion.tipo}{sesion.duracion_min ? ` — ${sesion.duracion_min} min` : ''}</p>
-                      <p className="text-ink-muted text-xs">{plan.nombre}{sesion.descripcion ? ` · ${sesion.descripcion}` : ''}</p>
-                    </div>
-                    <span className="text-hiviz text-xs font-semibold">+ Registrar</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center justify-end gap-2">
             <button onClick={() => inputArchivoRef.current?.click()} className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-3 py-2 rounded-lg hover:text-ink">
               Importar FIT/GPX/TCX
@@ -427,7 +392,7 @@ export default function Entrenamientos() {
           {errorImport && <div className="card border-alert-red text-sm text-alert-red">{errorImport}</div>}
 
           {mostrarForm && (
-            <FormEntrenamiento bicicletas={bicicletas} planes={planes} valoresIniciales={valoresImportados} onGuardar={crear} onCancelar={() => { setMostrarForm(false); setValoresImportados(null) }} />
+            <FormEntrenamiento bicicletas={bicicletas} valoresIniciales={valoresImportados} onGuardar={crear} onCancelar={() => { setMostrarForm(false); setValoresImportados(null) }} />
           )}
 
           {cargando ? (
@@ -454,7 +419,7 @@ export default function Entrenamientos() {
                     <div className="flex flex-col gap-2">
                       {items.map((e) =>
                         editandoId === e.id ? (
-                          <FormEntrenamiento key={e.id} bicicletas={bicicletas} planes={planes} valoresIniciales={valoresEdicion && valoresEdicion.id === e.id ? valoresEdicion : e} onGuardar={(datos) => actualizar(e.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
+                          <FormEntrenamiento key={e.id} bicicletas={bicicletas} valoresIniciales={valoresEdicion && valoresEdicion.id === e.id ? valoresEdicion : e} onGuardar={(datos) => actualizar(e.id, datos)} onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }} />
                         ) : (
                           <div key={e.id} className={`card flex items-center justify-between gap-4 ${e.estado === 'pendiente' ? 'opacity-70 border-dashed' : ''}`}>
                             <div className="flex items-center gap-2">
@@ -464,7 +429,6 @@ export default function Entrenamientos() {
                                 <p className="font-medium">{e.tipo} — {e.ruta || 'sin ruta'}</p>
                                 <p className="text-ink-muted text-xs">
                                   {nombreBici(e.bicicleta_id) || 'sin bici'}
-                                  {e.plan_id && nombrePlan(e.plan_id) && ` · ${nombrePlan(e.plan_id)}`}
                                   {e.estado === 'pendiente' && ' · Pendiente'}
                                 </p>
                               </div>
@@ -504,47 +468,6 @@ export default function Entrenamientos() {
                   </div>
                 )
               })}
-            </div>
-          )}
-        </>
-      )}
-
-      {vista === 'planes' && (
-        <>
-          <div className="flex justify-end">
-            <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPlanEditando(null); setFormPlanOpen((v) => !v) }}>+ Plan</button>
-          </div>
-          {formPlanOpen && <FormPlanEntreno onGuardar={crearPlan} onCancelar={() => setFormPlanOpen(false)} />}
-          {planes.length === 0 ? (
-            <p className="text-ink-muted text-sm">Sin planes cargados.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {planes.map((p) =>
-                planEditando === p.id ? (
-                  <FormPlanEntreno key={p.id} valoresIniciales={p} onGuardar={(datos) => actualizarPlan(p.id, datos)} onCancelar={() => setPlanEditando(null)} />
-                ) : (
-                  <div key={p.id} className="card">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm">{p.nombre}</p>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setFormPlanOpen(false); setPlanEditando(p.id) }} className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1">Editar</button>
-                        <button onClick={() => borrarPlan(p.id)} className="text-alert-red text-xs border border-asphalt-700 rounded-lg px-2 py-1">Borrar</button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-1.5 mt-2.5">
-                      {DIAS_SEMANA.map((d) => {
-                        const sesion = (p.sesiones || []).find((s) => s.dia === d.id)
-                        return (
-                          <div key={d.id} className="flex items-center gap-2 text-xs">
-                            <span className={`w-8 text-center py-0.5 rounded ${sesion ? 'bg-hiviz text-asphalt-950 font-semibold' : 'text-ink-faint border border-asphalt-700'}`}>{d.label}</span>
-                            <span className="text-ink-muted">{sesion ? `${sesion.tipo}${sesion.duracion_min ? ` — ${sesion.duracion_min} min` : ''}${sesion.descripcion ? ` · ${sesion.descripcion}` : ''}` : '—'}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              )}
             </div>
           )}
         </>
@@ -742,7 +665,6 @@ export default function Entrenamientos() {
                                     <div className="pb-1.5">
                                       <FormEntrenamiento
                                         bicicletas={bicicletas}
-                                        planes={planes}
                                         valoresIniciales={valoresEdicion && valoresEdicion.id === s.id ? valoresEdicion : s}
                                         onGuardar={(datos) => actualizar(s.id, datos)}
                                         onCancelar={() => { setEditandoId(null); setValoresEdicion(null) }}
@@ -893,11 +815,11 @@ function MiniDato({ label, value, accent }) {
   )
 }
 
-function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales, planes = [] }) {
+function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10), tipo: 'Ruta', ruta: '', bicicleta_id: '',
     duracion_min: '', km: '', desnivel: '', potencia_avg: '', potencia_normalizada: '', fc_avg: '', rpe: '', comentarios: '',
-    plan_id: '', estado: 'realizado', es_clave: false,
+    estado: 'realizado', es_clave: false,
     calorias: '', cadencia_avg: '', cadencia_max: '', descenso: '', altura_min: '', altura_max: '',
     temperatura_avg: '', temperatura_min: '', temperatura_max: '', velocidad_avg: '', velocidad_max: '',
     potencia_max: '', potencia_20min: '', trabajo_kj: '', tiempo_movimiento_min: '',
@@ -915,7 +837,6 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
       onGuardar({
         ...form,
         bicicleta_id: form.bicicleta_id || null,
-        plan_id: form.plan_id || null,
         duracion_min: numOrNull(form.duracion_min),
         km: numOrNull(form.km),
         desnivel: numOrNull(form.desnivel),
@@ -974,13 +895,6 @@ function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales
           <option value="">—</option>
           {bicicletas.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
         </select></label>
-      {planes.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Plan</span>
-          <select {...campo('plan_id')} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink">
-            <option value="">—</option>
-            {planes.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select></label>
-      )}
       <Campo label="Ruta" {...campo('ruta')} />
       <Campo label="Duración (min)" type="number" {...campo('duracion_min')} />
       <Campo label="Km" type="number" step="0.1" {...campo('km')} />
@@ -1032,57 +946,6 @@ function Campo({ label, ...props }) {
       <span className="text-ink-muted text-xs">{label}</span>
       <input {...props} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" />
     </label>
-  )
-}
-
-function FormPlanEntreno({ onGuardar, onCancelar, valoresIniciales }) {
-  const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
-  const [sesiones, setSesiones] = useState(
-    valoresIniciales?.sesiones?.length ? valoresIniciales.sesiones : DIAS_SEMANA.map((d) => ({ dia: d.id, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '' }))
-  )
-  function sesionDeDia(diaId) { return sesiones.find((s) => s.dia === diaId) || { dia: diaId, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '' } }
-  function actualizarDia(diaId, cambios) {
-    setSesiones((prev) => {
-      const existe = prev.some((s) => s.dia === diaId)
-      if (existe) return prev.map((s) => (s.dia === diaId ? { ...s, ...cambios } : s))
-      return [...prev, { dia: diaId, activo: false, tipo: 'Ruta', duracion_min: '', descripcion: '', ...cambios }]
-    })
-  }
-  return (
-    <form className="card flex flex-col gap-3" onSubmit={(e) => {
-      e.preventDefault()
-      const sesionesActivas = sesiones.filter((s) => s.activo).map((s) => ({ dia: s.dia, tipo: s.tipo, duracion_min: s.duracion_min, descripcion: s.descripcion }))
-      onGuardar({ nombre, sesiones: sesionesActivas })
-    }}>
-      <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Nombre del plan</span>
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
-      <div className="flex flex-col gap-2.5">
-        {DIAS_SEMANA.map((d) => {
-          const s = sesionDeDia(d.id)
-          return (
-            <div key={d.id} className="border border-asphalt-700 rounded-lg p-2.5">
-              <label className="flex items-center gap-2 text-sm mb-2">
-                <input type="checkbox" checked={!!s.activo} onChange={(e) => actualizarDia(d.id, { activo: e.target.checked })} />
-                <span className="font-medium">{d.label}</span>
-              </label>
-              {s.activo && (
-                <div className="grid grid-cols-3 gap-2">
-                  <select value={s.tipo} onChange={(e) => actualizarDia(d.id, { tipo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm">
-                    {TIPOS.map((t) => <option key={t}>{t}</option>)}
-                  </select>
-                  <input type="number" value={s.duracion_min} onChange={(e) => actualizarDia(d.id, { duracion_min: e.target.value })} placeholder="Min" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
-                  <input value={s.descripcion} onChange={(e) => actualizarDia(d.id, { descripcion: e.target.value })} placeholder="Detalle" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1.5 text-ink text-sm" />
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      <div className="flex justify-end gap-2 mt-1">
-        <button type="button" onClick={onCancelar} className="text-ink-muted text-sm px-4 py-2">Cancelar</button>
-        <button type="submit" className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg">Guardar plan</button>
-      </div>
-    </form>
   )
 }
 
@@ -1289,25 +1152,26 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
   const resumen = pasos.length > 0 ? partirTramo(pasos[0]).texto : s.comentarios
 
   return (
-    <div className="border-b border-asphalt-800 last:border-0">
-      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full flex items-center gap-2 py-2 text-left rounded-lg hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors -mx-1 px-1">
-        {zona ? (
-          <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md" style={{ background: `${zColor}26`, color: zColor }}>{zona}</span>
-        ) : (
-          <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md bg-asphalt-700 text-ink-faint">{s.tipo.slice(0, 2).toUpperCase()}</span>
-        )}
-        <span className="text-ink-muted text-[11px] w-14 flex-shrink-0">{diaLabelDeFecha(s.fecha)} {fmtFecha(s.fecha)}</span>
-        <span className="min-w-0 flex-1 flex items-baseline gap-1.5">
-          <span className="text-xs font-medium flex-shrink-0">{s.tipo}</span>
-          {resumen && <span className="text-ink-faint text-[11px] truncate">{resumen}{pasos.length > 1 ? ` +${pasos.length - 1}` : ''}</span>}
-        </span>
-        {s.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Sesión clave">★</span>}
-        {detalle && <span className="text-ink-faint text-[11px] flex-shrink-0 hidden sm:inline">{detalle}</span>}
-        <span className={`chevron text-ink-faint text-[10px] flex-shrink-0 ${abierto ? 'chevron-open' : ''}`}>▾</span>
+    <div className="border-b border-asphalt-800 last:border-0 py-1">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="w-full text-left rounded-lg hover:bg-asphalt-700/40 active:bg-asphalt-700/60 transition-colors -mx-1 px-1 py-1.5">
+        <div className="flex items-center gap-2">
+          {zona ? (
+            <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md" style={{ background: `${zColor}26`, color: zColor }}>{zona}</span>
+          ) : (
+            <span className="text-[10px] font-bold w-8 h-5 flex-shrink-0 flex items-center justify-center rounded-md bg-asphalt-700 text-ink-faint">{s.tipo.slice(0, 2).toUpperCase()}</span>
+          )}
+          <span className="text-ink-muted text-[11px] flex-shrink-0">{diaLabelDeFecha(s.fecha)} {fmtFecha(s.fecha)}</span>
+          {s.es_clave && <span className="text-hiviz text-xs flex-shrink-0" title="Sesión clave">★</span>}
+          <span className="flex-1" />
+          <span className="text-ink-faint text-[10px] flex-shrink-0">{abierto ? '▲' : '▼'}</span>
+        </div>
+        <p className="text-sm font-medium mt-1">{s.tipo}</p>
+        {resumen && <p className="text-ink-faint text-[12px] leading-snug mt-0.5">{resumen}{pasos.length > 1 ? ` +${pasos.length - 1}` : ''}</p>}
+        {detalle && <p className="text-ink-faint text-[11px] mt-0.5">{detalle}</p>}
       </button>
 
-      <div className={`collapse ${abierto ? 'collapse-open' : ''}`}>
-        <div className="collapse-inner pl-10 pb-2.5 flex flex-col gap-2">
+      {abierto && (
+        <div className="pl-2 pb-2.5 pt-1 flex flex-col gap-2">
           {pasos.length > 0 ? (
             <div className="flex flex-col">
               {pasos.map((paso, i) => {
@@ -1316,22 +1180,21 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
                   <div key={i} className="flex gap-2.5">
                     <div className="flex flex-col items-center flex-shrink-0 w-9">
                       {dur ? (
-                        <span className="text-hiviz font-mono text-[10px] font-semibold leading-tight">{dur}</span>
+                        <span className="text-hiviz font-mono text-[11px] font-semibold leading-tight">{dur}</span>
                       ) : (
                         <span className="w-1 h-1 rounded-full bg-asphalt-600 mt-1.5" />
                       )}
                       {i < pasos.length - 1 && <span className="w-px flex-1 bg-asphalt-700 mt-1 mb-0.5" />}
                     </div>
-                    <p className="text-ink-muted text-[11px] leading-snug pb-2">{texto}</p>
+                    <p className="text-ink-muted text-[12px] leading-snug pb-2">{texto}</p>
                   </div>
                 )
               })}
             </div>
           ) : (
-            s.comentarios && <p className="text-ink-muted text-[11px] leading-relaxed">{s.comentarios}</p>
+            s.comentarios && <p className="text-ink-muted text-[12px] leading-relaxed">{s.comentarios}</p>
           )}
-          {pasos.length > 0 && notas && <p className="text-ink-faint text-[10px] leading-relaxed">{notas}</p>}
-          {hecha && detalle && <p className="text-ink-faint text-[11px] sm:hidden">{detalle}</p>}
+          {pasos.length > 0 && notas && <p className="text-ink-faint text-[11px] leading-relaxed">{notas}</p>}
           <div className="flex items-center gap-3">
             {s.estado === 'pendiente' ? (
               <>
@@ -1343,7 +1206,7 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
