@@ -30,9 +30,19 @@ const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
 const METODOS_PRESCRIPCION = ['RPE', 'RIR', 'Peso fijo', '% de 1RM', 'Otro']
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
-function agruparPorFecha(items) {  const grupos = {}
+function agruparPorFecha(items) {
+  const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
-  return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
+  // Ordenado por cercanía a hoy (la fecha más próxima primero, sea pasada o
+  // futura), no por orden cronológico puro — así lo pendiente más inminente
+  // o lo recién cargado queda arriba de todo en Registro.
+  const hoyMs = new Date().toISOString().slice(0, 10) + 'T12:00:00'
+  const hoyTs = new Date(hoyMs).getTime()
+  return Object.entries(grupos).sort((a, b) => {
+    const distA = Math.abs(new Date(a[0] + 'T12:00:00').getTime() - hoyTs)
+    const distB = Math.abs(new Date(b[0] + 'T12:00:00').getTime() - hoyTs)
+    return distA - distB
+  })
 }
 function agruparPorFechaAsc(items) {
   const grupos = {}
