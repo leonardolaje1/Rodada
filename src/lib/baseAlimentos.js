@@ -103,6 +103,51 @@ const DATA = [
   ['Pechuga de pavo', 'Proteínas', 135, 30, 0, 1],
   ['Hígado vacuno cocido', 'Proteínas', 175, 26.5, 3.9, 4.9],
 
+  // ===== Cortes de carne vacuna (cocidos) =====
+  ['Bife de chorizo cocido', 'Proteínas', 250, 26, 0, 16],
+  ['Bife ancho / ojo de bife cocido', 'Proteínas', 271, 25, 0, 18.5],
+  ['Asado de tira cocido', 'Proteínas', 293, 24, 0, 21.5],
+  ['Vacío cocido', 'Proteínas', 244, 25, 0, 15.5],
+  ['Entraña cocida', 'Proteínas', 250, 26, 0, 16],
+  ['Matambre vacuno cocido', 'Proteínas', 225, 25, 0, 13],
+  ['Colita de cuadril cocida', 'Proteínas', 205, 27, 0, 10],
+  ['Cuadril cocido', 'Proteínas', 200, 28, 0, 9],
+  ['Peceto cocido', 'Proteínas', 175, 29, 0, 6],
+  ['Nalga cocida', 'Proteínas', 184, 29, 0, 7],
+  ['Bola de lomo cocida', 'Proteínas', 190, 28, 0, 8],
+  ['Paleta vacuna cocida', 'Proteínas', 235, 26, 0, 14],
+  ['Osobuco cocido', 'Proteínas', 220, 28, 0, 11],
+  ['Falda vacuna cocida', 'Proteínas', 245, 25, 0, 16],
+  ['Tapa de asado cocida', 'Proteínas', 260, 24, 0, 18],
+
+  // ===== Cortes de cerdo (cocidos) =====
+  ['Bondiola de cerdo cocida', 'Proteínas', 242, 27, 0, 15],
+  ['Costillas de cerdo (pechito) cocidas', 'Proteínas', 277, 26, 0, 18.5],
+  ['Panceta de cerdo cocida', 'Proteínas', 468, 15, 0, 45],
+  ['Matambre de cerdo cocido', 'Proteínas', 235, 25, 0, 14],
+  ['Pata de cerdo cocida', 'Proteínas', 200, 24, 0, 11],
+  ['Jamón crudo (serrano)', 'Proteínas', 195, 31, 0.5, 7],
+  ['Chorizo de cerdo cocido', 'Proteínas', 300, 17, 2, 25],
+  ['Chuleta / bife de cerdo cocido', 'Proteínas', 231, 27, 0, 13],
+
+  // ===== Cortes de pollo (cocidos) =====
+  ['Muslo de pollo con piel cocido', 'Proteínas', 250, 26, 0, 15.5],
+  ['Contramuslo de pollo sin piel cocido', 'Proteínas', 172, 24, 0, 8.1],
+  ['Alitas de pollo cocidas', 'Proteínas', 203, 30.5, 0, 8.1],
+  ['Pollo entero con piel cocido', 'Proteínas', 239, 27, 0, 13.6],
+  ['Milanesa de pollo (frita)', 'Proteínas', 275, 23, 12, 15],
+
+  // ===== Cortes de pescado (cocidos) =====
+  ['Trucha cocida', 'Proteínas', 190, 26.6, 0, 8.5],
+  ['Atún fresco cocido', 'Proteínas', 184, 30, 0, 6.3],
+  ['Corvina cocida', 'Proteínas', 105, 20, 0, 2.3],
+  ['Lenguado cocido', 'Proteínas', 90, 18.8, 0, 1.2],
+  ['Dorado (pescado) cocido', 'Proteínas', 109, 21, 0, 2.3],
+  ['Pejerrey cocido', 'Proteínas', 100, 19, 0, 2.5],
+  ['Bacalao cocido', 'Proteínas', 105, 23, 0, 0.9],
+  ['Mero cocido', 'Proteínas', 123, 23, 0, 2.6],
+  ['Boquerones / anchoas en aceite (lata)', 'Proteínas', 210, 25, 0, 12],
+
   // ===== Lácteos =====
   ['Leche entera', 'Lácteos', 61, 3.2, 4.8, 3.3],
   ['Leche descremada', 'Lácteos', 34, 3.4, 5, 0.1],
