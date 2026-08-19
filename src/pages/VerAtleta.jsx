@@ -92,7 +92,7 @@ export default function VerAtleta() {
 
     const [{ data: ents }, { data: gym }, { data: plsE }, { data: plsG }] = await Promise.all([
       supabase.from('entrenamientos').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde).order('fecha', { ascending: false }),
-      supabase.from('gimnasio').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde).order('fecha', { ascending: false }),
+      supabase.from('gimnasio').select('*').eq('user_id', atletaId).gte('fecha', fechaDesde).order('fecha', { ascending: false }).order('orden', { ascending: true }),
       supabase.from('planes_entrenamiento').select('*').eq('user_id', atletaId).eq('activo', true).order('created_at', { ascending: true }),
       supabase.from('planes_gimnasio').select('*').eq('user_id', atletaId).eq('activo', true).order('created_at', { ascending: true })
     ])
