@@ -108,6 +108,9 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
     const d = dias.find((x) => x.dia === diaId)
     if (!d || !d.activo) continue
     const fechaStr = fecha.toISOString().slice(0, 10)
+    // Una sesión por día: todos los ejercicios de ese día comparten sesion_id,
+    // así se pueden mover o mostrar juntos como una sola sesión de gimnasio.
+    const sesionId = crypto.randomUUID()
     for (const ej of d.ejercicios || []) {
       if (!ej.ejercicio) continue
       const p = ej.porSemana?.[si] || {}
@@ -123,7 +126,8 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
         valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
-        mesociclo_gimnasio_id
+        mesociclo_gimnasio_id,
+        sesion_id: sesionId
       })
     }
   }
@@ -167,7 +171,9 @@ export default function Gimnasio() {
     )
   }
   async function crear(form) {
-    const { data } = await supabase.from('gimnasio').insert(form).select()
+    // Entrada manual de un solo ejercicio: no forma parte de una sesión con
+    // otras filas, así que arranca su propio sesion_id.
+    const { data } = await supabase.from('gimnasio').insert({ sesion_id: crypto.randomUUID(), ...form }).select()
     setFormOpen(false)
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); cargar()
