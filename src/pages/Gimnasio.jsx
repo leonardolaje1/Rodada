@@ -153,7 +153,7 @@ export default function Gimnasio() {
   async function cargar() {
     setCargando(true)
     const [{ data: s }, { data: mesos }, { data: objs }] = await Promise.all([
-      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).limit(300),
+      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).order('orden', { ascending: true }).limit(300),
       supabase.from('mesociclos_gimnasio').select('*').eq('activo', true).order('fecha_inicio', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'gimnasio').order('created_at', { ascending: false })
     ])
@@ -173,7 +173,10 @@ export default function Gimnasio() {
   async function crear(form) {
     // Entrada manual de un solo ejercicio: no forma parte de una sesión con
     // otras filas, así que arranca su propio sesion_id.
-    const { data } = await supabase.from('gimnasio').insert({ sesion_id: crypto.randomUUID(), ...form }).select()
+    // Carga manual (fuera de un mesociclo importado): no tiene "orden" propio del
+    // día, así que se manda al final de lo que ya haya esa fecha.
+    const ordenSiguiente = 1 + Math.max(0, ...sesiones.filter((s) => s.fecha === form.fecha).map((s) => s.orden ?? 0))
+    const { data } = await supabase.from('gimnasio').insert({ sesion_id: crypto.randomUUID(), orden: ordenSiguiente, ...form }).select()
     setFormOpen(false)
     const nuevaLista = [...(data || []), ...sesiones]
     await sincronizarPRs(nuevaLista); cargar()
@@ -330,7 +333,8 @@ export default function Gimnasio() {
                     const totalDias = (new Date(m.fecha_fin) - new Date(m.fecha_inicio)) / 86400000 + 1
                     const diasPasados = Math.max(0, Math.min(totalDias, (new Date(hoyStr) - new Date(m.fecha_inicio)) / 86400000 + 1))
                     const pctTiempo = Math.round((diasPasados / totalDias) * 100)
-                    const filasMeso = sesiones.filter((s) => s.mesociclo_gimnasio_id === m.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
+                    const filasMeso = sesiones.filter((s) => s.mesociclo_gimnasio_id === m.id)
+                      .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.orden ?? 0) - (b.orden ?? 0))
                     const finalizado = !enCurso && hoyStr > m.fecha_fin
                     return (
                       <div key={m.id} className={`card ${enCurso ? 'border-hiviz' : ''}`}>
