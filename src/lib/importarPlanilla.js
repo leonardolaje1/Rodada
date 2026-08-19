@@ -250,9 +250,12 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
     if (!d || !d.activo) continue
     const fechaStr = fecha.toISOString().slice(0, 10)
     // Una sesión por día: todos los ejercicios de ese día comparten sesion_id.
+    // "orden" fija la posición del ejercicio dentro del día tal como vino en la
+    // planilla — sin esto, Postgres no garantiza devolver las filas con la misma
+    // fecha en el orden en que se insertaron (pueden salir mezcladas o invertidas).
     const sesionId = crypto.randomUUID()
-    for (const ej of d.ejercicios || []) {
-      if (!ej.ejercicio) continue
+    ;(d.ejercicios || []).forEach((ej, orden) => {
+      if (!ej.ejercicio) return
       const p = ej.porSemana?.[si] || {}
       const seriesNum = enteroSeguro(p.series)
       const repsNum = enteroSeguro(p.reps)
@@ -268,9 +271,10 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
         valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
         sesion_id: sesionId,
+        orden,
         ...(userId ? { user_id: userId } : {})
       })
-    }
+    })
   }
   return filas
 }
