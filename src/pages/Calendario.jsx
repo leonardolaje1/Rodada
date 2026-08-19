@@ -127,14 +127,34 @@ export default function Calendario() {
   // cuando el motor de conflictos detectó algo), esto lo puede disparar el
   // usuario en cualquier momento desde cualquier ítem real (no desde sesiones
   // planificadas por plantilla, que no tienen fila propia en la base).
+  // Agrupa los ejercicios de gimnasio de un día por sesion_id, así una sesión
+  // se ve y se mueve como un solo bloque. Si un registro viejo todavía no
+  // tiene sesion_id (antes de correr la migración), queda como grupo propio.
+  function gruposGym(gyms) {
+    const grupos = {}
+    for (const g of gyms) {
+      const clave = g.sesion_id || `sin-sesion-${g.id}`
+      ;(grupos[clave] ||= { clave, items: [] }).items.push(g)
+    }
+    return Object.values(grupos)
+  }
+
   function abrirMover(item, tabla, label, color) {
     setItemMoviendo({ id: item.id, tabla, fechaOrigen: item.fecha, label, color })
+  }
+  // Mueve varios registros a la vez (p. ej. todos los ejercicios de una
+  // sesión de gimnasio), ya que en la base cada ejercicio es una fila propia.
+  function abrirMoverGrupo(items, tabla, label, color, fechaOrigen) {
+    setItemMoviendo({ ids: items.map((i) => i.id), tabla, fechaOrigen, label, color })
   }
   function cerrarMover() { setItemMoviendo(null) }
 
   async function moverItem(fechaDestino) {
     if (!itemMoviendo) return
-    const { error } = await supabase.from(itemMoviendo.tabla).update({ fecha: fechaDestino }).eq('id', itemMoviendo.id)
+    const base = supabase.from(itemMoviendo.tabla).update({ fecha: fechaDestino })
+    const { error } = itemMoviendo.ids
+      ? await base.in('id', itemMoviendo.ids)
+      : await base.eq('id', itemMoviendo.id)
     if (error) { toast('No se pudo mover: ' + error.message); return }
     toast('Movido a ' + fechaDestino)
     setDiaSeleccionado(fechaDestino)
@@ -322,11 +342,35 @@ export default function Calendario() {
                   <button onClick={() => abrirMover(e, 'entrenamientos', e.tipo, '#EB642A')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
                 </div>
               ))}
-              {infoSeleccionado.gyms.map((g) => (
-                <div key={g.id} className="flex items-center gap-2">
-                  <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: '#C34AF1' }} />
-                  <p className="text-sm flex-1 min-w-0">{g.ejercicio}{g.estado === 'pendiente' ? ' · Pendiente' : g.peso ? ` · ${g.peso} kg` : ''}</p>
-                  <button onClick={() => abrirMover(g, 'gimnasio', g.ejercicio, '#C34AF1')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
+              {gruposGym(infoSeleccionado.gyms).map((grupo) => (
+                <div key={grupo.clave} className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: '#C34AF1' }} />
+                    <p className="text-sm flex-1 min-w-0 font-semibold">
+                      {grupo.items.length > 1
+                        ? `Sesión de gimnasio · ${grupo.items.length} ejercicios`
+                        : grupo.items[0].ejercicio}
+                    </p>
+                    <button
+                      onClick={() => abrirMoverGrupo(
+                        grupo.items, 'gimnasio',
+                        grupo.items.length > 1 ? `Sesión de gimnasio (${grupo.items.length} ejercicios)` : grupo.items[0].ejercicio,
+                        '#C34AF1', diaSeleccionado
+                      )}
+                      className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0"
+                    >
+                      ⇄ Mover {grupo.items.length > 1 ? 'sesión' : ''}
+                    </button>
+                  </div>
+                  {grupo.items.length > 1 && (
+                    <div className="flex flex-col gap-1 pl-4">
+                      {grupo.items.map((g) => (
+                        <p key={g.id} className="text-xs text-ink-muted">
+                          {g.ejercicio}{g.estado === 'pendiente' ? ' · Pendiente' : g.peso ? ` · ${g.peso} kg` : ''}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {infoSeleccionado.gymPlanificado && (
