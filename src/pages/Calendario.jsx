@@ -74,7 +74,7 @@ export default function Calendario() {
 
     const [{ data: ents }, { data: gym }, { data: comps }, { data: mants }, { data: pls }, { data: plsGym }] = await Promise.all([
       supabase.from('entrenamientos').select('*').gte('fecha', desde).lte('fecha', hasta),
-      supabase.from('gimnasio').select('*').gte('fecha', desde).lte('fecha', hasta),
+      supabase.from('gimnasio').select('*').gte('fecha', desde).lte('fecha', hasta).order('orden', { ascending: true }),
       supabase.from('competencias').select('*').gte('fecha', desde).lte('fecha', hasta),
       supabase.from('mantenimientos').select('*').gte('fecha', desde).lte('fecha', hasta),
       supabase.from('planes_entrenamiento').select('*').eq('activo', true),
