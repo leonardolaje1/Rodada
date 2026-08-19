@@ -249,6 +249,8 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
     const d = dias.find((x) => x.dia === diaId)
     if (!d || !d.activo) continue
     const fechaStr = fecha.toISOString().slice(0, 10)
+    // Una sesión por día: todos los ejercicios de ese día comparten sesion_id.
+    const sesionId = crypto.randomUUID()
     for (const ej of d.ejercicios || []) {
       if (!ej.ejercicio) continue
       const p = ej.porSemana?.[si] || {}
@@ -265,6 +267,7 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
         metodo_prescrito: ej.metodo || null,
         valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
+        sesion_id: sesionId,
         ...(userId ? { user_id: userId } : {})
       })
     }
