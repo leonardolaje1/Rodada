@@ -13,6 +13,10 @@
 // Referencia aproximada: ~1h a umbral ronda 100 TSS; una salida suave suele ser <50.
 const TSS_ALTO = 80
 
+// A partir de cuántos días seguidos con actividad (sin ningún día de
+// descanso entre medio) se avisa del patrón de sobrecarga semanal.
+const DIAS_SEGUIDOS_AVISO = 7
+
 // Al buscar un día alternativo para "mover" una sesión, se prueba primero con
 // más separación de la sesión clave (más días de por medio = más margen de
 // recuperación) y se va acercando si esos días ya están ocupados.
@@ -120,4 +124,36 @@ export function detectarConflictosCalendario({ entrenamientos = [], gimnasio = [
   }
 
   return conflictos.sort((a, b) => a.fecha.localeCompare(b.fecha))
+}
+
+// A diferencia de detectarConflictosCalendario (que compara días cercanos
+// entre sí), esta regla mira la ventana completa hacia atrás desde hoy:
+// cuántos días seguidos hubo actividad sin ningún día de descanso entre
+// medio — un patrón que un chequeo día-a-día no ve.
+export function detectarSobrecargaSemanal({ entrenamientos = [], gimnasio = [], fechaHoy }) {
+  const diasConActividad = new Set()
+  for (const e of entrenamientos) {
+    if ((Number(e.tss) || 0) > 0) diasConActividad.add(e.fecha)
+  }
+  for (const g of gimnasio) {
+    diasConActividad.add(g.fecha)
+  }
+
+  let racha = 0
+  let cursor = fechaHoy
+  while (diasConActividad.has(cursor)) {
+    racha++
+    cursor = sumarDias(cursor, -1)
+  }
+
+  if (racha < DIAS_SEGUIDOS_AVISO) return null
+
+  return {
+    id: `sobrecarga-semanal-${fechaHoy}`,
+    fecha: fechaHoy,
+    tipo: 'sin_descanso',
+    diasSeguidos: racha,
+    mensaje: `Llevás ${racha} días seguidos con actividad (ciclismo o gimnasio), sin un día de descanso entre medio. Considerá sumar uno pronto.`,
+    fuente: 'reglas'
+  }
 }
