@@ -5,6 +5,7 @@ import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import Avatar from '../components/Avatar'
 import { Users } from 'lucide-react'
+import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../lib/tss'
 
 const ROLES = [
   { id: 'entrenador', label: 'Entrenador' },
@@ -14,6 +15,7 @@ const ROLES = [
 const DATOS_POR_ROL = {
   entrenador: [
     'Tus entrenamientos y su historial completo (potencia, FC, TSS, comentarios)',
+    'Un indicador de fatiga (TSB) calculado a partir de tu carga de entrenamiento',
     'Tus rutinas y mesociclos de gimnasio, con resultados',
     'Tus objetivos y tu adherencia al plan'
   ],
@@ -24,6 +26,11 @@ const DATOS_POR_ROL = {
     'Los documentos de nutrición que subas'
   ]
 }
+
+// Color del indicador visual (bolita) según el estado de fatiga por carga (TSB).
+const COLOR_TSB = { red: 'rgb(var(--color-state-critical))', amber: 'rgb(var(--color-state-warning))', hiviz: 'rgb(var(--color-hiviz))', route: 'rgb(var(--color-route))' }
+// Orden de prioridad para mostrar primero a quien necesita más atención.
+const PRIORIDAD_TSB = { red: 0, amber: 1, hiviz: 2, route: 3 }
 
 function diasDesde(fecha) {
   if (!fecha) return null
@@ -82,21 +89,33 @@ export default function Equipo() {
       const desde7 = new Date()
       desde7.setDate(desde7.getDate() - 7)
       const fecha7 = desde7.toISOString().slice(0, 10)
+      const desde60 = new Date()
+      desde60.setDate(desde60.getDate() - 60)
+      const fecha60 = desde60.toISOString().slice(0, 10)
+      const hoyStr = new Date().toISOString().slice(0, 10)
 
       const nuevoResumen = {}
       await Promise.all(
         misAtletasIds.map(async (atletaId) => {
           const { data: ents } = await supabase
             .from('entrenamientos')
-            .select('fecha, tss')
+            .select('fecha, tss, duracion_min, if, rpe')
             .eq('user_id', atletaId)
-            .order('fecha', { ascending: false })
-            .limit(30)
-          const ultimaFecha = ents && ents.length > 0 ? ents[0].fecha : null
+            .gte('fecha', fecha60)
+            .order('fecha', { ascending: true })
+          const ultimaFecha = ents && ents.length > 0 ? ents[ents.length - 1].fecha : null
           const tssSemana = (ents || [])
             .filter((e) => e.fecha >= fecha7)
             .reduce((a, e) => a + (Number(e.tss) || 0), 0)
-          nuevoResumen[atletaId] = { ultimaFecha, tssSemana }
+
+          // Fatiga por carga (TSB), calculada con el mismo motor que usa el
+          // propio atleta en su Dashboard — no requiere datos de recuperación
+          // (HRV/sueño), que no forman parte de lo compartido con el entrenador.
+          const serie = calcularCargaDiaria(construirSerieDiaria(ents || [], fecha60, hoyStr))
+          const ultimo = serie[serie.length - 1] || null
+          const estadoCarga = ultimo ? interpretarTSB(ultimo.tsb) : null
+
+          nuevoResumen[atletaId] = { ultimaFecha, tssSemana, tsb: ultimo?.tsb ?? null, estadoCarga }
         })
       )
       setResumenAtletas(nuevoResumen)
@@ -165,6 +184,15 @@ export default function Equipo() {
   ]
   const misAtletas = vinculos.filter((v) => v.estado === 'aceptado' && v.profesional_id === miId)
   const misProfesionales = vinculos.filter((v) => v.estado === 'aceptado' && v.atleta_id === miId)
+  const misAtletasOrdenados = [...misAtletas].sort((a, b) => {
+    const pa = PRIORIDAD_TSB[resumenAtletas[a.atleta_id]?.estadoCarga?.color] ?? 4
+    const pb = PRIORIDAD_TSB[resumenAtletas[b.atleta_id]?.estadoCarga?.color] ?? 4
+    return pa - pb
+  })
+  const atletasEnFatiga = misAtletas.filter((v) => {
+    const color = resumenAtletas[v.atleta_id]?.estadoCarga?.color
+    return color === 'red' || color === 'amber'
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -288,6 +316,14 @@ export default function Equipo() {
             </div>
           )}
         </div>
+        {atletasEnFatiga.length > 0 && (
+          <div className="card border-alert-amber mb-2">
+            <span className="label-eyebrow text-alert-amber">Atención</span>
+            <p className="text-sm mt-1">
+              {atletasEnFatiga.length === 1 ? '1 atleta está' : `${atletasEnFatiga.length} atletas están`} en zona de fatiga alta (TSB) esta semana.
+            </p>
+          </div>
+        )}
         {misAtletas.length === 0 ? (
           <EstadoVacio
             Icono={Users}
@@ -296,7 +332,7 @@ export default function Equipo() {
           />
         ) : (
           <div className="flex flex-col gap-2">
-            {misAtletas.map((v) => {
+            {misAtletasOrdenados.map((v) => {
               const resumen = resumenAtletas[v.atleta_id]
               const dias = resumen ? diasDesde(resumen.ultimaFecha) : null
               const color = dias == null ? 'rgb(var(--color-state-neutral))' : dias === 0 ? 'rgb(var(--color-state-success))' : dias >= 7 ? 'rgb(var(--color-state-critical))' : dias >= 3 ? 'rgb(var(--color-state-warning))' : 'rgb(var(--color-state-success))'
@@ -318,6 +354,9 @@ export default function Equipo() {
                   <div className="text-right">
                     {resumen && (
                       <p className="readout text-xs text-hiviz font-semibold">{resumen.tssSemana.toFixed(0)} TSS <span className="text-ink-faint font-normal">/ 7d</span></p>
+                    )}
+                    {resumen?.estadoCarga && (
+                      <p className="text-[11px] font-medium mt-0.5" style={{ color: COLOR_TSB[resumen.estadoCarga.color] }}>{resumen.estadoCarga.texto}</p>
                     )}
                     <span className="text-hiviz text-xs">Ver →</span>
                   </div>
