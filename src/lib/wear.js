@@ -30,3 +30,13 @@ export function nivelDesgasteInfo(nivel) {
   if (nivel === 'atencion') return { color: '#F5A623', texto: 'Pasó el 50% — empezá a controlar' }
   return { color: '#C4F135', texto: 'En rango normal' }
 }
+
+// Proyecta cuántos días quedan hasta el límite de vida útil de un componente,
+// asumiendo que el ritmo de uso reciente (km/día) se mantiene. Reutiliza el
+// estado ya calculado por estadoDesgaste() en vez de repetir esa lógica.
+export function proyectarDiasRestantes(estado, kmPorDia) {
+  if (!kmPorDia || kmPorDia <= 0) return null
+  const kmRestantes = estado.vidaUtil - estado.kmDesde
+  if (kmRestantes <= 0) return 0
+  return Math.round(kmRestantes / kmPorDia)
+}
