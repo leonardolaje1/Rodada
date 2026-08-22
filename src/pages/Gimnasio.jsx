@@ -61,14 +61,24 @@ const COLOR_METODO = {
   'RPE': '#F5A623', 'RIR': '#4A9EFF', '% de 1RM': '#C4F135', 'Peso fijo': '#8A8F9C', 'Otro': '#8A8F9C'
 }
 function colorMetodo(metodo) { return COLOR_METODO[metodo] || '#8A8F9C' }
+// Antes comparaba solo el peso levantado, ignorando las repeticiones — una
+// serie de 5x100kg no se detectaba como PR frente a un simple de 1x100kg
+// previo, aunque represente más fuerza real. Ahora usa 1RM estimado (fórmula
+// de Epley) para comparar series con distinta combinación de peso y reps.
+function estimar1RM(peso, reps) {
+  const p = Number(peso) || 0
+  if (!p) return 0
+  const r = Number(reps) || 1
+  return p * (1 + r / 30)
+}
 function recalcularPRs(sesiones) {
   const realizadas = sesiones.filter((s) => (s.estado || 'realizado') === 'realizado')
   const ordenadas = [...realizadas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.id).localeCompare(String(b.id)))
   const maxPorEjercicio = {}; const marcados = {}
   for (const s of ordenadas) {
-    const p = Number(s.peso) || 0
+    const est = estimar1RM(s.peso, s.reps)
     const max = maxPorEjercicio[s.ejercicio] || 0
-    if (p > max) { marcados[s.id] = true; maxPorEjercicio[s.ejercicio] = p } else marcados[s.id] = false
+    if (est > 0 && est > max) { marcados[s.id] = true; maxPorEjercicio[s.ejercicio] = est } else marcados[s.id] = false
   }
   return marcados
 }
