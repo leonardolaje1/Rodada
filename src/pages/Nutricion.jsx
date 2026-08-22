@@ -10,7 +10,7 @@ import { PLATOS_PRECARGADOS } from '../lib/platosPrecargados'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
 import { Apple, ChevronLeft } from 'lucide-react'
-import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE, calcularEdad } from '../lib/tdee'
+import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE, calcularEdad, calcularTDEEDinamico } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
@@ -120,9 +120,12 @@ export default function Nutricion() {
   const [errorArchivo, setErrorArchivo] = useState('')
   const [cargando, setCargando] = useState(true)
   const [editarDatosFisicos, setEditarDatosFisicos] = useState(false)
+  const [entrenamientosRecientes, setEntrenamientosRecientes] = useState([])
 
   async function cargar() {
-    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }] = await Promise.all([
+    const desde6 = new Date()
+    desde6.setDate(desde6.getDate() - 6)
+    const [{ data: p }, { data: cm }, { data: h }, { data: s }, { data: pesos }, { data: antro }, { data: pl }, { data: docs }, { data: ents }] = await Promise.all([
       supabase.from('perfil_nutricional').select('*').maybeSingle(),
       supabase.from('comidas').select('*').order('fecha', { ascending: false }).limit(100),
       supabase.from('hidratacion').select('*').order('fecha', { ascending: false }).limit(60),
@@ -130,7 +133,8 @@ export default function Nutricion() {
       supabase.from('peso_historial').select('*').order('fecha', { ascending: true }),
       supabase.from('antropometria').select('*').order('fecha', { ascending: false }),
       supabase.from('planes_nutricion').select('*').eq('activo', true).order('created_at', { ascending: true }),
-      supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false })
+      supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false }),
+      supabase.from('entrenamientos').select('fecha, calorias').gte('fecha', desde6.toISOString().slice(0, 10))
     ])
     if (p) setPerfil(p)
     setComidas(cm || [])
@@ -140,6 +144,7 @@ export default function Nutricion() {
     setAntropometria(antro || [])
     setPlanes(pl || [])
     setDocumentos(docs || [])
+    setEntrenamientosRecientes(ents || [])
     setCargando(false)
   }
   useEffect(() => { cargar() }, [])
@@ -295,7 +300,16 @@ export default function Nutricion() {
   const tdee = calcularTDEE(perfilEfectivo)
   const comidasPorDia = agruparPorFecha(comidas)
 
-  const alertasNutricion = evaluarDeficitNutricional({ comidas, tdee, pesoKg: pesoActual?.peso || perfil?.peso })
+  // Calorías activas reales de hoy (de Entrenamientos) y TDEE ajustado con ese
+  // dato — más preciso que el multiplicador fijo de nivel de actividad cuando
+  // hay un entrenamiento registrado hoy.
+  const caloriasActivasHoy = entrenamientosRecientes
+    .filter((e) => e.fecha === hoy)
+    .reduce((a, e) => a + (Number(e.calorias) || 0), 0)
+  const tdeeDinamicoHoy = calcularTDEEDinamico({ bmr, caloriasActivas: caloriasActivasHoy })
+  const tdeeEfectivoHoy = caloriasActivasHoy > 0 && tdeeDinamicoHoy ? tdeeDinamicoHoy : tdee
+
+  const alertasNutricion = evaluarDeficitNutricional({ comidas, tdee, bmr, entrenamientos: entrenamientosRecientes, pesoKg: pesoActual?.peso || perfil?.peso })
   const pesoInicial = pesoHistorial[0] || null
   const diferenciaPeso = pesoActual && pesoInicial && pesoHistorial.length > 1 ? (pesoActual.peso - pesoInicial.peso) : null
   const graficoPeso = pesoHistorial.map((p) => ({ fecha: p.fecha, peso: p.peso }))
@@ -338,12 +352,19 @@ export default function Nutricion() {
             {tdee ? (
               <div className="flex gap-6 mt-4 pt-4 border-t border-asphalt-700">
                 <div><span className="label-eyebrow">BMR</span><p className="readout text-xl font-bold mt-0.5">{Math.round(bmr)}</p></div>
-                <div><span className="label-eyebrow">TDEE estimado</span><p className="readout text-xl font-bold mt-0.5 text-hiviz">{tdee} kcal</p></div>
+                <div><span className="label-eyebrow">TDEE base</span><p className="readout text-xl font-bold mt-0.5 text-hiviz">{tdee} kcal</p></div>
               </div>
             ) : (
               <p className="text-ink-muted text-xs mt-3">
                 Completá tus datos físicos para calcular tu gasto calórico. Tu peso se toma de la pestaña Composición.
               </p>
+            )}
+            {tdee && caloriasActivasHoy > 0 && (
+              <div className="mt-3 pt-3 border-t border-asphalt-700">
+                <span className="label-eyebrow text-route">TDEE ajustado hoy</span>
+                <p className="readout text-xl font-bold mt-0.5 text-route">{tdeeEfectivoHoy} kcal</p>
+                <p className="text-ink-faint text-[11px] mt-1">Incluye {caloriasActivasHoy} kcal quemadas en entrenamientos de hoy, en vez del promedio fijo por nivel de actividad.</p>
+              </div>
             )}
             <button onClick={() => setEditarDatosFisicos((v) => !v)} className="text-hiviz text-xs font-semibold mt-3">
               {editarDatosFisicos ? 'Ocultar datos físicos ▲' : 'Editar datos físicos (altura, edad, sexo) ▼'}
@@ -362,7 +383,7 @@ export default function Nutricion() {
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <StatMini label="Kcal — hoy" value={kcalHoy.toFixed(0)} unit={tdee ? `/ ${tdee}` : ''} color="hiviz" />
+            <StatMini label="Kcal — hoy" value={kcalHoy.toFixed(0)} unit={tdeeEfectivoHoy ? `/ ${tdeeEfectivoHoy}` : ''} color="hiviz" />
             <StatMini label="Agua — hoy" value={(mlHoyAgua / 1000).toFixed(1)} unit="L" color="route" />
             <StatMini label="Proteínas" value={proteinasHoy.toFixed(0)} unit="g" />
             <StatMini label="Carbos / Grasas" value={`${carbosHoy.toFixed(0)}/${grasasHoy.toFixed(0)}`} unit="g" />
