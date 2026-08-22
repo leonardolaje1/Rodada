@@ -7,6 +7,7 @@ import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
 import { parsearPlanillaGimnasio } from '../lib/importarPlanilla'
+import { detectarFasesMesocicloGimnasio, detectarFasesMesocicloGimnasioDesdeFilas, FASES_INFO } from '../lib/motorFase'
 
 // Antes era una lista cerrada de 7 nombres (un <select>), lo que impedía cargar
 // planes reales con ejercicios de máquina/adaptados. Ahora es solo la lista de
@@ -377,17 +378,32 @@ export default function Gimnasio() {
                           <div className="flex flex-col mt-3 pt-3 border-t border-asphalt-700">
                             {(() => {
                               const porFecha = agruparPorFechaAsc(filasMeso)
+                              // Agrupa las filas materializadas en 4 semanas (por índice, no por
+                              // fecha exacta) para calcular la fase sobre lo que realmente quedó
+                              // guardado, igual que hace el preview del formulario con lo tipeado.
+                              const filasPorSemana = [0, 1, 2, 3].map((idx) =>
+                                filasMeso.filter((f) => semanaIndice(f.fecha, m.fecha_inicio) === idx)
+                              )
+                              const fasesPorIndice = detectarFasesMesocicloGimnasioDesdeFilas(filasPorSemana)
                               return porFecha.map(([fecha, items], i) => {
                                 const semanaActual = semanaIndice(fecha, m.fecha_inicio)
                                 const semanaAnterior = i > 0 ? semanaIndice(porFecha[i - 1][0], m.fecha_inicio) : null
                                 const nuevaSemana = semanaActual !== semanaAnterior
                                 const fechasSemana = nuevaSemana ? porFecha.filter(([f]) => semanaIndice(f, m.fecha_inicio) === semanaActual).map(([f]) => f) : null
                                 const ejerciciosSemana = nuevaSemana ? fechasSemana.reduce((acc, f) => acc + filasMeso.filter((x) => x.fecha === f).length, 0) : null
+                                const faseInfo = nuevaSemana ? FASES_INFO[fasesPorIndice[semanaActual]?.fase] : null
                                 return (
                                   <div key={fecha}>
                                     {nuevaSemana && (
                                       <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1`}>
-                                        <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                          {faseInfo && (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${faseInfo.color}22`, color: faseInfo.color }}>
+                                              {faseInfo.label}
+                                            </span>
+                                          )}
+                                        </div>
                                         <p className="text-ink-faint text-[11px]">{fechasSemana.length} sesiones · {ejerciciosSemana} ejercicios</p>
                                       </div>
                                     )}
@@ -841,6 +857,29 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
           <span className="label-eyebrow">Días y ejercicios</span>
           <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las 4 semanas. Abajo cargás series/reps/valor de cada semana.</p>
         </div>
+        {(() => {
+          // Fase detectada por semana, recalculada en vivo mientras se arma
+          // el bloque — mismo criterio que en Entrenamientos, adaptado a
+          // series/reps/método de gimnasio en vez de duración/zona de potencia.
+          const fasesPorSemana = detectarFasesMesocicloGimnasio(dias)
+          const hayAlgunaFase = fasesPorSemana.some((f) => f.fase !== 'sin_datos')
+          if (!hayAlgunaFase) return null
+          return (
+            <div className="flex gap-1.5">
+              {fasesPorSemana.map((f, i) => {
+                const info = FASES_INFO[f.fase]
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5 border border-asphalt-700 rounded-lg py-1.5">
+                    <span className="text-ink-faint text-[10px]">S{i + 1}</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: `${info.color}22`, color: info.color }}>
+                      {info.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
         <datalist id="ejercicios-sugeridos">{EJERCICIOS_COMUNES.map((e) => <option key={e} value={e} />)}</datalist>
         {DIAS_SEMANA.map((diaInfo) => {
             const d = dias.find((x) => x.dia === diaInfo.id)
