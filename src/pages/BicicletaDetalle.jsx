@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { WEAR_TYPES, estadoDesgaste, nivelDesgasteInfo } from '../lib/wear'
+import { WEAR_TYPES, estadoDesgaste, nivelDesgasteInfo, proyectarDiasRestantes } from '../lib/wear'
 import { evaluarFitting, infoNivelFitting } from '../lib/bikeFitting'
 
 const TIPOS_MANTENIMIENTO = ['Lavado', 'Lubricación', 'Ajuste de cambios', 'Ajuste de frenos', 'Cambio de líquido', 'Revisión general', 'Otro']
@@ -18,6 +18,7 @@ export default function BicicletaDetalle() {
   const [fittings, setFittings] = useState([])
   const [pesoActual, setPesoActual] = useState(null)
   const [recuperacion, setRecuperacion] = useState([])
+  const [kmPorDia, setKmPorDia] = useState(0)
   const [formMantOpen, setFormMantOpen] = useState(false)
   const [formCompOpen, setFormCompOpen] = useState(false)
   const [compEditando, setCompEditando] = useState(null)
@@ -31,6 +32,8 @@ export default function BicicletaDetalle() {
     const { data: f } = await supabase.from('bike_fitting').select('*').eq('bicicleta_id', id).order('fecha', { ascending: false })
     const { data: perfil } = await supabase.from('perfil_nutricional').select('peso').maybeSingle()
     const { data: rec } = await supabase.from('metricas_diarias').select('fecha, dolor_muscular').order('fecha', { ascending: false }).limit(14)
+    const desde45 = new Date(); desde45.setDate(desde45.getDate() - 45)
+    const { data: entsBici } = await supabase.from('entrenamientos').select('km').eq('bicicleta_id', id).gte('fecha', desde45.toISOString().slice(0, 10))
     setBici(b)
     setComponentes(c || [])
     setDesgaste(d || [])
@@ -38,6 +41,10 @@ export default function BicicletaDetalle() {
     setFittings(f || [])
     setPesoActual(perfil?.peso || null)
     setRecuperacion(rec || [])
+    // Ritmo de uso reciente de esta bici, para proyectar cuándo un componente
+    // llega al límite de vida útil al ritmo actual (no un promedio histórico).
+    const kmTotalesRecientes = (entsBici || []).reduce((a, e) => a + (Number(e.km) || 0), 0)
+    setKmPorDia(kmTotalesRecientes / 45)
   }
 
   useEffect(() => {
@@ -150,6 +157,7 @@ export default function BicicletaDetalle() {
                     wearType={wt}
                     item={item}
                     kmActualBici={kmTotalesBici}
+                    kmPorDia={kmPorDia}
                     onConfigurar={(config) => configurarDesgaste(wt.id, config)}
                     onMedir={(medicion) => medirDesgaste(item.id, medicion)}
                   />
@@ -283,7 +291,7 @@ function ComponenteCard({ c, kmTotalesBici, onEditar, onEliminar }) {
   )
 }
 
-function WearCard({ wearType, item, kmActualBici, onConfigurar, onMedir }) {
+function WearCard({ wearType, item, kmActualBici, kmPorDia, onConfigurar, onMedir }) {
   const [configurando, setConfigurando] = useState(false)
   const [midiendo, setMidiendo] = useState(false)
   const [valorConfig, setValorConfig] = useState({
@@ -329,6 +337,7 @@ function WearCard({ wearType, item, kmActualBici, onConfigurar, onMedir }) {
 
   const { kmDesde, vidaUtil, pctKm, pct, ultimaMedicion, nivel } = estadoDesgaste(item, wearType, kmActualBici)
   const { color, texto } = nivelDesgasteInfo(nivel)
+  const diasRestantes = proyectarDiasRestantes({ vidaUtil, kmDesde }, kmPorDia)
 
   return (
     <div className="card" style={nivel !== 'ok' ? { borderColor: color } : undefined}>
@@ -348,6 +357,13 @@ function WearCard({ wearType, item, kmActualBici, onConfigurar, onMedir }) {
         <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold" style={{ color }}>
           <span>⚠</span><span>{texto}</span>
         </div>
+      )}
+      {diasRestantes != null && (
+        <p className="text-ink-faint text-[11px] mt-2">
+          {diasRestantes <= 0
+            ? 'Ya alcanzó el límite estimado.'
+            : `≈ ${diasRestantes} día${diasRestantes === 1 ? '' : 's'} para el límite, al ritmo actual de uso.`}
+        </p>
       )}
       <div className="flex items-center justify-between mt-2.5">
         <p className="text-ink-muted text-xs">
