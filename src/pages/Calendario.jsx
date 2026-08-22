@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import Skeleton from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
-import { detectarConflictosCalendario } from '../lib/motorConflictos'
+import { detectarConflictosCalendario, detectarSobrecargaSemanal } from '../lib/motorConflictos'
 import { detectarOportunidadCalendario } from '../lib/motorOportunidades'
 import { detectarNecesidadTaper } from '../lib/motorTaper'
 import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
@@ -61,6 +61,7 @@ export default function Calendario() {
 
   // Datos para detectar oportunidades de mañana (independiente del mes que se esté mirando).
   const [entrenamientosHistorial, setEntrenamientosHistorial] = useState([])
+  const [gimnasioHistorial, setGimnasioHistorial] = useState([])
   const [hrvActual, setHrvActual] = useState(null)
   const [historialHrv, setHistorialHrv] = useState([])
   const [sueñoUltimaNoche, setSueñoUltimaNoche] = useState(null)
@@ -102,13 +103,15 @@ export default function Calendario() {
       const mananaStr = aFecha(manana)
       const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
 
-      const [{ data: entsHist }, { data: metricas }, { data: entManana }, { data: proxComp }] = await Promise.all([
+      const [{ data: entsHist }, { data: metricas }, { data: entManana }, { data: proxComp }, { data: gymHist }] = await Promise.all([
         supabase.from('entrenamientos').select('fecha, tss').gte('fecha', aFecha(desde90)).lte('fecha', hoyStr).order('fecha', { ascending: true }),
         supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8),
         supabase.from('entrenamientos').select('*').eq('fecha', mananaStr).limit(1).maybeSingle(),
-        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1).maybeSingle()
+        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1).maybeSingle(),
+        supabase.from('gimnasio').select('fecha').gte('fecha', aFecha(desde90)).lte('fecha', hoyStr)
       ])
       setEntrenamientosHistorial(entsHist || [])
+      setGimnasioHistorial(gymHist || [])
       const metricasOrdenadas = metricas || []
       setHrvActual(metricasOrdenadas[0]?.hrv ?? null)
       setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
@@ -191,6 +194,11 @@ export default function Calendario() {
     ctlActual: ultimaCarga.ctl,
     fechaHoy: aFecha(hoy)
   })
+  const avisoSobrecarga = detectarSobrecargaSemanal({
+    entrenamientos: entrenamientosHistorial,
+    gimnasio: gimnasioHistorial,
+    fechaHoy: aFecha(hoy)
+  })
 
   function cambiarMes(delta) {
     let nuevoMes = mes + delta
@@ -261,6 +269,13 @@ export default function Calendario() {
           <button onClick={() => cambiarMes(1)} className="border border-asphalt-700 rounded-lg w-9 h-9 text-ink-muted">›</button>
         </div>
       </div>
+
+      {avisoSobrecarga && (
+        <div className="card border-alert-amber">
+          <span className="text-alert-amber font-semibold text-sm">⚠ {avisoSobrecarga.diasSeguidos} días seguidos sin descanso</span>
+          <p className="text-sm mt-1.5">{avisoSobrecarga.mensaje}</p>
+        </div>
+      )}
 
       {avisoTaper && (
         <div className="card border-alert-amber">
