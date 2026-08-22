@@ -5,6 +5,7 @@ import Skeleton from '../components/Skeleton'
 import IconoInsignia from '../components/IconoInsignia'
 import { detectarConflictosCalendario } from '../lib/motorConflictos'
 import { detectarOportunidadCalendario } from '../lib/motorOportunidades'
+import { detectarNecesidadTaper } from '../lib/motorTaper'
 import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
 import { generarInsightRecuperacion } from '../lib/motorInsights'
 import { useToast } from '../lib/ToastContext'
@@ -64,6 +65,7 @@ export default function Calendario() {
   const [historialHrv, setHistorialHrv] = useState([])
   const [sueñoUltimaNoche, setSueñoUltimaNoche] = useState(null)
   const [entrenamientoManana, setEntrenamientoManana] = useState(null)
+  const [proximaCompetencia, setProximaCompetencia] = useState(null)
 
   const { dias, inicioGrilla, finGrilla } = construirGrilla(anio, mes)
 
@@ -100,10 +102,11 @@ export default function Calendario() {
       const mananaStr = aFecha(manana)
       const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
 
-      const [{ data: entsHist }, { data: metricas }, { data: entManana }] = await Promise.all([
+      const [{ data: entsHist }, { data: metricas }, { data: entManana }, { data: proxComp }] = await Promise.all([
         supabase.from('entrenamientos').select('fecha, tss').gte('fecha', aFecha(desde90)).lte('fecha', hoyStr).order('fecha', { ascending: true }),
         supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8),
-        supabase.from('entrenamientos').select('*').eq('fecha', mananaStr).limit(1).maybeSingle()
+        supabase.from('entrenamientos').select('*').eq('fecha', mananaStr).limit(1).maybeSingle(),
+        supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1).maybeSingle()
       ])
       setEntrenamientosHistorial(entsHist || [])
       const metricasOrdenadas = metricas || []
@@ -111,6 +114,7 @@ export default function Calendario() {
       setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
       setSueñoUltimaNoche(metricasOrdenadas[0]?.sueño_horas ?? null)
       setEntrenamientoManana(entManana || null)
+      setProximaCompetencia(proxComp || null)
     }
     cargarRecuperacion()
   }, [])
@@ -168,7 +172,7 @@ export default function Calendario() {
 
   const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
   const serieCarga = calcularCargaDiaria(construirSerieDiaria(entrenamientosHistorial, aFecha(desde90), aFecha(hoy)))
-  const ultimaCarga = serieCarga[serieCarga.length - 1] || { tsb: 0, atl: 0 }
+  const ultimaCarga = serieCarga[serieCarga.length - 1] || { tsb: 0, atl: 0, ctl: 0 }
   const historialAtlSerie = serieCarga.slice(-43, -1).map((d) => d.atl)
   const insightRecuperacion = generarInsightRecuperacion({
     tsb: ultimaCarga.tsb, atl: ultimaCarga.atl, historialAtl: historialAtlSerie,
@@ -180,6 +184,12 @@ export default function Calendario() {
     nivelRecuperacion: insightRecuperacion.nivel,
     entrenamientoManana,
     fechaManana: mananaStr
+  })
+  const avisoTaper = detectarNecesidadTaper({
+    competenciaProxima: proximaCompetencia,
+    tsbActual: ultimaCarga.tsb,
+    ctlActual: ultimaCarga.ctl,
+    fechaHoy: aFecha(hoy)
   })
 
   function cambiarMes(delta) {
@@ -251,6 +261,17 @@ export default function Calendario() {
           <button onClick={() => cambiarMes(1)} className="border border-asphalt-700 rounded-lg w-9 h-9 text-ink-muted">›</button>
         </div>
       </div>
+
+      {avisoTaper && (
+        <div className="card border-alert-amber">
+          <span className="text-alert-amber font-semibold text-sm">⏱ Taper — {avisoTaper.diasRestantes === 0 ? 'hoy' : `${avisoTaper.diasRestantes} día${avisoTaper.diasRestantes === 1 ? '' : 's'}`}</span>
+          <p className="text-ink-muted text-xs mt-1">{avisoTaper.competencia}</p>
+          <div className="mt-2.5 pt-2.5 border-t border-asphalt-700">
+            <p className="text-sm">{avisoTaper.mensaje}</p>
+            <p className="text-ink-faint text-[11px] mt-2">TSB actual: {avisoTaper.tsbActual} · Proyectado sin bajar carga: {avisoTaper.tsbProyectado}</p>
+          </div>
+        </div>
+      )}
 
       {oportunidad && (
         <div className="card border-hiviz">
