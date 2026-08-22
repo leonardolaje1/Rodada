@@ -10,6 +10,8 @@ import Skeleton, { SkeletonList } from '../components/Skeleton'
 import { calcularTDEE } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { generarInsightRecuperacion } from '../lib/motorInsights'
+import { detectarAvisoHidratacion } from '../lib/motorHidratacion'
+import { detectarCaidaCargaSemanal } from '../lib/motorAnomalias'
 import { Apple } from 'lucide-react'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
@@ -33,6 +35,7 @@ export default function Dashboard() {
   const [cargando, setCargando] = useState(true)
   const [clima, setClima] = useState(null)
   const [climaError, setClimaError] = useState(false)
+  const [tempMananaMax, setTempMananaMax] = useState(null)
   const [proximaCompetencia, setProximaCompetencia] = useState(null)
   const [componentes, setComponentes] = useState([])
   const [desgaste, setDesgaste] = useState([])
@@ -111,7 +114,7 @@ export default function Dashboard() {
         try {
           const { latitude, longitude } = pos.coords
           const res = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m`
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max&forecast_days=2&timezone=auto`
           )
           const data = await res.json()
           if (data.current) {
@@ -122,6 +125,10 @@ export default function Dashboard() {
             })
           } else {
             setClimaError(true)
+          }
+          // Índice 1 = mañana (índice 0 es hoy) del arreglo diario.
+          if (data.daily?.temperature_2m_max?.[1] != null) {
+            setTempMananaMax(data.daily.temperature_2m_max[1])
           }
         } catch {
           setClimaError(true)
@@ -259,6 +266,19 @@ export default function Dashboard() {
     ? Math.round((new Date(proximaCompetencia.fecha + 'T00:00:00') - new Date().setHours(0, 0, 0, 0)) / 86400000)
     : null
 
+  // Duración de mañana: si ya hay una sesión real cargada, se usa esa; si no,
+  // se cae a la plantilla del plan activo para ese día de la semana (misma
+  // fuente que usa Calendario para "sesiones planificadas").
+  const mananaDate = new Date(); mananaDate.setDate(mananaDate.getDate() + 1)
+  const mananaStr = mananaDate.toISOString().slice(0, 10)
+  const entrenamientoManana = entrenamientos.find((e) => e.fecha === mananaStr) || null
+  const sesionPlanManana = !entrenamientoManana
+    ? planesEntreno.flatMap((p) => (p.sesiones || []).filter((s) => s.dia === diaIdDe(mananaStr)))[0]
+    : null
+  const duracionManana = entrenamientoManana?.duracion_min || sesionPlanManana?.duracion_min || null
+  const avisoHidratacion = detectarAvisoHidratacion({ duracionMananaMin: duracionManana, tempMaxManana: tempMananaMax })
+  const avisoCargaBaja = detectarCaidaCargaSemanal({ entrenamientos, fechaHoy: hoy })
+
   if (cargando) {
     return (
       <div className="flex flex-col gap-6">
@@ -288,6 +308,13 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {avisoHidratacion && (
+        <div className="card border-route">
+          <span className="text-route font-semibold text-sm">💧 Hidratación reforzada — mañana</span>
+          <p className="text-sm mt-1.5">{avisoHidratacion.mensaje}</p>
+        </div>
+      )}
 
       {/* Zona 1 — Hero de decisión */}
       <div className={`card text-center py-5 ${estadoDia.claseCard}`}>
@@ -340,8 +367,20 @@ export default function Dashboard() {
       </div>
 
       {/* Zona 3 — Alertas urgentes */}
-      {(alertasMantenimiento.length > 0 || alertasNutricion.length > 0 || (diasCompetencia != null && diasCompetencia <= 7)) && (
+      {(alertasMantenimiento.length > 0 || alertasNutricion.length > 0 || avisoCargaBaja || (diasCompetencia != null && diasCompetencia <= 7)) && (
         <div className="flex flex-col gap-2">
+          {avisoCargaBaja && (
+            <Link to="/analitica" className="card card-warning flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <IconoInsignia Icono={Activity} claseColor="text-state-warning" claseFondo="bg-state-warning/10" />
+                <div>
+                  <p className="text-xs font-semibold text-state-warning">Carga semanal {avisoCargaBaja.caidaPct}% por debajo de tu promedio</p>
+                  <p className="text-ink-muted text-[11px]">{avisoCargaBaja.tssSemanaActual} TSS vs. {avisoCargaBaja.promedioAnterior} TSS habitual</p>
+                </div>
+              </div>
+              <span className="text-ink-faint text-xs">→</span>
+            </Link>
+          )}
           {alertasNutricion.map((a) => (
             <Link key={a.tipo} to="/nutricion" className="card card-warning flex items-center justify-between">
               <div className="flex items-center gap-2.5">
