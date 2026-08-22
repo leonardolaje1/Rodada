@@ -9,7 +9,7 @@ import { buscarAlimentosLocal, BASE_ALIMENTOS } from '../lib/baseAlimentos'
 import { PLATOS_PRECARGADOS } from '../lib/platosPrecargados'
 import EscanerCodigoBarras from '../components/EscanerCodigoBarras'
 import IconoInsignia from '../components/IconoInsignia'
-import { Apple } from 'lucide-react'
+import { Apple, ChevronLeft } from 'lucide-react'
 import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE, calcularEdad } from '../lib/tdee'
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { useToast } from '../lib/ToastContext'
@@ -26,7 +26,7 @@ const METRICAS_ANTROPOMETRIA = [
   { id: 'perimetro_brazo', label: 'Brazo (cm)', color: '#C34AF1' },
   { id: 'perimetro_pierna', label: 'Pierna (cm)', color: '#7A4AF1' }
 ]
-const TABS = [['hoy', 'Hoy'], ['comidas', 'Comidas'], ['composicion', 'Composición'], ['mas', 'Más']]
+const TABS = [['hoy', 'Hoy'], ['comidas', 'Comidas'], ['hidratacion', 'Agua'], ['composicion', 'Composición'], ['mas', 'Más']]
 const OPCIONES_FAB_DEFAULT = [
   { id: 'comida', label: 'Comida', icono: '🍽️' },
   { id: 'agua', label: 'Agua (+250 ml)', icono: '💧' },
@@ -91,7 +91,7 @@ export default function Nutricion() {
   const { confirmar, alertar } = useConfirm()
 
   const [tab, setTab] = useState('hoy')
-  const [subMas, setSubMas] = useState(null) // null = lista | 'planes' | 'hidratacion' | 'suplementos' | 'documentos'
+  const [subMas, setSubMas] = useState(null) // null = lista | 'planes' | 'suplementos' | 'documentos'
   const [fabAbierto, setFabAbierto] = useState(false)
 
   const [perfil, setPerfil] = useState({ peso: '', altura: '', edad: '', sexo: 'M', nivel_actividad: 'moderado' })
@@ -584,10 +584,6 @@ export default function Nutricion() {
             <div><p className="text-sm font-medium">Planes de comida</p><p className="text-ink-faint text-xs mt-0.5">{planes.length} plan{planes.length === 1 ? '' : 'es'} activo{planes.length === 1 ? '' : 's'}</p></div>
             <span className="text-ink-faint">›</span>
           </button>
-          <button onClick={() => setSubMas('hidratacion')} className="card flex items-center justify-between text-left">
-            <div><p className="text-sm font-medium">Hidratación — historial</p><p className="text-ink-faint text-xs mt-0.5">Detalle por día y tipo de bebida</p></div>
-            <span className="text-ink-faint">›</span>
-          </button>
           <button onClick={() => setSubMas('suplementos')} className="card flex items-center justify-between text-left">
             <div><p className="text-sm font-medium">Suplementos</p><p className="text-ink-faint text-xs mt-0.5">{suplementos.length} activo{suplementos.length === 1 ? '' : 's'}</p></div>
             <span className="text-ink-faint">›</span>
@@ -601,8 +597,7 @@ export default function Nutricion() {
 
       {tab === 'mas' && subMas === 'planes' && (
         <div className="flex flex-col gap-3">
-          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
-          <span className="label-eyebrow">Planes de comida</span>
+          <SubMasHeader onVolver={() => setSubMas(null)} titulo="Planes de comida" />
           <div className="flex justify-end">
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setPlanEditando(null); setFormPlanOpen((v) => !v) }}>+ Plan</button>
           </div>
@@ -659,10 +654,8 @@ export default function Nutricion() {
         </div>
       )}
 
-      {tab === 'mas' && subMas === 'hidratacion' && (
+      {tab === 'hidratacion' && (
         <div className="flex flex-col gap-3">
-          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
-          <span className="label-eyebrow">Hidratación</span>
           <div className="card">
             <span className="label-eyebrow">Fecha</span>
             <input
@@ -743,8 +736,7 @@ export default function Nutricion() {
 
       {tab === 'mas' && subMas === 'suplementos' && (
         <div className="flex flex-col gap-3">
-          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
-          <span className="label-eyebrow">Suplementos</span>
+          <SubMasHeader onVolver={() => setSubMas(null)} titulo="Suplementos" />
           <div className="flex justify-end"><button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => setFormSuplemento((v) => !v)}>+ Suplemento</button></div>
           {formSuplemento && (
             <FormSuplemento onGuardar={async (n) => { const { data: userData } = await supabase.auth.getUser(); await supabase.from('suplementos').insert({ ...n, user_id: userData.user.id }); setFormSuplemento(false); cargar() }} onCancelar={() => setFormSuplemento(false)} />
@@ -780,8 +772,7 @@ export default function Nutricion() {
 
       {tab === 'mas' && subMas === 'documentos' && (
         <div className="flex flex-col gap-3">
-          <button onClick={() => setSubMas(null)} className="text-hiviz text-xs font-semibold self-start">‹ Más</button>
-          <span className="label-eyebrow">Documentos</span>
+          <SubMasHeader onVolver={() => setSubMas(null)} titulo="Documentos" />
           <div className="card">
             <span className="label-eyebrow">Subir plan de comidas (PDF o foto)</span>
             <p className="text-ink-muted text-xs mt-1.5">
@@ -867,6 +858,16 @@ function StatMini({ label, value, unit, color }) {
 }
 function MiniDato({ label, value, color = 'text-ink' }) {
   return <div><p className={`readout text-sm font-semibold ${color}`}>{value ?? '—'}</p><p className="text-ink-muted text-[10px] uppercase">{label}</p></div>
+}
+function SubMasHeader({ onVolver, titulo }) {
+  return (
+    <button onClick={onVolver} className="flex items-center gap-1.5 self-start text-ink-muted hover:text-ink -ml-1">
+      <ChevronLeft size={16} strokeWidth={2.5} aria-hidden />
+      <span className="label-eyebrow">Más</span>
+      <span className="text-ink-faint">/</span>
+      <span className="label-eyebrow text-ink">{titulo}</span>
+    </button>
+  )
 }
 
 function FormPlanNutricion({ onGuardar, onCancelar, valoresIniciales }) {
