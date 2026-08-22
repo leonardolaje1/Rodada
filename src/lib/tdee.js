@@ -28,3 +28,15 @@ export function calcularEdad(fechaNacimiento) {
   if (aunNoCumplio) edad -= 1
   return edad
 }
+
+// TDEE dinámico: en vez de un multiplicador fijo por "nivel de actividad",
+// suma el BMR a nivel sedentario (NEAT — actividad cotidiana sin entrenar)
+// más las calorías activas reales de ese día (de Entrenamientos). Se usa
+// cuando hay datos reales de gasto para el día; si no hay, se cae al TDEE
+// estático de calcularTDEE() de arriba.
+export const FACTOR_NEAT_BASE = 1.2
+
+export function calcularTDEEDinamico({ bmr, caloriasActivas }) {
+  if (!bmr) return null
+  return Math.round(bmr * FACTOR_NEAT_BASE + (Number(caloriasActivas) || 0))
+}
