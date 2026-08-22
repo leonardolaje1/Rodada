@@ -15,6 +15,7 @@ import EstadoVacio from '../components/EstadoVacio'
 import { Activity } from 'lucide-react'
 import { ZONAS_POTENCIA, ZONAS_FC } from '../lib/zonas'
 import { parsearPlanillaBici } from '../lib/importarPlanilla'
+import { detectarFasesMesociclo, FASES_INFO } from '../lib/motorFase'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -647,17 +648,33 @@ export default function Entrenamientos() {
 
                         {sesionesMeso.length > 0 && (
                           <div className="flex flex-col mt-3 pt-3 border-t border-asphalt-700">
-                            {sesionesMeso.map((s, i) => {
+                            {(() => {
+                              // Semanas del mesociclo tal como quedaron materializadas (no el
+                              // form de armado): agrupa por índice de semana y calcula la fase
+                              // de cada una sobre lo realmente programado, no sobre lo tipeado.
+                              const indices = [...new Set(sesionesMeso.map((s) => semanaIndice(s.fecha, m.fecha_inicio)))].sort((a, b) => a - b)
+                              const semanasSesiones = indices.map((idx) => sesionesMeso.filter((s) => semanaIndice(s.fecha, m.fecha_inicio) === idx))
+                              const fasesPorIndice = {}
+                              detectarFasesMesociclo(semanasSesiones).forEach((f, i) => { fasesPorIndice[indices[i]] = f })
+                              return sesionesMeso.map((s, i) => {
                               const semanaActual = semanaIndice(s.fecha, m.fecha_inicio)
                               const semanaAnterior = i > 0 ? semanaIndice(sesionesMeso[i - 1].fecha, m.fecha_inicio) : null
                               const nuevaSemana = semanaActual !== semanaAnterior
                               const sesionesSemana = nuevaSemana ? sesionesMeso.filter((x) => semanaIndice(x.fecha, m.fecha_inicio) === semanaActual) : null
                               const horasSemana = nuevaSemana ? (sesionesSemana.reduce((acc, x) => acc + (x.duracion_min || 0), 0) / 60).toFixed(1) : null
+                              const faseInfo = nuevaSemana ? FASES_INFO[fasesPorIndice[semanaActual]?.fase] : null
                               return (
                                 <div key={s.id}>
                                   {nuevaSemana && (
                                     <div className={`flex items-baseline justify-between ${i === 0 ? '' : 'mt-3'} mb-1`}>
-                                      <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="label-eyebrow mb-0">Semana {semanaActual + 1}</p>
+                                        {faseInfo && (
+                                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${faseInfo.color}22`, color: faseInfo.color }}>
+                                            {faseInfo.label}
+                                          </span>
+                                        )}
+                                      </div>
                                       <p className="text-ink-faint text-[11px]">{fmtFecha(sesionesSemana[0].fecha)}–{fmtFecha(sesionesSemana[sesionesSemana.length - 1].fecha)} · {horasSemana} h</p>
                                     </div>
                                   )}
@@ -679,7 +696,8 @@ export default function Entrenamientos() {
                                   )}
                                 </div>
                               )
-                            })}
+                              })
+                            })()}
                           </div>
                         )}
                       </div>
@@ -1049,9 +1067,25 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
       )}
       <div className="flex flex-col gap-3">
         <span className="label-eyebrow">Cronograma — 4 semanas</span>
-        {semanas.map((semana, si) => (
+        {(() => {
+          // Fase detectada por semana, recalculada en vivo mientras se arma
+          // el bloque — para que el usuario vea de entrada si el patrón que
+          // está armando realmente forma una progresión base→pico→descarga.
+          const fasesPorSemana = detectarFasesMesociclo(
+            semanas.map((semana) => (semana.dias || []).filter((d) => d.activo))
+          )
+          return semanas.map((semana, si) => {
+            const faseInfo = FASES_INFO[fasesPorSemana[si]?.fase] || null
+            return (
             <div key={si} className="border border-asphalt-700 rounded-lg p-2.5">
-              <p className="text-sm font-semibold mb-2">Semana {semana.semana}</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold">Semana {semana.semana}</p>
+                {faseInfo && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${faseInfo.color}22`, color: faseInfo.color }}>
+                    {faseInfo.label}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-col gap-2">
                 {DIAS_SEMANA.map((diaInfo) => {
                   const d = semana.dias.find((x) => x.dia === diaInfo.id)
@@ -1105,7 +1139,9 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
                 })}
               </div>
             </div>
-          ))}
+            )
+          })
+        })()}
         </div>
 
       <div className="flex justify-end gap-2 mt-1">
