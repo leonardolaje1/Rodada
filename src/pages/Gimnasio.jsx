@@ -29,6 +29,12 @@ const DIAS_SEMANA = [
 ]
 const PRS_DESTACADOS = ['Press banca', 'Sentadilla', 'Peso muerto']
 const METODOS_PRESCRIPCION = ['RPE', 'RIR', 'Peso fijo', '% de 1RM', 'Otro']
+// Rol del ejercicio dentro de la sesión -- independiente del método de
+// prescripción (Método = cómo se define la carga; Función = para qué está
+// ese ejercicio ahí). Sin columna propia en Supabase todavía, así que viaja
+// codificado dentro de valor_prescrito (mismo criterio que ya usa el código
+// para series/reps en texto) hasta que se agregue la columna real.
+const FUNCIONES_EJERCICIO = ['Fuerza básica', 'Fuerza accesoria', 'Transferencia/potencia', 'Fibra lenta', 'Sostén/estabilidad', 'Aislamiento']
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function agruparPorFecha(items) {
@@ -83,14 +89,19 @@ function recalcularPRs(sesiones) {
   }
   return marcados
 }
-function crearParametrosSemanas() {
-  return [1, 2, 3, 4].map(() => ({ series: '', reps: '', valor: '' }))
+function crearParametrosSemanas(numSemanas = 4) {
+  return Array.from({ length: numSemanas }, () => ({ series: '', reps: '', valor: '' }))
 }
-function crearDiasVacios() {
+function crearDiasVacios(numSemanas = 4) {
   return DIAS_SEMANA.map((d) => ({
     dia: d.id, activo: false, es_clave: false,
-    ejercicios: [{ ejercicio: 'Sentadilla', metodo: '', porSemana: crearParametrosSemanas() }]
+    ejercicios: [{ ejercicio: 'Sentadilla', metodo: '', funcion: '', porSemana: crearParametrosSemanas(numSemanas) }]
   }))
+}
+// Duración real de un mesociclo ya armado (o en edición) = el largo más
+// largo de porSemana que aparezca en sus ejercicios -- no se asume fijo.
+function numSemanasDeDias(dias) {
+  return Math.max(1, ...(dias || []).flatMap((d) => (d.ejercicios || []).map((ej) => (ej.porSemana || []).length)), 0)
 }
 // Las columnas series/reps son numéricas en Supabase. Si el valor prescrito
 // trae texto ("10-12", "10 c/lado"), NUNCA lo mandamos crudo a esas columnas
@@ -111,7 +122,8 @@ function textoSiDistinto(v, entero) {
 
 function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
   const filas = []
-  for (let offset = 0; offset < 28; offset++) {
+  const numSemanas = numSemanasDeDias(dias)
+  for (let offset = 0; offset < numSemanas * 7; offset++) {
     const fecha = new Date(fechaInicioBase)
     fecha.setDate(fecha.getDate() + offset)
     const si = Math.floor(offset / 7)
@@ -130,13 +142,14 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
       const repsTexto = textoSiDistinto(p.reps, repsNum)
       const seriesTexto = textoSiDistinto(p.series, seriesNum)
       const notaReps = [seriesTexto ? `series ${seriesTexto}` : null, repsTexto ? `reps ${repsTexto}` : null].filter(Boolean).join(' · ')
+      const notaFuncion = ej.funcion ? `función: ${ej.funcion}` : null
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
         series: seriesNum,
         reps: repsNum,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
-        valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
+        valor_prescrito: [p.valor || null, notaFuncion, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
         sesion_id: sesionId
       })
@@ -217,8 +230,9 @@ export default function Gimnasio() {
 
   async function crearMesociclo(form) {
     // "dias" es la plantilla única (días + ejercicios + método), con un valor de
-    // series/reps/valor por cada una de las 4 semanas. Se guarda en la columna
-    // "semanas" de mesociclos_gimnasio para no requerir cambios de esquema en Supabase.
+    // series/reps/valor por cada semana del bloque (duración variable, no fija
+    // en 4). Se guarda en la columna "semanas" de mesociclos_gimnasio para no
+    // requerir cambios de esquema en Supabase.
     const { dias, ...meta } = form
     const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias }).select().single()
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
@@ -302,6 +316,17 @@ export default function Gimnasio() {
     }
   }
 
+  // 1RM estimado por ejercicio (fórmula de Epley, misma que usan los PRs) a
+  // partir del historial ya logueado. Se usa para sugerir el peso de una
+  // sesión prescrita en "% de 1RM" sin que el atleta tenga que cargar su 1RM
+  // a mano en ningún lado -- ya lo "sabemos" por lo que efectivamente levantó.
+  const estimados1RMPorEjercicio = {}
+  for (const s of sesiones) {
+    if (s.estado !== 'realizado') continue
+    const est = estimar1RM(s.peso, s.reps)
+    if (est > 0 && est > (estimados1RMPorEjercicio[s.ejercicio] || 0)) estimados1RMPorEjercicio[s.ejercicio] = est
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
@@ -331,7 +356,7 @@ export default function Gimnasio() {
             <EstadoVacio
               Icono={Dumbbell}
               titulo="Sin mesociclos todavía"
-              descripcion="Armá tu bloque de 4 semanas con los días y ejercicios de cada uno."
+              descripcion="Armá tu bloque (la duración que necesites) con los días y ejercicios de cada uno."
             />
           ) : (
             <div className="flex flex-col gap-2">
@@ -378,10 +403,13 @@ export default function Gimnasio() {
                           <div className="flex flex-col mt-3 pt-3 border-t border-asphalt-700">
                             {(() => {
                               const porFecha = agruparPorFechaAsc(filasMeso)
-                              // Agrupa las filas materializadas en 4 semanas (por índice, no por
+                              // Agrupa las filas materializadas por semana (por índice, no por
                               // fecha exacta) para calcular la fase sobre lo que realmente quedó
                               // guardado, igual que hace el preview del formulario con lo tipeado.
-                              const filasPorSemana = [0, 1, 2, 3].map((idx) =>
+                              // numSemanas sale de la duración real guardada (fecha_fin - fecha_inicio),
+                              // no de un tamaño fijo -- así un bloque de 2 o de 6 semanas también agrupa bien.
+                              const numSemanasMeso = Math.max(1, Math.round(((new Date(m.fecha_fin) - new Date(m.fecha_inicio)) / 86400000 + 1) / 7))
+                              const filasPorSemana = Array.from({ length: numSemanasMeso }, (_, idx) =>
                                 filasMeso.filter((f) => semanaIndice(f.fecha, m.fecha_inicio) === idx)
                               )
                               const fasesPorIndice = detectarFasesMesocicloGimnasioDesdeFilas(filasPorSemana)
@@ -412,6 +440,7 @@ export default function Gimnasio() {
                                       items={items}
                                       editandoId={editandoId}
                                       valoresEdicion={valoresEdicion}
+                                      estimados1RMPorEjercicio={estimados1RMPorEjercicio}
                                       onGuardarEdicion={(id, datos) => actualizar(id, datos)}
                                       onCancelarEdicion={() => { setEditandoId(null); setValoresEdicion(null) }}
                                       onCargarDatos={(s) => { setFormOpen(false); setValoresEdicion({ ...s, estado: 'realizado' }); setEditandoId(s.id) }}
@@ -565,7 +594,7 @@ function MiniDato({ label, value, color = 'text-ink' }) {
   return <div><p className={`readout text-sm font-semibold ${color}`}>{value}</p><p className="text-ink-muted text-[10px] uppercase">{label}</p></div>
 }
 
-function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
+function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, estimados1RMPorEjercicio, onGuardarEdicion, onCancelarEdicion, onCargarDatos }) {
   return (
     <div className="border-b border-asphalt-800 last:border-0 py-2">
       <p className="text-xs font-medium px-1">{diaLabelDeFecha(fecha)} {fmtFecha(fecha)}</p>
@@ -580,7 +609,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, onGuardarEdici
               />
             </div>
           ) : (
-            <SesionMesocicloGymRow key={s.id} s={s} onCargarDatos={() => onCargarDatos(s)} />
+            <SesionMesocicloGymRow key={s.id} s={s} estimado1RM={estimados1RMPorEjercicio?.[s.ejercicio]} onCargarDatos={() => onCargarDatos(s)} />
           )
         )}
       </div>
@@ -657,7 +686,12 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
   )
 }
 
-function SesionMesocicloGymRow({ s, onCargarDatos }) {
+// Redondea al múltiplo de 2.5kg más cercano -- el incremento típico de disco
+// en la mayoría de las barras/máquinas, mismo criterio que se usa al armar
+// la planificación en planilla.
+function redondear2y5(kg) { return Math.round(kg / 2.5) * 2.5 }
+
+function SesionMesocicloGymRow({ s, estimado1RM, onCargarDatos }) {
   const hecha = s.estado === 'realizado'
   const metodo = s.metodo_prescrito
   const esNota = !metodo || metodo === 'Otro'
@@ -666,13 +700,28 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
   // primer segmento cuando hay método; el resto (o todo, si no hay método) va como nota.
   const partes = (s.valor_prescrito || '').split(' · ').filter(Boolean)
   const valorCore = !esNota ? partes[0] : null
-  const notaPartes = esNota ? partes : partes.slice(1)
+  const notaPartesCrudas = esNota ? partes : partes.slice(1)
+  // La función ("función: Fuerza básica") viaja codificada en valor_prescrito
+  // -- se separa acá para mostrarla como etiqueta propia en vez de mezclarla
+  // con notas genéricas de series/reps.
+  const funcionParte = notaPartesCrudas.find((p) => p.startsWith('función: '))
+  const funcion = funcionParte ? funcionParte.replace('función: ', '') : null
+  const notaPartes = notaPartesCrudas.filter((p) => p !== funcionParte)
   const nota = notaPartes.length > 0 ? notaPartes.join(' · ') : null
   const chipTexto = !esNota ? (valorCore ? `${metodo} ${valorCore}` : metodo) : null
   const seriesReps = [s.series, s.reps].filter((v) => v !== null && v !== undefined && v !== '').join('x')
   const pesosTxt = Array.isArray(s.pesos_series) && s.pesos_series.length > 0
     ? s.pesos_series.join('/') + 'kg'
     : (s.peso ? `${s.peso}kg` : '')
+
+  // Peso sugerido: solo cuando el método es "% de 1RM", el valor prescrito es
+  // un número, y ya tenemos un 1RM estimado de este ejercicio en el historial
+  // (sale solo de sesiones ya logueadas -- nadie tiene que cargar un 1RM a mano).
+  let pesoSugerido = null
+  if (!hecha && metodo === '% de 1RM' && estimado1RM) {
+    const pct = parseFloat(valorCore)
+    if (!isNaN(pct)) pesoSugerido = redondear2y5(estimado1RM * pct / 100)
+  }
 
   return (
     <div className="flex items-center gap-2 py-1.5 px-1 -mx-1 rounded-lg hover:bg-asphalt-700/40 transition-colors">
@@ -682,8 +731,14 @@ function SesionMesocicloGymRow({ s, onCargarDatos }) {
         <span className="w-1.5 h-1.5 rounded-full bg-asphalt-600 flex-shrink-0 mx-1.5" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium truncate">{s.ejercicio}{seriesReps ? ` — ${seriesReps}` : ''}{hecha && pesosTxt ? ` @ ${pesosTxt}` : ''}</p>
+        <p className="text-xs font-medium truncate">
+          {s.ejercicio}{seriesReps ? ` — ${seriesReps}` : ''}{hecha && pesosTxt ? ` @ ${pesosTxt}` : ''}
+          {funcion && <span className="text-ink-faint text-[9px] font-normal ml-1.5 align-middle">· {funcion}</span>}
+        </p>
         {nota && <p className="text-ink-faint text-[10px] truncate">{nota}</p>}
+        {pesoSugerido != null && (
+          <p className="text-hiviz text-[10px] truncate">≈ {pesoSugerido}kg sugerido (1RM est. {Math.round(estimado1RM)}kg)</p>
+        )}
       </div>
       {hecha ? (
         <span className="text-hiviz text-[11px] flex-shrink-0">{s.pr ? '🏆 PR' : '✓'}</span>
@@ -795,11 +850,30 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
   const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
   const [fechaInicio, setFechaInicio] = useState(valoresIniciales?.fecha_inicio || new Date().toISOString().slice(0, 10))
   const [notas, setNotas] = useState(valoresIniciales?.notas || '')
-  // Plantilla única de días/ejercicios: se define una sola vez y se repite en las 4 semanas.
-  // Lo único que cambia semana a semana son los parámetros de carga (series/reps/valor).
+  // Plantilla única de días/ejercicios: se define una sola vez y se repite en
+  // las N semanas del bloque. Lo único que cambia semana a semana son los
+  // parámetros de carga (series/reps/valor). N es elegible (numSemanas) y ya
+  // no está fijo en 4 -- un mesociclo de fuerza+hipertrofia puede durar 6
+  // semanas, uno de descarga 2, etc.
   const [dias, setDias] = useState(
-    valoresIniciales?.semanas?.length ? valoresIniciales.semanas : crearDiasVacios()
+    valoresIniciales?.semanas?.length ? valoresIniciales.semanas : crearDiasVacios(4)
   )
+  const [numSemanas, setNumSemanas] = useState(() => numSemanasDeDias(dias))
+
+  function cambiarNumSemanas(nuevoValor) {
+    const n = Math.max(1, Math.min(52, Number(nuevoValor) || 1))
+    setNumSemanas(n)
+    setDias((prev) => prev.map((d) => ({
+      ...d,
+      ejercicios: d.ejercicios.map((ej) => {
+        const actual = ej.porSemana || []
+        const porSemana = actual.length >= n
+          ? actual.slice(0, n)
+          : [...actual, ...crearParametrosSemanas(n - actual.length)]
+        return { ...ej, porSemana }
+      })
+    })))
+  }
 
   function actualizarDia(diaId, cambios) {
     setDias((prev) => prev.map((d) => (d.dia === diaId ? { ...d, ...cambios } : d)))
@@ -820,7 +894,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
   }
   function agregarEjercicio(diaId) {
     setDias((prev) => prev.map((d) => (d.dia !== diaId ? d : {
-      ...d, ejercicios: [...d.ejercicios, { ejercicio: 'Sentadilla', metodo: '', porSemana: crearParametrosSemanas() }]
+      ...d, ejercicios: [...d.ejercicios, { ejercicio: 'Sentadilla', metodo: '', funcion: '', porSemana: crearParametrosSemanas(numSemanas) }]
     })))
   }
   function quitarEjercicio(diaId, ejIdx) {
@@ -831,7 +905,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
     <form className="card flex flex-col gap-3" onSubmit={(e) => {
       e.preventDefault()
       const inicio = new Date(fechaInicio + 'T12:00:00')
-      const fechaFin = new Date(inicio); fechaFin.setDate(fechaFin.getDate() + 27)
+      const fechaFin = new Date(inicio); fechaFin.setDate(fechaFin.getDate() + numSemanas * 7 - 1)
       onGuardar({
         nombre,
         fecha_inicio: fechaInicio,
@@ -853,9 +927,15 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
         </p>
       )}
       <div className="flex flex-col gap-3">
-        <div>
-          <span className="label-eyebrow">Días y ejercicios</span>
-          <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las 4 semanas. Abajo cargás series/reps/valor de cada semana.</p>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <span className="label-eyebrow">Días y ejercicios</span>
+            <p className="text-ink-faint text-[10px] mt-0.5">Se repiten igual en las {numSemanas} semana{numSemanas === 1 ? '' : 's'}. Abajo cargás series/reps/valor de cada semana.</p>
+          </div>
+          <label className="flex flex-col gap-1 text-sm flex-shrink-0">
+            <span className="text-ink-muted text-xs">Duración (semanas)</span>
+            <input type="number" min="1" max="52" value={numSemanas} onChange={(e) => cambiarNumSemanas(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink w-24" />
+          </label>
         </div>
         {(() => {
           // Fase detectada por semana, recalculada en vivo mientras se arma
@@ -901,6 +981,10 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
                       <div key={ejIdx} className="flex flex-col gap-1.5 pb-2 border-b border-asphalt-800 last:border-0">
                         <div className="flex gap-1.5 items-center">
                           <input value={ej.ejercicio} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { ejercicio: e.target.value })} list="ejercicios-sugeridos" placeholder="Ejercicio" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs flex-1" />
+                          <select value={ej.funcion || ''} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { funcion: e.target.value })} title="Función del ejercicio en la sesión" className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-32">
+                            <option value="">Sin función</option>
+                            {FUNCIONES_EJERCICIO.map((f) => <option key={f}>{f}</option>)}
+                          </select>
                           <select value={ej.metodo} onChange={(e) => actualizarEjercicio(diaInfo.id, ejIdx, { metodo: e.target.value })} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-2 py-1 text-ink text-xs w-28">
                             <option value="">Sin método</option>
                             {METODOS_PRESCRIPCION.map((m) => <option key={m}>{m}</option>)}
@@ -912,7 +996,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
                             <thead>
                               <tr className="text-ink-faint">
                                 <th className="text-left font-normal pr-2 w-14"></th>
-                                {[1, 2, 3, 4].map((n) => <th key={n} className="font-semibold text-hiviz px-1.5 pb-1">S{n}</th>)}
+                                {ej.porSemana.map((_, n) => <th key={n} className="font-semibold text-hiviz px-1.5 pb-1">S{n + 1}</th>)}
                               </tr>
                             </thead>
                             <tbody>
