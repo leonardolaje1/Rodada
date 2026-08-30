@@ -334,6 +334,7 @@ export default function Calendario() {
             const esHoy = dia.fecha === aFecha(hoy)
             const seleccionado = dia.fecha === diaSeleccionado
             const tieneConflicto = !!conflictosPorFecha[dia.fecha]
+            const tieneClave = ents.some((e) => e.es_clave) || gyms.some((g) => g.es_clave)
             return (
               <button
                 key={dia.fecha}
@@ -343,6 +344,7 @@ export default function Calendario() {
                 } ${dia.delMesActual ? '' : 'opacity-30'}`}
               >
                 {tieneConflicto && <span className="absolute top-0.5 right-0.5 text-[9px]">⚠️</span>}
+                {tieneClave && <span title="Sesión clave" className="absolute top-0.5 left-0.5 text-[9px]">⭐</span>}
                 <span className={`text-xs ${esHoy ? 'text-hiviz font-bold' : 'text-ink'}`}>{dia.diaMes}</span>
                 <div className="flex gap-0.5 mt-1 flex-wrap justify-center">
                   {ents.length > 0 && <i className="w-1.5 h-1.5 rounded-full bg-hiviz inline-block" />}
@@ -372,16 +374,20 @@ export default function Calendario() {
           ) : (
             <div className="flex flex-col gap-3 mt-3">
               {infoSeleccionado.ents.map((e) => (
-                <div key={e.id} className="flex items-center gap-2">
-                  <i className="w-2 h-2 rounded-full bg-hiviz inline-block flex-shrink-0" />
-                  <p className="text-sm flex-1 min-w-0">{e.tipo}{e.ruta ? ` — ${e.ruta}` : ''} {e.km ? `· ${e.km} km` : ''}</p>
+                <div key={e.id} className={`flex items-center gap-2 ${e.es_clave ? 'bg-hiviz/10 -mx-2 px-2 py-1 rounded-lg' : ''}`}>
+                  <i className={`w-2 h-2 rounded-full inline-block flex-shrink-0 ${e.es_clave ? 'bg-hiviz' : 'bg-hiviz/60'}`} />
+                  {e.es_clave && <span title="Sesión clave" className="text-hiviz text-xs flex-shrink-0">⭐</span>}
+                  <p className={`text-sm flex-1 min-w-0 ${e.es_clave ? 'font-semibold' : ''}`}>{e.tipo}{e.ruta ? ` — ${e.ruta}` : ''} {e.km ? `· ${e.km} km` : ''}</p>
                   <button onClick={() => abrirMover(e, 'entrenamientos', e.tipo, '#EB642A')} className="text-ink-muted text-[11px] font-semibold border border-asphalt-700 rounded-lg px-2 py-1 flex-shrink-0">⇄ Mover</button>
                 </div>
               ))}
-              {gruposGym(infoSeleccionado.gyms).map((grupo) => (
+              {gruposGym(infoSeleccionado.gyms).map((grupo) => {
+                const esClave = grupo.items.some((it) => it.es_clave)
+                return (
                 <div key={grupo.clave} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-2 ${esClave ? 'bg-hiviz/10 -mx-2 px-2 py-1 rounded-lg' : ''}`}>
                     <i className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ background: '#C34AF1' }} />
+                    {esClave && <span title="Sesión clave" className="text-hiviz text-xs flex-shrink-0">⭐</span>}
                     <p className="text-sm flex-1 min-w-0 font-semibold">
                       {grupo.items.length > 1
                         ? `Sesión de gimnasio · ${grupo.items.length} ejercicios`
@@ -408,7 +414,7 @@ export default function Calendario() {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
               {infoSeleccionado.gymPlanificado && (
                 <div className="flex items-center gap-2">
                   <i className="w-2 h-2 rounded-full border border-ink-faint inline-block flex-shrink-0" />
