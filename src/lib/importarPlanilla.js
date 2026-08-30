@@ -141,14 +141,25 @@ export async function parsearPlanillaBici(file) {
   const filasRaw = XLSX.utils.sheet_to_json(hojaSesiones, { defval: '' })
   if (filasRaw.length === 0) throw new Error('La hoja "Sesiones" está vacía.')
 
-  const semanas = [1, 2, 3, 4].map((n) => ({ semana: n, dias: DIAS_VALIDOS.map(diaVacioBici) }))
+  // Duración real del mesociclo = máximo de la columna Semana, no un tamaño
+  // fijo de 4 -- mismo criterio que en el importador de Gimnasio.
+  let numSemanas = 0
+  filasRaw.forEach((filaOriginal) => {
+    const fila = mapearFila(filaOriginal, ALIAS_SESION)
+    const n = numOrNull(fila.semana)
+    if (n && n > numSemanas) numSemanas = n
+  })
+  if (numSemanas < 1) throw new Error('La hoja "Sesiones" no tiene ninguna fila con un número de Semana válido.')
+  if (numSemanas > 52) throw new Error('La columna Semana no puede superar 52 -- revisá si hay un valor mal tipeado.')
+
+  const semanas = Array.from({ length: numSemanas }, (_, idx) => ({ semana: idx + 1, dias: DIAS_VALIDOS.map(diaVacioBici) }))
 
   filasRaw.forEach((filaOriginal, i) => {
     const fila = mapearFila(filaOriginal, ALIAS_SESION)
     const numFila = i + 2 // +2: encabezado + índice base 1
     const semanaNum = numOrNull(fila.semana)
     const diaId = normalizarDia(fila.dia)
-    if (!semanaNum || semanaNum < 1 || semanaNum > 4) throw new Error(`Fila ${numFila} de "Sesiones": la columna Semana debe ser 1, 2, 3 o 4.`)
+    if (!semanaNum || semanaNum < 1) throw new Error(`Fila ${numFila} de "Sesiones": la columna Semana debe ser un número entero mayor o igual a 1.`)
     if (!diaId) throw new Error(`Fila ${numFila} de "Sesiones": no reconozco el día "${fila.dia}". Usá Lun/Mar/Mié/Jue/Vie/Sáb/Dom.`)
     if (!fila.tipo) throw new Error(`Fila ${numFila} de "Sesiones": falta la columna Tipo (Ruta/MTB/Gravel/Rodillo/Pista/Descanso).`)
 
@@ -171,7 +182,7 @@ export async function parsearPlanillaBici(file) {
   })
 
   const inicio = lunesDeFecha(String(meta.fecha_inicio).slice(0, 10))
-  const fin = new Date(inicio); fin.setDate(fin.getDate() + 27)
+  const fin = new Date(inicio); fin.setDate(fin.getDate() + numSemanas * 7 - 1)
 
   return {
     nombre: String(meta.nombre).trim(),
@@ -241,7 +252,11 @@ function textoSiDistinto(v, entero) {
 
 export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id, userId) {
   const filas = []
-  for (let offset = 0; offset < 28; offset++) {
+  // La duración se toma de los propios datos (largo real de porSemana), no
+  // de un tamaño fijo -- así un mesociclo de 2, 6 o 12 semanas genera todos
+  // sus días, no solo los primeros 28.
+  const numSemanas = Math.max(1, ...(dias || []).flatMap((d) => (d.ejercicios || []).map((ej) => (ej.porSemana || []).length)), 0)
+  for (let offset = 0; offset < numSemanas * 7; offset++) {
     const fecha = new Date(fechaInicioBase)
     fecha.setDate(fecha.getDate() + offset)
     const si = Math.floor(offset / 7)
@@ -319,10 +334,10 @@ export async function generarPlantillaGimnasio() {
     ['Fecha_inicio', '2026-01-05'],
     ['Notas', '']
   ]
-  const headers = ['Semana', 'Dia', 'Clave', 'Ejercicio', 'Metodo', 'Series', 'Reps', 'Valor']
+  const headers = ['Semana', 'Dia', 'Clave', 'Ejercicio', 'Funcion', 'Metodo', 'Series', 'Reps', 'Valor']
   const ejemplo = [
-    [1, 'Mar', '', 'Sentadilla trasera', 'RPE', 3, 12, 6],
-    [2, 'Mar', '', 'Sentadilla trasera', 'RPE', 4, 10, '6-7']
+    [1, 'Mar', '', 'Sentadilla trasera', 'Fuerza básica', 'RPE', 3, 12, 6],
+    [2, 'Mar', '', 'Sentadilla trasera', 'Fuerza básica', 'RPE', 4, 10, '6-7']
   ]
   return construirLibro(XLSX, 'Meta', filasMeta, 'Ejercicios', headers, ejemplo)
 }
@@ -349,6 +364,10 @@ const ALIAS_EJERCICIO = {
   es_clave: ['clave', 'es_clave', 'destacada', 'key'],
   ejercicio: ['ejercicio', 'exercise', 'nombre_ejercicio'],
   metodo: ['metodo', 'method'],
+  // Funcion = rol del ejercicio en la sesión (fuerza básica, accesoria,
+  // transferencia/potencia, fibra lenta, sostén, aislamiento) -- distinto de
+  // Metodo, que describe cómo se prescribe la carga.
+  funcion: ['funcion', 'function', 'rol'],
   series: ['series'],
   reps: ['reps', 'repeticiones'],
   valor: ['valor', 'carga', 'rpe', 'peso', 'valor_prescrito']
@@ -370,7 +389,21 @@ export async function parsearPlanillaGimnasio(file) {
   const filasRaw = XLSX.utils.sheet_to_json(hojaEjercicios, { defval: '' })
   if (filasRaw.length === 0) throw new Error('La hoja "Ejercicios" está vacía.')
 
-  // dias: { [diaId]: { dia, activo, es_clave, ejercicios: { [nombreEjercicio]: { metodo, porSemana:[4] } } } }
+  // La duración del mesociclo NO se asume fija en 4 semanas -- se toma del
+  // máximo valor que aparezca en la columna Semana. Esto permite bloques de
+  // cualquier duración (2 semanas de descarga, 6 de fuerza+hipertrofia, etc.)
+  // sin tocar código cada vez. Límite superior generoso (52) solo para
+  // atajar un error de tipeo grosero en la planilla, no una duración real.
+  let numSemanas = 0
+  filasRaw.forEach((filaOriginal) => {
+    const fila = mapearFila(filaOriginal, ALIAS_EJERCICIO)
+    const n = numOrNull(fila.semana)
+    if (n && n > numSemanas) numSemanas = n
+  })
+  if (numSemanas < 1) throw new Error('La hoja "Ejercicios" no tiene ninguna fila con un número de Semana válido.')
+  if (numSemanas > 52) throw new Error('La columna Semana no puede superar 52 -- revisá si hay un valor mal tipeado.')
+
+  // dias: { [diaId]: { dia, activo, es_clave, ejercicios: { [nombreEjercicio]: { metodo, porSemana:[numSemanas] } } } }
   const diasMap = {}
   for (const d of DIAS_VALIDOS) diasMap[d] = { dia: d, activo: false, es_clave: false, ejerciciosPorNombre: {} }
 
@@ -379,7 +412,7 @@ export async function parsearPlanillaGimnasio(file) {
     const numFila = i + 2
     const semanaNum = numOrNull(fila.semana)
     const diaId = normalizarDia(fila.dia)
-    if (!semanaNum || semanaNum < 1 || semanaNum > 4) throw new Error(`Fila ${numFila} de "Ejercicios": la columna Semana debe ser 1, 2, 3 o 4.`)
+    if (!semanaNum || semanaNum < 1) throw new Error(`Fila ${numFila} de "Ejercicios": la columna Semana debe ser un número entero mayor o igual a 1.`)
     if (!diaId) throw new Error(`Fila ${numFila} de "Ejercicios": no reconozco el día "${fila.dia}". Usá Lun/Mar/Mié/Jue/Vie/Sáb/Dom.`)
     if (!fila.ejercicio) throw new Error(`Fila ${numFila} de "Ejercicios": falta el nombre del ejercicio.`)
 
@@ -392,7 +425,8 @@ export async function parsearPlanillaGimnasio(file) {
       dia.ejerciciosPorNombre[nombreEj] = {
         ejercicio: nombreEj,
         metodo: fila.metodo ? String(fila.metodo).trim() : '',
-        porSemana: [1, 2, 3, 4].map(() => ({ series: '', reps: '', valor: '' }))
+        funcion: fila.funcion ? String(fila.funcion).trim() : '',
+        porSemana: Array.from({ length: numSemanas }, () => ({ series: '', reps: '', valor: '' }))
       }
     }
     const ej = dia.ejerciciosPorNombre[nombreEj]
@@ -408,12 +442,12 @@ export async function parsearPlanillaGimnasio(file) {
     const ejercicios = Object.values(dia.ejerciciosPorNombre)
     return {
       dia: d, activo: dia.activo, es_clave: dia.es_clave,
-      ejercicios: ejercicios.length > 0 ? ejercicios : [{ ejercicio: '', metodo: '', porSemana: [1, 2, 3, 4].map(() => ({ series: '', reps: '', valor: '' })) }]
+      ejercicios: ejercicios.length > 0 ? ejercicios : [{ ejercicio: '', metodo: '', funcion: '', porSemana: Array.from({ length: numSemanas }, () => ({ series: '', reps: '', valor: '' })) }]
     }
   })
 
   const inicio = String(meta.fecha_inicio).slice(0, 10)
-  const fin = new Date(inicio + 'T12:00:00'); fin.setDate(fin.getDate() + 27)
+  const fin = new Date(inicio + 'T12:00:00'); fin.setDate(fin.getDate() + numSemanas * 7 - 1)
 
   return {
     nombre: String(meta.nombre).trim(),
