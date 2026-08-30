@@ -294,7 +294,7 @@ export default function Entrenamientos() {
         const texto = await file.text()
         json = JSON.parse(texto)
         if (!json.nombre || !Array.isArray(json.semanas)) {
-          alertar('El JSON debe tener al menos "nombre" y "semanas" (array de 4 semanas con "dias").')
+          alertar('El JSON debe tener al menos "nombre" y "semanas" (array de semanas con "dias").')
           return
         }
       } else {
@@ -593,7 +593,7 @@ export default function Entrenamientos() {
             <EstadoVacio
               Icono={Activity}
               titulo="Sin mesociclos todavía"
-              descripcion="Armá tu bloque de 4 semanas: base, construcción, específico, pico o transición."
+              descripcion="Armá tu bloque (la duración que necesites) con etapas de base, construcción, específico, pico o transición."
             />
           ) : (
             <div className="flex flex-col gap-2">
@@ -1026,7 +1026,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
     <form className="card flex flex-col gap-3" onSubmit={(e) => {
       e.preventDefault()
       const lunes = lunesDeSemana(form.fecha_inicio)
-      const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + 27)
+      const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + semanas.length * 7 - 1)
       onGuardar({
         ...form,
         fecha_inicio: lunes.toISOString().slice(0, 10),
@@ -1066,7 +1066,22 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
         </p>
       )}
       <div className="flex flex-col gap-3">
-        <span className="label-eyebrow">Cronograma — 4 semanas</span>
+        <div className="flex items-center justify-between">
+          <span className="label-eyebrow">Cronograma — {semanas.length} semana{semanas.length === 1 ? '' : 's'}</span>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setSemanas((prev) => (prev.length <= 1 ? prev : prev.slice(0, -1)))}
+              disabled={semanas.length <= 1}
+              className="text-ink-muted text-xs border border-asphalt-700 rounded-lg px-2 py-1 disabled:opacity-40"
+            >− Semana</button>
+            <button
+              type="button"
+              onClick={() => setSemanas((prev) => [...prev, crearSemanaVacia(prev.length + 1)])}
+              className="text-hiviz text-xs border border-asphalt-700 rounded-lg px-2 py-1"
+            >+ Semana</button>
+          </div>
+        </div>
         {(() => {
           // Fase detectada por semana, recalculada en vivo mientras se arma
           // el bloque — para que el usuario vea de entrada si el patrón que
