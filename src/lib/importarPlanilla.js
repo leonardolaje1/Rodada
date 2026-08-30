@@ -359,6 +359,10 @@ const ALIAS_META_GYM = {
   notas: ['notas', 'notes', 'comentarios']
 }
 const ALIAS_EJERCICIO = {
+  // Solo se usa en archivos multi-mesociclo (varios bloques juntos en un
+  // archivo) para saber a qué bloque pertenece cada fila. En un archivo de
+  // un solo mesociclo esta columna no hace falta y se ignora si aparece.
+  mesociclo: ['mesociclo', 'bloque', 'meso'],
   semana: ['semana', 'week', 'sem'],
   dia: ['dia', 'day'],
   es_clave: ['clave', 'es_clave', 'destacada', 'key'],
@@ -373,37 +377,21 @@ const ALIAS_EJERCICIO = {
   valor: ['valor', 'carga', 'rpe', 'peso', 'valor_prescrito']
 }
 
-export async function parsearPlanillaGimnasio(file) {
-  const { XLSX, wb } = await leerWorkbook(file)
-
-  const hojaMeta = buscarHoja(wb, ['meta', 'plan', 'info', 'datos'])
-  const hojaEjercicios = buscarHoja(wb, ['ejercicio', 'gimnasio', 'gym', 'plan_gimnasio'])
-  if (!hojaMeta) throw new Error('No encontré una hoja "Meta" (o "Plan") con los datos generales del mesociclo.')
-  if (!hojaEjercicios) throw new Error('No encontré una hoja "Ejercicios" con el detalle de cada día.')
-
-  const metaRaw = leerMetaKV(hojaMeta, XLSX)
-  const meta = mapearFila(metaRaw, ALIAS_META_GYM)
-  if (!meta.nombre) throw new Error('A la hoja "Meta" le falta el campo "Nombre".')
-  if (!meta.fecha_inicio) throw new Error('A la hoja "Meta" le falta el campo "Fecha_inicio" (formato AAAA-MM-DD).')
-
-  const filasRaw = XLSX.utils.sheet_to_json(hojaEjercicios, { defval: '' })
-  if (filasRaw.length === 0) throw new Error('La hoja "Ejercicios" está vacía.')
-
-  // La duración del mesociclo NO se asume fija en 4 semanas -- se toma del
-  // máximo valor que aparezca en la columna Semana. Esto permite bloques de
-  // cualquier duración (2 semanas de descarga, 6 de fuerza+hipertrofia, etc.)
-  // sin tocar código cada vez. Límite superior generoso (52) solo para
-  // atajar un error de tipeo grosero en la planilla, no una duración real.
+// Arma la estructura "dias" (para un único mesociclo) a partir de sus filas
+// ya filtradas de la hoja Ejercicios. Comparte esta lógica tanto el caso de
+// un archivo de un solo mesociclo como cada bloque de un archivo multi.
+// "etiqueta" es el nombre del mesociclo, solo para que los mensajes de error
+// digan a cuál bloque pertenece la fila con problemas.
+function construirDiasDesdeFilasEjercicios(filasRaw, etiqueta) {
   let numSemanas = 0
   filasRaw.forEach((filaOriginal) => {
     const fila = mapearFila(filaOriginal, ALIAS_EJERCICIO)
     const n = numOrNull(fila.semana)
     if (n && n > numSemanas) numSemanas = n
   })
-  if (numSemanas < 1) throw new Error('La hoja "Ejercicios" no tiene ninguna fila con un número de Semana válido.')
-  if (numSemanas > 52) throw new Error('La columna Semana no puede superar 52 -- revisá si hay un valor mal tipeado.')
+  if (numSemanas < 1) throw new Error(`"${etiqueta}": no hay ninguna fila con un número de Semana válido en "Ejercicios".`)
+  if (numSemanas > 52) throw new Error(`"${etiqueta}": la columna Semana no puede superar 52 -- revisá si hay un valor mal tipeado.`)
 
-  // dias: { [diaId]: { dia, activo, es_clave, ejercicios: { [nombreEjercicio]: { metodo, porSemana:[numSemanas] } } } }
   const diasMap = {}
   for (const d of DIAS_VALIDOS) diasMap[d] = { dia: d, activo: false, es_clave: false, ejerciciosPorNombre: {} }
 
@@ -412,9 +400,9 @@ export async function parsearPlanillaGimnasio(file) {
     const numFila = i + 2
     const semanaNum = numOrNull(fila.semana)
     const diaId = normalizarDia(fila.dia)
-    if (!semanaNum || semanaNum < 1) throw new Error(`Fila ${numFila} de "Ejercicios": la columna Semana debe ser un número entero mayor o igual a 1.`)
-    if (!diaId) throw new Error(`Fila ${numFila} de "Ejercicios": no reconozco el día "${fila.dia}". Usá Lun/Mar/Mié/Jue/Vie/Sáb/Dom.`)
-    if (!fila.ejercicio) throw new Error(`Fila ${numFila} de "Ejercicios": falta el nombre del ejercicio.`)
+    if (!semanaNum || semanaNum < 1) throw new Error(`"${etiqueta}", fila ${numFila} de "Ejercicios": la columna Semana debe ser un número entero mayor o igual a 1.`)
+    if (!diaId) throw new Error(`"${etiqueta}", fila ${numFila} de "Ejercicios": no reconozco el día "${fila.dia}". Usá Lun/Mar/Mié/Jue/Vie/Sáb/Dom.`)
+    if (!fila.ejercicio) throw new Error(`"${etiqueta}", fila ${numFila} de "Ejercicios": falta el nombre del ejercicio.`)
 
     const dia = diasMap[diaId]
     dia.activo = true
@@ -445,15 +433,85 @@ export async function parsearPlanillaGimnasio(file) {
       ejercicios: ejercicios.length > 0 ? ejercicios : [{ ejercicio: '', metodo: '', funcion: '', porSemana: Array.from({ length: numSemanas }, () => ({ series: '', reps: '', valor: '' })) }]
     }
   })
+  return { numSemanas, dias }
+}
 
-  const inicio = String(meta.fecha_inicio).slice(0, 10)
-  const fin = new Date(inicio + 'T12:00:00'); fin.setDate(fin.getDate() + numSemanas * 7 - 1)
+function metaGimnasioAObjeto(meta, etiqueta) {
+  if (!meta.nombre) throw new Error(`"${etiqueta}": a la hoja "Meta" le falta el campo "Nombre".`)
+  if (!meta.fecha_inicio) throw new Error(`"${etiqueta}": a la hoja "Meta" le falta el campo "Fecha_inicio" (formato AAAA-MM-DD).`)
+  return { nombre: String(meta.nombre).trim(), fecha_inicio: String(meta.fecha_inicio).slice(0, 10), notas: meta.notas ? String(meta.notas).trim() : '' }
+}
 
-  return {
-    nombre: String(meta.nombre).trim(),
-    fecha_inicio: inicio,
-    fecha_fin: fechaISO(fin),
-    notas: meta.notas ? String(meta.notas).trim() : '',
-    dias
+// Devuelve SIEMPRE un array de mesociclos (uno solo, si el archivo trae uno
+// solo) para que quien llama tenga un único camino de código sin importar
+// cuántos bloques venían en el archivo.
+export async function parsearPlanillaGimnasio(file) {
+  const { XLSX, wb } = await leerWorkbook(file)
+
+  const hojaMeta = buscarHoja(wb, ['meta', 'plan', 'info', 'datos'])
+  const hojaEjercicios = buscarHoja(wb, ['ejercicio', 'gimnasio', 'gym', 'plan_gimnasio'])
+  if (!hojaMeta) throw new Error('No encontré una hoja "Meta" (o "Plan") con los datos generales del mesociclo.')
+  if (!hojaEjercicios) throw new Error('No encontré una hoja "Ejercicios" con el detalle de cada día.')
+
+  const filasEjRaw = XLSX.utils.sheet_to_json(hojaEjercicios, { defval: '' })
+  if (filasEjRaw.length === 0) throw new Error('La hoja "Ejercicios" está vacía.')
+
+  const filasMetaHeader1 = XLSX.utils.sheet_to_json(hojaMeta, { header: 1, defval: '' })
+  if (filasMetaHeader1.length === 0) throw new Error('La hoja "Meta" está vacía.')
+
+  // Un archivo trae un solo mesociclo (Meta = 2 columnas Campo/Valor, el
+  // formato de siempre) o varios juntos (Meta = tabla con "Mesociclo" como
+  // encabezado de la primera columna y una fila por bloque; Ejercicios lleva
+  // entonces una columna "Mesociclo" que dice a cuál pertenece cada fila).
+  // Se distingue solo mirando esa primera celda: ningún campo real ("Nombre",
+  // "Fecha_inicio"...) normaliza jamás a "mesociclo", así que un archivo
+  // viejo de un solo bloque nunca cae acá por accidente.
+  const esMulti = normalizar(filasMetaHeader1[0]?.[0]) === 'mesociclo'
+
+  if (!esMulti) {
+    const metaRaw = leerMetaKV(hojaMeta, XLSX)
+    const meta = metaGimnasioAObjeto(mapearFila(metaRaw, ALIAS_META_GYM), 'mesociclo')
+    const { numSemanas, dias } = construirDiasDesdeFilasEjercicios(filasEjRaw, meta.nombre)
+    const fin = new Date(meta.fecha_inicio + 'T12:00:00'); fin.setDate(fin.getDate() + numSemanas * 7 - 1)
+    return [{ ...meta, fecha_fin: fechaISO(fin), dias }]
   }
+
+  // --- Multi-mesociclo ---
+  const headers = filasMetaHeader1[0].map((h) => normalizar(h))
+  const filasMetaTabla = filasMetaHeader1.slice(1)
+    .filter((fila) => fila.some((v) => String(v ?? '').trim() !== ''))
+    .map((fila) => {
+      const obj = {}
+      headers.forEach((h, i) => { obj[h] = fila[i] })
+      return obj
+    })
+  if (filasMetaTabla.length === 0) throw new Error('La hoja "Meta" tiene el encabezado multi-mesociclo pero ninguna fila con datos debajo.')
+
+  const idsVistos = new Set()
+  const resultado = []
+  for (const filaMeta of filasMetaTabla) {
+    const id = String(filaMeta.mesociclo ?? '').trim()
+    if (!id) throw new Error('Una fila de "Meta" no tiene valor en la columna "Mesociclo".')
+    if (idsVistos.has(id)) throw new Error(`El identificador de mesociclo "${id}" está repetido en la hoja "Meta".`)
+    idsVistos.add(id)
+
+    const meta = metaGimnasioAObjeto(mapearFila(filaMeta, ALIAS_META_GYM), id)
+    const filasDeEsteBloque = filasEjRaw.filter((filaOriginal) => {
+      const fila = mapearFila(filaOriginal, ALIAS_EJERCICIO)
+      return String(fila.mesociclo ?? '').trim() === id
+    })
+    if (filasDeEsteBloque.length === 0) throw new Error(`No hay ninguna fila en "Ejercicios" con Mesociclo="${id}" (definido en "Meta" pero sin filas propias).`)
+
+    const { numSemanas, dias } = construirDiasDesdeFilasEjercicios(filasDeEsteBloque, `${id} - ${meta.nombre}`)
+    const fin = new Date(meta.fecha_inicio + 'T12:00:00'); fin.setDate(fin.getDate() + numSemanas * 7 - 1)
+    resultado.push({ ...meta, fecha_fin: fechaISO(fin), dias })
+  }
+
+  // Filas de "Ejercicios" cuyo Mesociclo no aparece en "Meta" -- avisar en
+  // vez de ignorarlas en silencio, para no perder datos por un id mal tipeado.
+  const idsEnEjercicios = new Set(filasEjRaw.map((filaOriginal) => String(mapearFila(filaOriginal, ALIAS_EJERCICIO).mesociclo ?? '').trim()).filter(Boolean))
+  const huerfanos = [...idsEnEjercicios].filter((id) => !idsVistos.has(id))
+  if (huerfanos.length > 0) throw new Error(`Hay filas en "Ejercicios" con Mesociclo="${huerfanos.join(', ')}" que no tienen fila correspondiente en "Meta".`)
+
+  return resultado
 }
