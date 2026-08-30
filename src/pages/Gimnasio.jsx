@@ -251,22 +251,37 @@ export default function Gimnasio() {
     const file = e.target.files[0]; e.target.value = ''
     if (!file) return
     try {
-      let json
+      let mesociclos
       if (/\.(xlsx|xls|csv)$/i.test(file.name)) {
-        json = await parsearPlanillaGimnasio(file)
+        // parsearPlanillaGimnasio siempre devuelve un array -- un solo
+        // elemento si el archivo trae un mesociclo, varios si trae un
+        // bloque completo (Meta tabular + columna "Mesociclo" en Ejercicios).
+        mesociclos = await parsearPlanillaGimnasio(file)
       } else if (/\.json$/i.test(file.name)) {
         const texto = await file.text()
-        json = JSON.parse(texto)
+        const json = JSON.parse(texto)
         if (!json.nombre || !Array.isArray(json.dias)) {
           alertar('El JSON debe tener al menos "nombre" y "dias" (array de días con ejercicios y "porSemana").')
           return
         }
+        mesociclos = [json]
       } else {
         alertar('Formato no reconocido. Subí un .xlsx, .csv o .json.')
         return
       }
-      await crearMesociclo(json)
-      toast('Plan importado')
+
+      if (mesociclos.length > 1) {
+        const nombres = mesociclos.map((m) => m.nombre).join(', ')
+        const ok = await confirmar(`El archivo trae ${mesociclos.length} mesociclos: ${nombres}. ¿Crear los ${mesociclos.length}?`, { destructivo: false })
+        if (!ok) return
+      }
+      // Secuencial (no Promise.all): si uno falla a mitad de camino, el
+      // mensaje de error deja claro cuál mesociclo quedó sin crear en vez de
+      // fallar todos a la vez sin distinción.
+      for (const m of mesociclos) {
+        await crearMesociclo(m)
+      }
+      toast(mesociclos.length > 1 ? `${mesociclos.length} mesociclos importados` : 'Plan importado')
     } catch (err) {
       alertar('No se pudo importar: ' + err.message)
     }
