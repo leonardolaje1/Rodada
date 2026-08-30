@@ -277,13 +277,14 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
       const repsTexto = textoSiDistinto(p.reps, repsNum)
       const seriesTexto = textoSiDistinto(p.series, seriesNum)
       const notaReps = [seriesTexto ? `series ${seriesTexto}` : null, repsTexto ? `reps ${repsTexto}` : null].filter(Boolean).join(' · ')
+      const notaFuncion = ej.funcion ? `función: ${ej.funcion}` : null
       filas.push({
         fecha: fechaStr, ejercicio: ej.ejercicio,
         series: seriesNum,
         reps: repsNum,
         peso: null, estado: 'pendiente', es_clave: !!d.es_clave,
         metodo_prescrito: ej.metodo || null,
-        valor_prescrito: [p.valor || null, notaReps || null].filter(Boolean).join(' · ') || null,
+        valor_prescrito: [p.valor || null, notaFuncion, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
         sesion_id: sesionId,
         orden,
