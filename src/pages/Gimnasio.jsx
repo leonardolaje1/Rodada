@@ -134,8 +134,13 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
     // Una sesión por día: todos los ejercicios de ese día comparten sesion_id,
     // así se pueden mover o mostrar juntos como una sola sesión de gimnasio.
     const sesionId = crypto.randomUUID()
-    for (const ej of d.ejercicios || []) {
-      if (!ej.ejercicio) continue
+    // El orden en pantalla depende de la columna "orden" (la consulta hace
+    // .order('orden')) -- sin asignarla acá, las filas importadas quedaban
+    // con "orden" vacío y la base las devolvía en un orden no garantizado,
+    // distinto al de la planilla. El índice dentro de d.ejercicios (mismo
+    // para las N semanas de ese día) es lo que preserva la secuencia real.
+    d.ejercicios.forEach((ej, ordenEj) => {
+      if (!ej.ejercicio) return
       const p = ej.porSemana?.[si] || {}
       const seriesNum = enteroSeguro(p.series)
       const repsNum = enteroSeguro(p.reps)
@@ -151,9 +156,10 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
         metodo_prescrito: ej.metodo || null,
         valor_prescrito: [p.valor || null, notaFuncion, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
-        sesion_id: sesionId
+        sesion_id: sesionId,
+        orden: ordenEj
       })
-    }
+    })
   }
   return filas
 }
