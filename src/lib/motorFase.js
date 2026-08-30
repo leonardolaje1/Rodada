@@ -140,10 +140,13 @@ function resumenSemanaGimnasio(items) {
 }
 
 // Recibe la plantilla "dias" del formulario de armado (días de la semana,
-// cada uno con sus ejercicios y, por ejercicio, un array de 4 semanas con
-// {series, reps, valor}). Devuelve la fase de cada una de las 4 semanas.
+// cada uno con sus ejercicios y, por ejercicio, un array de N semanas con
+// {series, reps, valor}). N es la duración real del mesociclo -- no se asume
+// un tamaño fijo, porque hay bloques de 2, 6 o cualquier otra duración.
+// Devuelve la fase de cada una de las N semanas.
 export function detectarFasesMesocicloGimnasio(dias) {
-  const resumenes = [0, 1, 2, 3].map((semanaIdx) => {
+  const numSemanas = Math.max(1, ...(dias || []).flatMap((d) => (d.ejercicios || []).map((ej) => (ej.porSemana || []).length)), 0)
+  const resumenes = Array.from({ length: numSemanas }, (_, semanaIdx) => {
     const items = []
     for (const dia of dias || []) {
       if (!dia.activo) continue
