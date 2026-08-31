@@ -40,14 +40,12 @@ const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
-  return Object.entries(grupos)
-}
-function ordenarGrupos(grupos, modo = 'proximidad') {
-  if (modo === 'asc') return [...grupos].sort((a, b) => a[0].localeCompare(b[0]))
-  if (modo === 'desc') return [...grupos].sort((a, b) => b[0].localeCompare(a[0]))
-  // proximidad: la fecha más próxima a hoy primero (comportamiento original)
-  const hoyTs = new Date(new Date().toISOString().slice(0, 10) + 'T12:00:00').getTime()
-  return [...grupos].sort((a, b) => {
+  // Ordenado por cercanía a hoy (la fecha más próxima primero, sea pasada o
+  // futura), no por orden cronológico puro — así lo pendiente más inminente
+  // o lo recién cargado queda arriba de todo en Registro.
+  const hoyMs = new Date().toISOString().slice(0, 10) + 'T12:00:00'
+  const hoyTs = new Date(hoyMs).getTime()
+  return Object.entries(grupos).sort((a, b) => {
     const distA = Math.abs(new Date(a[0] + 'T12:00:00').getTime() - hoyTs)
     const distB = Math.abs(new Date(b[0] + 'T12:00:00').getTime() - hoyTs)
     return distA - distB
@@ -170,7 +168,6 @@ export default function Gimnasio() {
   const toast = useToast()
   const { confirmar, alertar } = useConfirm()
   const [vista, setVista] = useState('planificacion')
-  const [filtroRegistro, setFiltroRegistro] = useState('pendientes')
   const [sesiones, setSesiones] = useState([])
   const [mesociclos, setMesociclos] = useState([])
   const [objetivos, setObjetivos] = useState([])
@@ -226,24 +223,6 @@ export default function Gimnasio() {
     await supabase.from('gimnasio').delete().eq('id', id)
     const nuevaLista = sesiones.filter((s) => s.id !== id)
     await sincronizarPRs(nuevaLista); cargar()
-  }
-  // Reordena dos ejercicios del mismo día intercambiando su campo `orden`.
-  // itemsDia ya viene en el orden visible actual (por eso alcanza con mirar
-  // el vecino inmediato en ese array, no hace falta recalcular nada más).
-  async function moverEjercicio(itemsDia, id, direccion) {
-    const idx = itemsDia.findIndex((it) => it.id === id)
-    const idxDestino = idx + direccion
-    if (idx === -1 || idxDestino < 0 || idxDestino >= itemsDia.length) return
-    const actual = itemsDia[idx]
-    const destino = itemsDia[idxDestino]
-    const ordenActual = actual.orden ?? idx
-    const ordenDestino = destino.orden ?? idxDestino
-    if (ordenActual === ordenDestino) return
-    await Promise.all([
-      supabase.from('gimnasio').update({ orden: ordenDestino }).eq('id', actual.id),
-      supabase.from('gimnasio').update({ orden: ordenActual }).eq('id', destino.id)
-    ])
-    cargar()
   }
 
   async function crearObjetivo(form) {
@@ -345,13 +324,7 @@ export default function Gimnasio() {
     cargar()
   }
 
-  const gruposDia = agruparPorFecha(sesiones)
-  const estadoDia = (items) => (items.every((it) => it.estado === 'realizado') ? 'realizado' : 'pendiente')
-  const gruposFiltrados = filtroRegistro === 'todos'
-    ? gruposDia
-    : gruposDia.filter(([, items]) => estadoDia(items) === (filtroRegistro === 'pendientes' ? 'pendiente' : 'realizado'))
-  // Pendientes y "todos" van de la próxima sesión a la más lejana; realizados queda como historial (más reciente primero).
-  const porDia = ordenarGrupos(gruposFiltrados, filtroRegistro === 'realizados' ? 'desc' : 'asc')
+  const porDia = agruparPorFecha(sesiones)
   const hoy = new Date().toISOString().slice(0, 10)
   const hoyStr = hoy
 
@@ -524,14 +497,7 @@ export default function Gimnasio() {
             })}
           </div>
 
-          <div className="flex justify-between items-center gap-2 flex-wrap">
-            <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-              {[['pendientes', 'Pendientes'], ['realizados', 'Realizados'], ['todos', 'Todos']].map(([id, label]) => (
-                <button key={id} onClick={() => setFiltroRegistro(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${filtroRegistro === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="flex justify-end">
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setEditandoId(null); setValoresEdicion(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
           </div>
           {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
@@ -560,7 +526,6 @@ export default function Gimnasio() {
                   onCargarResultado={(g) => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }}
                   onEditar={(g) => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }}
                   onBorrar={async (id) => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(id) }}
-                  onMover={(id, direccion) => moverEjercicio(items, id, direccion)}
                 />
               ))}
             </div>
@@ -675,7 +640,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, estimados1RMPo
 
 // Un día de Registro, colapsado por defecto (salvo el más reciente). Muestra
 // todas las sesiones registradas ese día (vengan o no de un mesociclo).
-function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarResultado, onEditar, onBorrar, onMover }) {
+function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarResultado, onEditar, onBorrar }) {
   const [abierto, setAbierto] = useState(!!abiertoPorDefecto)
   const hechos = items.filter((g) => g.estado === 'realizado').length
   const todosHechos = hechos === items.length
@@ -723,12 +688,6 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
                   <button onClick={() => onCargarResultado(g)} className="text-hiviz text-[11px] font-semibold border border-hiviz rounded-lg px-2 py-1 flex-shrink-0">Cargar resultado</button>
                 )}
                 <div className="flex gap-1 flex-shrink-0">
-                  {items.length > 1 && (
-                    <>
-                      <button onClick={() => onMover(g.id, -1)} disabled={items.findIndex((it) => it.id === g.id) === 0} title="Subir" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted disabled:opacity-30 disabled:hover:text-ink-faint disabled:hover:border-asphalt-700">▲</button>
-                      <button onClick={() => onMover(g.id, 1)} disabled={items.findIndex((it) => it.id === g.id) === items.length - 1} title="Bajar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted disabled:opacity-30 disabled:hover:text-ink-faint disabled:hover:border-asphalt-700">▼</button>
-                    </>
-                  )}
                   <button onClick={() => onEditar(g)} title="Editar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted">✎</button>
                   <button onClick={() => onBorrar(g.id)} title="Borrar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-alert-red hover:border-alert-red">🗑</button>
                 </div>
