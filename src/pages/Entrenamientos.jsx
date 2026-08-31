@@ -95,17 +95,16 @@ function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id) {
   })
   return sesiones
 }
-function agruparPorFecha(items, ascendente = false) {
+function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
-  return Object.entries(grupos).sort((a, b) => (ascendente ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])))
+  return Object.entries(grupos).sort((a, b) => b[0].localeCompare(a[0]))
 }
 
 export default function Entrenamientos() {
   const toast = useToast()
   const { confirmar, alertar } = useConfirm()
   const [vista, setVista] = useState('registro')
-  const [filtroRegistro, setFiltroRegistro] = useState('pendientes')
   const [lista, setLista] = useState([])
   const [bicicletas, setBicicletas] = useState([])
   const [objetivos, setObjetivos] = useState([])
@@ -131,7 +130,10 @@ export default function Entrenamientos() {
   async function cargar() {
     setCargando(true)
     const [{ data: ents }, { data: bicis }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
-      supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
+      // Mismo criterio que en Gimnasio.jsx: un límite bajo y fijo corta las
+      // fechas más antiguas apenas se acumula historial (orden descendente
+      // por fecha), no solo cuando hay "demasiados" datos.
+      supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(3000),
       supabase.from('bicicletas').select('id, nombre'),
       supabase.from('objetivos').select('*').eq('categoria', 'entrenamiento').order('created_at', { ascending: false }),
       supabase.from('ftp_historial').select('*').order('fecha', { ascending: true }),
@@ -337,11 +339,7 @@ export default function Entrenamientos() {
   }
 
   const nombreBici = (id) => bicicletas.find((b) => b.id === id)?.nombre || null
-  const listaRegistro = filtroRegistro === 'todos'
-    ? lista
-    : lista.filter((e) => e.estado === (filtroRegistro === 'pendientes' ? 'pendiente' : 'realizado'))
-  // Pendientes y "todos" se ven de la próxima sesión a la más lejana; realizados queda como historial (más reciente primero).
-  const porDia = agruparPorFecha(listaRegistro, filtroRegistro !== 'realizados')
+  const porDia = agruparPorFecha(lista)
 
   const realizados = lista.filter((e) => e.estado === 'realizado')
   const kmAnualesActual = realizados
@@ -385,23 +383,14 @@ export default function Entrenamientos() {
 
       {vista === 'registro' && (
         <>
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
-              {[['pendientes', 'Pendientes'], ['realizados', 'Realizados'], ['todos', 'Todos']].map(([id, label]) => (
-                <button key={id} onClick={() => setFiltroRegistro(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${filtroRegistro === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => inputArchivoRef.current?.click()} className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-3 py-2 rounded-lg hover:text-ink">
-                Importar FIT/GPX/TCX
-              </button>
-              <input ref={inputArchivoRef} type="file" className="hidden" onChange={manejarArchivo} />
-              <button onClick={() => { setValoresImportados(null); setEditandoId(null); setMostrarForm((v) => !v) }} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-95">
-                + Nuevo
-              </button>
-            </div>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => inputArchivoRef.current?.click()} className="border border-asphalt-700 text-ink-muted font-semibold text-sm px-3 py-2 rounded-lg hover:text-ink">
+              Importar FIT/GPX/TCX
+            </button>
+            <input ref={inputArchivoRef} type="file" className="hidden" onChange={manejarArchivo} />
+            <button onClick={() => { setValoresImportados(null); setEditandoId(null); setMostrarForm((v) => !v) }} className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg hover:brightness-95">
+              + Nuevo
+            </button>
           </div>
 
           {errorImport && <div className="card border-alert-red text-sm text-alert-red">{errorImport}</div>}
