@@ -183,7 +183,12 @@ export default function Gimnasio() {
   async function cargar() {
     setCargando(true)
     const [{ data: s }, { data: mesos }, { data: objs }] = await Promise.all([
-      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).order('orden', { ascending: true }).limit(300),
+      // Límite generoso: un macrociclo de 3 mesociclos con zona media +
+      // básicos + accesorios ya ronda las 250-300 filas él solo. Con 300
+      // fijo, el corte (ordenado por fecha descendente) empezaba a comerse
+      // las semanas más antiguas -- las del primer mesociclo -- apenas se
+      // acumulaba algo más de historial o de mesociclos en paralelo.
+      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).order('orden', { ascending: true }).limit(3000),
       supabase.from('mesociclos_gimnasio').select('*').eq('activo', true).order('fecha_inicio', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'gimnasio').order('created_at', { ascending: false })
     ])
