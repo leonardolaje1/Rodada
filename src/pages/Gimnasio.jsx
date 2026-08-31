@@ -40,12 +40,14 @@ const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 function agruparPorFecha(items) {
   const grupos = {}
   for (const item of items) { if (!grupos[item.fecha]) grupos[item.fecha] = []; grupos[item.fecha].push(item) }
-  // Ordenado por cercanía a hoy (la fecha más próxima primero, sea pasada o
-  // futura), no por orden cronológico puro — así lo pendiente más inminente
-  // o lo recién cargado queda arriba de todo en Registro.
-  const hoyMs = new Date().toISOString().slice(0, 10) + 'T12:00:00'
-  const hoyTs = new Date(hoyMs).getTime()
-  return Object.entries(grupos).sort((a, b) => {
+  return Object.entries(grupos)
+}
+function ordenarGrupos(grupos, modo = 'proximidad') {
+  if (modo === 'asc') return [...grupos].sort((a, b) => a[0].localeCompare(b[0]))
+  if (modo === 'desc') return [...grupos].sort((a, b) => b[0].localeCompare(a[0]))
+  // proximidad: la fecha más próxima a hoy primero (comportamiento original)
+  const hoyTs = new Date(new Date().toISOString().slice(0, 10) + 'T12:00:00').getTime()
+  return [...grupos].sort((a, b) => {
     const distA = Math.abs(new Date(a[0] + 'T12:00:00').getTime() - hoyTs)
     const distB = Math.abs(new Date(b[0] + 'T12:00:00').getTime() - hoyTs)
     return distA - distB
@@ -168,6 +170,7 @@ export default function Gimnasio() {
   const toast = useToast()
   const { confirmar, alertar } = useConfirm()
   const [vista, setVista] = useState('planificacion')
+  const [filtroRegistro, setFiltroRegistro] = useState('pendientes')
   const [sesiones, setSesiones] = useState([])
   const [mesociclos, setMesociclos] = useState([])
   const [objetivos, setObjetivos] = useState([])
@@ -324,7 +327,13 @@ export default function Gimnasio() {
     cargar()
   }
 
-  const porDia = agruparPorFecha(sesiones)
+  const gruposDia = agruparPorFecha(sesiones)
+  const estadoDia = (items) => (items.every((it) => it.estado === 'realizado') ? 'realizado' : 'pendiente')
+  const gruposFiltrados = filtroRegistro === 'todos'
+    ? gruposDia
+    : gruposDia.filter(([, items]) => estadoDia(items) === (filtroRegistro === 'pendientes' ? 'pendiente' : 'realizado'))
+  // Pendientes y "todos" van de la próxima sesión a la más lejana; realizados queda como historial (más reciente primero).
+  const porDia = ordenarGrupos(gruposFiltrados, filtroRegistro === 'realizados' ? 'desc' : 'asc')
   const hoy = new Date().toISOString().slice(0, 10)
   const hoyStr = hoy
 
@@ -497,7 +506,14 @@ export default function Gimnasio() {
             })}
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center gap-2 flex-wrap">
+            <div className="flex gap-1 bg-asphalt-950 p-1 rounded-lg overflow-x-auto">
+              {[['pendientes', 'Pendientes'], ['realizados', 'Realizados'], ['todos', 'Todos']].map(([id, label]) => (
+                <button key={id} onClick={() => setFiltroRegistro(id)} className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap ${filtroRegistro === id ? 'bg-hiviz text-asphalt-950' : 'text-ink-muted'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <button className="bg-hiviz text-asphalt-950 font-semibold text-sm px-4 py-2 rounded-lg" onClick={() => { setEditandoId(null); setValoresEdicion(null); setFormOpen((v) => !v) }}>+ Ejercicio suelto</button>
           </div>
           {formOpen && <FormGimnasio onGuardar={crear} onCancelar={() => setFormOpen(false)} />}
