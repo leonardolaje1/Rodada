@@ -227,6 +227,24 @@ export default function Gimnasio() {
     const nuevaLista = sesiones.filter((s) => s.id !== id)
     await sincronizarPRs(nuevaLista); cargar()
   }
+  // Reordena dos ejercicios del mismo día intercambiando su campo `orden`.
+  // itemsDia ya viene en el orden visible actual (por eso alcanza con mirar
+  // el vecino inmediato en ese array, no hace falta recalcular nada más).
+  async function moverEjercicio(itemsDia, id, direccion) {
+    const idx = itemsDia.findIndex((it) => it.id === id)
+    const idxDestino = idx + direccion
+    if (idx === -1 || idxDestino < 0 || idxDestino >= itemsDia.length) return
+    const actual = itemsDia[idx]
+    const destino = itemsDia[idxDestino]
+    const ordenActual = actual.orden ?? idx
+    const ordenDestino = destino.orden ?? idxDestino
+    if (ordenActual === ordenDestino) return
+    await Promise.all([
+      supabase.from('gimnasio').update({ orden: ordenDestino }).eq('id', actual.id),
+      supabase.from('gimnasio').update({ orden: ordenActual }).eq('id', destino.id)
+    ])
+    cargar()
+  }
 
   async function crearObjetivo(form) {
     const { error } = await supabase.from('objetivos').insert({ ...form, categoria: 'gimnasio', estado: 'activo', valor_actual: 0 })
@@ -542,6 +560,7 @@ export default function Gimnasio() {
                   onCargarResultado={(g) => { setFormOpen(false); setValoresEdicion({ ...g, estado: 'realizado' }); setEditandoId(g.id) }}
                   onEditar={(g) => { setFormOpen(false); setValoresEdicion(null); setEditandoId(g.id) }}
                   onBorrar={async (id) => { if (await confirmar('¿Borrar este ejercicio?', { destructivo: true })) eliminar(id) }}
+                  onMover={(id, direccion) => moverEjercicio(items, id, direccion)}
                 />
               ))}
             </div>
@@ -656,7 +675,7 @@ function BloqueDiaGym({ fecha, items, editandoId, valoresEdicion, estimados1RMPo
 
 // Un día de Registro, colapsado por defecto (salvo el más reciente). Muestra
 // todas las sesiones registradas ese día (vengan o no de un mesociclo).
-function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarResultado, onEditar, onBorrar }) {
+function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editandoId, valoresEdicion, onGuardarEdicion, onCancelarEdicion, onCargarResultado, onEditar, onBorrar, onMover }) {
   const [abierto, setAbierto] = useState(!!abiertoPorDefecto)
   const hechos = items.filter((g) => g.estado === 'realizado').length
   const todosHechos = hechos === items.length
@@ -704,6 +723,12 @@ function BloqueDiaRegistro({ fecha, items, abiertoPorDefecto, prsPorId, editando
                   <button onClick={() => onCargarResultado(g)} className="text-hiviz text-[11px] font-semibold border border-hiviz rounded-lg px-2 py-1 flex-shrink-0">Cargar resultado</button>
                 )}
                 <div className="flex gap-1 flex-shrink-0">
+                  {items.length > 1 && (
+                    <>
+                      <button onClick={() => onMover(g.id, -1)} disabled={items.findIndex((it) => it.id === g.id) === 0} title="Subir" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted disabled:opacity-30 disabled:hover:text-ink-faint disabled:hover:border-asphalt-700">▲</button>
+                      <button onClick={() => onMover(g.id, 1)} disabled={items.findIndex((it) => it.id === g.id) === items.length - 1} title="Bajar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted disabled:opacity-30 disabled:hover:text-ink-faint disabled:hover:border-asphalt-700">▼</button>
+                    </>
+                  )}
                   <button onClick={() => onEditar(g)} title="Editar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-ink-muted hover:border-ink-muted">✎</button>
                   <button onClick={() => onBorrar(g.id)} title="Borrar" className="text-ink-faint text-xs border border-asphalt-700 rounded-lg w-6 h-6 flex items-center justify-center hover:text-alert-red hover:border-alert-red">🗑</button>
                 </div>
