@@ -6,17 +6,18 @@ import IconoInsignia from '../components/IconoInsignia'
 import { detectarConflictosCalendario, detectarSobrecargaSemanal } from '../lib/motorConflictos'
 import { detectarOportunidadCalendario } from '../lib/motorOportunidades'
 import { detectarNecesidadTaper } from '../lib/motorTaper'
-import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
+import { calcularCargaConWarmup, DIAS_WARMUP } from '../lib/tss'
 import { generarInsightRecuperacion } from '../lib/motorInsights'
 import { useToast } from '../lib/ToastContext'
 import { Calendar } from 'lucide-react'
+import { aFechaLocal, sumarDiasLocal } from '../lib/fechas'
 
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function aFecha(d) {
-  return d.toISOString().slice(0, 10)
+  return aFechaLocal(d)
 }
 
 function construirGrilla(anio, mes) {
@@ -102,9 +103,12 @@ export default function Calendario() {
       const manana = new Date(hoy); manana.setDate(manana.getDate() + 1)
       const mananaStr = aFecha(manana)
       const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
+      // El PMC muestra 90 días, pero la EMA necesita historia previa para no
+      // arrancar en CTL 0 (ver calcularCargaConWarmup en tss.js).
+      const desdeConWarmup = sumarDiasLocal(hoyStr, -(90 + DIAS_WARMUP))
 
       const [{ data: entsHist }, { data: metricas }, { data: entManana }, { data: proxComp }, { data: gymHist }] = await Promise.all([
-        supabase.from('entrenamientos').select('fecha, tss').gte('fecha', aFecha(desde90)).lte('fecha', hoyStr).order('fecha', { ascending: true }),
+        supabase.from('entrenamientos').select('fecha, tss').gte('fecha', desdeConWarmup).lte('fecha', hoyStr).order('fecha', { ascending: true }),
         supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8),
         supabase.from('entrenamientos').select('*').eq('fecha', mananaStr).limit(1).maybeSingle(),
         supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1).maybeSingle(),
@@ -112,10 +116,16 @@ export default function Calendario() {
       ])
       setEntrenamientosHistorial(entsHist || [])
       setGimnasioHistorial(gymHist || [])
+      // Solo cuenta como "actual" si el registro es de hoy o de ayer. Antes se
+      // tomaba el más reciente sin mirar la fecha, así que un HRV de hace una
+      // semana disparaba alertas de recuperación falsas.
       const metricasOrdenadas = metricas || []
-      setHrvActual(metricasOrdenadas[0]?.hrv ?? null)
-      setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
-      setSueñoUltimaNoche(metricasOrdenadas[0]?.sueño_horas ?? null)
+      const ayerStr = sumarDiasLocal(hoyStr, -1)
+      const masReciente = metricasOrdenadas[0] || null
+      const esReciente = masReciente && (masReciente.fecha === hoyStr || masReciente.fecha === ayerStr)
+      setHrvActual(esReciente ? (masReciente.hrv ?? null) : null)
+      setSueñoUltimaNoche(esReciente ? (masReciente.sueño_horas ?? null) : null)
+      setHistorialHrv(metricasOrdenadas.slice(esReciente ? 1 : 0).map((m) => m.hrv).filter((v) => v != null))
       setEntrenamientoManana(entManana || null)
       setProximaCompetencia(proxComp || null)
     }
@@ -174,7 +184,7 @@ export default function Calendario() {
   for (const c of conflictos) { (conflictosPorFecha[c.fecha] ||= []).push(c) }
 
   const desde90 = new Date(hoy); desde90.setDate(desde90.getDate() - 90)
-  const serieCarga = calcularCargaDiaria(construirSerieDiaria(entrenamientosHistorial, aFecha(desde90), aFecha(hoy)))
+  const serieCarga = calcularCargaConWarmup(entrenamientosHistorial, aFecha(desde90), aFecha(hoy))
   const ultimaCarga = serieCarga[serieCarga.length - 1] || { tsb: 0, atl: 0, ctl: 0 }
   const historialAtlSerie = serieCarga.slice(-43, -1).map((d) => d.atl)
   const insightRecuperacion = generarInsightRecuperacion({
