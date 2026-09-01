@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { WEAR_TYPES, estadoDesgaste, nivelDesgasteInfo, proyectarDiasRestantes } from '../lib/wear'
 import { evaluarFitting, infoNivelFitting } from '../lib/bikeFitting'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 const TIPOS_MANTENIMIENTO = ['Lavado', 'Lubricación', 'Ajuste de cambios', 'Ajuste de frenos', 'Cambio de líquido', 'Revisión general', 'Otro']
 const TIPOS_COMPONENTE = ['Pastillas de freno', 'Cables', 'Rulemanes', 'Discos', 'Manubrio', 'Sillín', 'Otro']
@@ -33,7 +34,7 @@ export default function BicicletaDetalle() {
     const { data: perfil } = await supabase.from('perfil_nutricional').select('peso').maybeSingle()
     const { data: rec } = await supabase.from('metricas_diarias').select('fecha, dolor_muscular').order('fecha', { ascending: false }).limit(14)
     const desde45 = new Date(); desde45.setDate(desde45.getDate() - 45)
-    const { data: entsBici } = await supabase.from('entrenamientos').select('km').eq('bicicleta_id', id).gte('fecha', desde45.toISOString().slice(0, 10))
+    const { data: entsBici } = await supabase.from('entrenamientos').select('km').eq('bicicleta_id', id).gte('fecha', aFechaLocal(desde45))
     setBici(b)
     setComponentes(c || [])
     setDesgaste(d || [])
@@ -295,7 +296,7 @@ function WearCard({ wearType, item, kmActualBici, kmPorDia, onConfigurar, onMedi
   const [configurando, setConfigurando] = useState(false)
   const [midiendo, setMidiendo] = useState(false)
   const [valorConfig, setValorConfig] = useState({
-    fecha_instalacion: new Date().toISOString().slice(0, 10),
+    fecha_instalacion: hoyLocal(),
     km_instalacion: kmActualBici,
     vida_util_km: wearType.vidaUtilDefault
   })
@@ -379,7 +380,7 @@ function WearCard({ wearType, item, kmActualBici, kmPorDia, onConfigurar, onMedi
           </label>
           <button className="bg-hiviz text-asphalt-950 font-semibold text-xs px-3 py-1.5 rounded-lg" onClick={() => {
             if (valorMedicion === '') return
-            onMedir({ fecha: new Date().toISOString().slice(0, 10), valor: Number(valorMedicion), km_bici: kmActualBici })
+            onMedir({ fecha: hoyLocal(), valor: Number(valorMedicion), km_bici: kmActualBici })
             setValorMedicion(''); setMidiendo(false)
           }}>Guardar</button>
         </div>
@@ -391,7 +392,7 @@ function WearCard({ wearType, item, kmActualBici, kmPorDia, onConfigurar, onMedi
 function FormComponente({ onGuardar, onCancelar, valoresIniciales, kmActual }) {
   const [form, setForm] = useState({
     tipo: 'Pastillas de freno', marca: '', modelo: '',
-    fecha_instalacion: new Date().toISOString().slice(0, 10), km_instalacion: kmActual, vida_util_km: '',
+    fecha_instalacion: hoyLocal(), km_instalacion: kmActual, vida_util_km: '',
     ...valoresIniciales
   })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
@@ -423,7 +424,7 @@ function FormComponente({ onGuardar, onCancelar, valoresIniciales, kmActual }) {
 }
 
 function FormMantenimiento({ onGuardar, onCancelar }) {
-  const [form, setForm] = useState({ tipo: 'Lavado', fecha: new Date().toISOString().slice(0, 10), km_bici: '', notas: '' })
+  const [form, setForm] = useState({ tipo: 'Lavado', fecha: hoyLocal(), km_bici: '', notas: '' })
   const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar(form) }}>
@@ -447,7 +448,7 @@ function FormMantenimiento({ onGuardar, onCancelar }) {
 
 function FormFitting({ onGuardar, onCancelar, pesoActual }) {
   const [form, setForm] = useState({
-    fecha: new Date().toISOString().slice(0, 10), realizado_por: '', peso_ciclista: pesoActual || '',
+    fecha: hoyLocal(), realizado_por: '', peso_ciclista: pesoActual || '',
     altura_asiento: '', retroceso_asiento: '', reach: '', stack: '', caida_manubrio: '', largo_bielas: '',
     cala_fore_aft: '', cala_angulo: '', notas: ''
   })
