@@ -2,6 +2,8 @@
 // una comparación estadística simple (promedio móvil). Mismo patrón que los
 // otros motores: reglas explícitas, ninguna acción automática.
 
+import { aFechaLocal } from './fechas'
+
 const SEMANAS_COMPARACION = 4
 const CAIDA_PCT_AVISO = 30 // % de caída respecto al promedio para avisar
 const TSS_MINIMO_PARA_COMPARAR = 50 // con promedio anterior muy bajo, comparar no tiene sentido
@@ -14,8 +16,8 @@ function inicioSemana(fechaStr) {
 }
 
 function tssEnRango(entrenamientos, desde, hasta) {
-  const desdeStr = desde.toISOString().slice(0, 10)
-  const hastaStr = hasta.toISOString().slice(0, 10)
+  const desdeStr = aFechaLocal(desde)
+  const hastaStr = aFechaLocal(hasta)
   return entrenamientos
     .filter((e) => e.fecha >= desdeStr && e.fecha <= hastaStr)
     .reduce((a, e) => a + (Number(e.tss) || 0), 0)
