@@ -16,6 +16,7 @@ import { Activity } from 'lucide-react'
 import { ZONAS_POTENCIA, ZONAS_FC } from '../lib/zonas'
 import { parsearPlanillaBici } from '../lib/importarPlanilla'
 import { detectarFasesMesociclo, FASES_INFO } from '../lib/motorFase'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -76,7 +77,7 @@ function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id) {
       const fecha = new Date(lunesBase)
       fecha.setDate(fecha.getDate() + si * 7 + oi)
       sesiones.push({
-        fecha: fecha.toISOString().slice(0, 10),
+        fecha: aFechaLocal(fecha),
         tipo: d.tipo,
         duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
         comentarios: d.descripcion || null,
@@ -359,9 +360,9 @@ export default function Entrenamientos() {
     tss: realizados.reduce((max, e) => (Number(e.tss) > (max?.tss || 0) ? e : max), null)
   }
 
-  const hoyStr = new Date().toISOString().slice(0, 10)
+  const hoyStr = hoyLocal()
   const desde400 = new Date(); desde400.setDate(desde400.getDate() - 400)
-  const serieCTL = calcularCargaDiaria(construirSerieDiaria(realizados, desde400.toISOString().slice(0, 10), hoyStr))
+  const serieCTL = calcularCargaDiaria(construirSerieDiaria(realizados, aFechaLocal(desde400), hoyStr))
   const ctlActual = serieCTL[serieCTL.length - 1]?.ctl ?? 0
   const nombreCompetencia = (id) => competencias.find((c) => c.id === id)?.nombre || null
 
@@ -849,7 +850,7 @@ function MiniDato({ label, value, accent }) {
 
 function FormEntrenamiento({ bicicletas, onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({
-    fecha: new Date().toISOString().slice(0, 10), tipo: 'Ruta', ruta: '', bicicleta_id: '',
+    fecha: hoyLocal(), tipo: 'Ruta', ruta: '', bicicleta_id: '',
     duracion_min: '', km: '', desnivel: '', potencia_avg: '', potencia_normalizada: '', fc_avg: '', rpe: '', comentarios: '',
     estado: 'realizado', es_clave: false,
     calorias: '', cadencia_avg: '', cadencia_max: '', descenso: '', altura_min: '', altura_max: '',
@@ -1018,7 +1019,7 @@ function crearSemanaVacia(numero) {
 function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias = [] }) {
   const esEdicion = !!valoresIniciales
   const [form, setForm] = useState({
-    nombre: '', tipo: 'base', fecha_inicio: new Date().toISOString().slice(0, 10),
+    nombre: '', tipo: 'base', fecha_inicio: hoyLocal(),
     competencia_id: '', ctl_objetivo: '', notas: '', ...valoresIniciales
   })
   const [semanas, setSemanas] = useState(
@@ -1043,8 +1044,8 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales, competencias =
       const fechaFin = new Date(lunes); fechaFin.setDate(fechaFin.getDate() + semanas.length * 7 - 1)
       onGuardar({
         ...form,
-        fecha_inicio: lunes.toISOString().slice(0, 10),
-        fecha_fin: fechaFin.toISOString().slice(0, 10),
+        fecha_inicio: aFechaLocal(lunes),
+        fecha_fin: aFechaLocal(fechaFin),
         competencia_id: form.competencia_id || null,
         ctl_objetivo: form.ctl_objetivo === '' ? null : Number(form.ctl_objetivo),
         semanas
@@ -1277,7 +1278,7 @@ function SesionMesocicloRow({ s, onCargarDatos, onDescargarReloj }) {
 }
 
 function FormFTP({ onGuardar, onCancelar, valoresIniciales }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ftp_watts: '', fc_umbral: '', fc_maxima: '', tipo_test: 'ftp', fuente: 'test', notas: '', ...valoresIniciales })
+  const [form, setForm] = useState({ fecha: hoyLocal(), ftp_watts: '', fc_umbral: '', fc_maxima: '', tipo_test: 'ftp', fuente: 'test', notas: '', ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, ftp_watts: Number(form.ftp_watts), fc_umbral: form.fc_umbral ? Number(form.fc_umbral) : null, fc_maxima: form.fc_maxima ? Number(form.fc_maxima) : null }) }}>
