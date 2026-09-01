@@ -5,6 +5,7 @@ import Avatar from '../components/Avatar'
 import IconoInsignia from '../components/IconoInsignia'
 import { Settings } from 'lucide-react'
 import { useToast } from '../lib/ToastContext'
+import { hoyLocal } from '../lib/fechas'
 
 const TABLAS = [
   'bicicletas',
@@ -166,7 +167,7 @@ export default function Configuracion() {
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      const fecha = new Date().toISOString().slice(0, 10)
+      const fecha = hoyLocal()
       a.href = url
       a.download = `helu-backup-${fecha}.json`
       document.body.appendChild(a)
