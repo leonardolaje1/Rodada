@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
 import { LineChart } from 'lucide-react'
+import { aFechaLocal } from '../lib/fechas'
 
 const DIAS_ANALISIS = 90
 
@@ -53,7 +54,7 @@ export default function Analitica() {
     setCargando(true)
     const desde = new Date()
     desde.setDate(desde.getDate() - DIAS_ANALISIS)
-    const fechaDesde = desde.toISOString().slice(0, 10)
+    const fechaDesde = aFechaLocal(desde)
 
     const [{ data: ents }, { data: mets }] = await Promise.all([
       supabase.from('entrenamientos').select('*').gte('fecha', fechaDesde),
