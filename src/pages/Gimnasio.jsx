@@ -120,7 +120,7 @@ function textoSiDistinto(v, entero) {
   return s === String(entero) ? null : s
 }
 
-function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
+function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id, userId) {
   const filas = []
   const numSemanas = numSemanasDeDias(dias)
   for (let offset = 0; offset < numSemanas * 7; offset++) {
@@ -157,7 +157,8 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
         valor_prescrito: [p.valor || null, notaFuncion, notaReps || null].filter(Boolean).join(' · ') || null,
         mesociclo_gimnasio_id,
         sesion_id: sesionId,
-        orden: ordenEj
+        orden: ordenEj,
+        ...(userId ? { user_id: userId } : {})
       })
     })
   }
@@ -245,11 +246,20 @@ export default function Gimnasio() {
     // en 4). Se guarda en la columna "semanas" de mesociclos_gimnasio para no
     // requerir cambios de esquema en Supabase.
     const { dias, ...meta } = form
-    const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias }).select().single()
+    // Bug: mesociclos_gimnasio no tiene default de user_id en Supabase (a
+    // diferencia de "gimnasio"/"bici"), así que sin mandarlo explícito la fila
+    // queda con user_id null y la política RLS de INSERT la rechaza siempre
+    // ("new row violates row-level security policy"), incluso para el propio
+    // usuario. Mismo patrón que ya usan Nutricion.jsx y VerAtleta.jsx.
+    const { data: userData, error: errorUser } = await supabase.auth.getUser()
+    if (errorUser || !userData?.user) { alertar('No se pudo verificar la sesión — volvé a iniciar sesión e intentá de nuevo.'); return }
+    const userId = userData.user.id
+
+    const { error, data: nuevo } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias, user_id: userId }).select().single()
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
     const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
-    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id)
+    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id, userId)
     if (filasNuevas.length > 0) {
       const { error: errorFilas } = await supabase.from('gimnasio').insert(filasNuevas)
       if (errorFilas) { alertar('El mesociclo se creó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
@@ -312,9 +322,14 @@ export default function Gimnasio() {
     const { error } = await supabase.from('mesociclos_gimnasio').update({ ...meta, semanas: dias }).eq('id', id)
     if (error) { alertar('No se pudo guardar: ' + error.message); return }
 
+    // Mismo fix que en crearMesociclo: las filas de "gimnasio" que se
+    // regeneran acá también necesitan user_id explícito para pasar la RLS.
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
     await supabase.from('gimnasio').delete().eq('mesociclo_gimnasio_id', id).eq('estado', 'pendiente')
     const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
-    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, id)
+    const filasNuevas = generarFilasDesdeDias(fechaInicioBase, dias, id, userId)
     if (filasNuevas.length > 0) {
       const { error: errorFilas } = await supabase.from('gimnasio').insert(filasNuevas)
       if (errorFilas) { alertar('El mesociclo se actualizó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
