@@ -9,6 +9,8 @@
 // tira un error con un mensaje concreto (qué hoja/columna falta) en vez de fallar
 // en silencio o importar datos a medias.
 
+import { aFechaLocal } from './fechas'
+
 const DIAS_VALIDOS = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom']
 
 const ALIAS_DIA = {
@@ -90,7 +92,7 @@ function lunesDeFecha(fechaStr) {
   d.setDate(d.getDate() + offset)
   return d
 }
-function fechaISO(d) { return d.toISOString().slice(0, 10) }
+function fechaISO(d) { return aFechaLocal(d) }
 
 // ---------------- BICI ----------------
 const ALIAS_META_BICI = {
@@ -212,7 +214,7 @@ export function generarSesionesDesdeSemanas(lunesBase, semanas, mesociclo_id, us
       const fecha = new Date(lunesBase)
       fecha.setDate(fecha.getDate() + si * 7 + oi)
       sesiones.push({
-        fecha: fecha.toISOString().slice(0, 10),
+        fecha: aFechaLocal(fecha),
         tipo: d.tipo,
         duracion_min: d.duracion_min ? Number(d.duracion_min) : null,
         comentarios: d.descripcion || null,
@@ -263,7 +265,7 @@ export function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_
     const diaId = DIAS_SEMANA_ORDEN[(fecha.getDay() + 6) % 7]
     const d = dias.find((x) => x.dia === diaId)
     if (!d || !d.activo) continue
-    const fechaStr = fecha.toISOString().slice(0, 10)
+    const fechaStr = aFechaLocal(fecha)
     // Una sesión por día: todos los ejercicios de ese día comparten sesion_id.
     // "orden" fija la posición del ejercicio dentro del día tal como vino en la
     // planilla — sin esto, Postgres no garantiza devolver las filas con la misma
