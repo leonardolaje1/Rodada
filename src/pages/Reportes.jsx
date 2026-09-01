@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { calcularTSS } from '../lib/tss'
 import IconoInsignia from '../components/IconoInsignia'
 import { FileText } from 'lucide-react'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 const ATAJOS = [
   { dias: 1, label: 'Hoy' },
@@ -17,7 +18,7 @@ const LOGO_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAIAA
 function fechaHace(dias) {
   const d = new Date()
   d.setDate(d.getDate() - dias)
-  return d.toISOString().slice(0, 10)
+  return aFechaLocal(d)
 }
 
 function textoPrescrito(e) {
@@ -55,13 +56,13 @@ function agregarPie(doc, grisTexto) {
 
 export default function Reportes() {
   const [desde, setDesde] = useState(fechaHace(7))
-  const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10))
+  const [hasta, setHasta] = useState(hoyLocal())
   const [generando, setGenerando] = useState('')
   const [error, setError] = useState('')
 
   function aplicarAtajo(dias) {
     setDesde(fechaHace(dias - 1))
-    setHasta(new Date().toISOString().slice(0, 10))
+    setHasta(hoyLocal())
   }
 
   async function generarPDFGeneral() {
