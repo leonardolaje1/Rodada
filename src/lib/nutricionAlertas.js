@@ -1,4 +1,5 @@
 import { calcularTDEEDinamico } from './tdee'
+import { aFechaLocal } from './fechas'
 
 const DIAS_VENTANA = 5
 const UMBRAL = 0.85 // por debajo del 85% del objetivo cuenta como día en déficit
@@ -13,7 +14,7 @@ export function evaluarDeficitNutricional({ comidas, tdee, bmr, entrenamientos, 
   for (let i = 1; i <= DIAS_VENTANA; i++) {
     const d = new Date(hoy)
     d.setDate(d.getDate() - i)
-    fechas.push(d.toISOString().slice(0, 10))
+    fechas.push(aFechaLocal(d))
   }
 
   // TDEE del día: si hay calorías activas reales (de Entrenamientos) para esa
