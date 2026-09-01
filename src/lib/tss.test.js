@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { calcularTSS, calcularCargaDiaria, construirSerieDiaria, interpretarTSB } from './tss'
+import { calcularTSS, calcularCargaDiaria, construirSerieDiaria, interpretarTSB, calcularCargaConWarmup } from './tss'
+import { aFechaLocal } from './fechas'
 
 describe('calcularTSS', () => {
   it('usa el tss guardado directamente si ya existe', () => {
@@ -105,5 +106,54 @@ describe('interpretarTSB', () => {
 
   it('TSB moderadamente negativo indica fatiga acumulada', () => {
     expect(interpretarTSB(-20).color).toBe('amber')
+  })
+})
+
+describe('calcularCargaDiaria con semilla', () => {
+  it('sin semilla arranca en cero (comportamiento previo intacto)', () => {
+    const r = calcularCargaDiaria([{ fecha: '2026-01-01', tss: 0 }])
+    expect(r[0].ctl).toBe(0)
+    expect(r[0].atl).toBe(0)
+  })
+
+  it('con semilla arranca desde el CTL/ATL previo', () => {
+    const r = calcularCargaDiaria([{ fecha: '2026-01-01', tss: 0 }], { ctl: 60, atl: 40 })
+    expect(r[0].ctl).toBeGreaterThan(55)
+    expect(r[0].atl).toBeLessThan(40)
+  })
+
+  it('una semilla inválida se trata como cero, no rompe', () => {
+    const r = calcularCargaDiaria([{ fecha: '2026-01-01', tss: 100 }], { ctl: undefined, atl: null })
+    expect(r[0].ctl).toBeGreaterThan(0)
+  })
+})
+
+describe('calcularCargaConWarmup', () => {
+  const entrenamientos = Array.from({ length: 200 }, (_, i) => {
+    const d = new Date(2025, 0, 1)
+    d.setDate(d.getDate() + i)
+    return { fecha: aFechaLocal(d), tss: 80 }
+  })
+
+  it('devuelve solo los días del rango visible', () => {
+    const serie = calcularCargaConWarmup(entrenamientos, '2025-06-01', '2025-06-10')
+    expect(serie).toHaveLength(10)
+    expect(serie[0].fecha).toBe('2025-06-01')
+    expect(serie[serie.length - 1].fecha).toBe('2025-06-10')
+  })
+
+  it('el primer día visible ya llega con CTL cargado, no en cero', () => {
+    const conWarmup = calcularCargaConWarmup(entrenamientos, '2025-06-01', '2025-06-10')
+    const sinWarmup = calcularCargaDiaria(construirSerieDiaria(entrenamientos, '2025-06-01', '2025-06-10'))
+    expect(conWarmup[0].ctl).toBeGreaterThan(60)
+    expect(sinWarmup[0].ctl).toBeLessThan(5)
+  })
+
+  it('el TSB del último día no depende del rango elegido', () => {
+    const rangoCorto = calcularCargaConWarmup(entrenamientos, '2025-06-01', '2025-06-10')
+    const rangoLargo = calcularCargaConWarmup(entrenamientos, '2025-04-01', '2025-06-10')
+    const ultimoCorto = rangoCorto[rangoCorto.length - 1]
+    const ultimoLargo = rangoLargo[rangoLargo.length - 1]
+    expect(ultimoCorto.tsb).toBeCloseTo(ultimoLargo.tsb, 0)
   })
 })
