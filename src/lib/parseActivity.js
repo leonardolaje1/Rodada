@@ -1,4 +1,5 @@
 import { parseFIT } from './parseFit'
+import { aFechaLocal, hoyLocal } from './fechas'
 
 export function detectarFormato(nombreArchivo) {
   const ext = nombreArchivo.split('.').pop().toLowerCase()
@@ -117,7 +118,7 @@ function parseGPX(xml) {
   const velocidad_avg = duracion_min ? Math.round(((km / duracion_min) * 60) * 10) / 10 : null
 
   return {
-    fecha: primero ? primero.time.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    fecha: primero ? aFechaLocal(new Date(primero.time)) : hoyLocal(),
     duracion_min,
     km: Math.round(km * 100) / 100,
     desnivel: Math.round(ascenso),
@@ -185,7 +186,7 @@ function parseTCX(xml) {
   const { ascenso, descenso } = calcularAscensoDescenso(alturas)
 
   return {
-    fecha: primerTiempo ? primerTiempo.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    fecha: primerTiempo ? aFechaLocal(new Date(primerTiempo)) : hoyLocal(),
     duracion_min: Math.round(totalSegundos / 60),
     km: Math.round((totalMetros / 1000) * 100) / 100,
     desnivel: Math.round(ascenso),
