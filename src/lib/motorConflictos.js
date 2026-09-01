@@ -11,6 +11,8 @@
 
 // Umbral de TSS a partir del cual un día de ciclismo se considera "carga alta".
 // Referencia aproximada: ~1h a umbral ronda 100 TSS; una salida suave suele ser <50.
+import { aFechaLocal } from './fechas'
+
 const TSS_ALTO = 80
 
 // A partir de cuántos días seguidos con actividad (sin ningún día de
@@ -27,7 +29,7 @@ const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'vier
 function sumarDias(fechaStr, dias) {
   const d = new Date(fechaStr + 'T12:00:00')
   d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
+  return aFechaLocal(d)
 }
 
 function formatearDiaCorto(fechaStr) {
