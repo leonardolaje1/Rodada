@@ -5,7 +5,8 @@ import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import Avatar from '../components/Avatar'
 import { Users } from 'lucide-react'
-import { construirSerieDiaria, calcularCargaDiaria, interpretarTSB } from '../lib/tss'
+import { calcularCargaConWarmup, DIAS_WARMUP, interpretarTSB } from '../lib/tss'
+import { aFechaLocal, hace, hoyLocal } from '../lib/fechas'
 
 const ROLES = [
   { id: 'entrenador', label: 'Entrenador' },
@@ -88,11 +89,12 @@ export default function Equipo() {
     if (misAtletasIds.length > 0) {
       const desde7 = new Date()
       desde7.setDate(desde7.getDate() - 7)
-      const fecha7 = desde7.toISOString().slice(0, 10)
-      const desde60 = new Date()
-      desde60.setDate(desde60.getDate() - 60)
-      const fecha60 = desde60.toISOString().slice(0, 10)
-      const hoyStr = new Date().toISOString().slice(0, 10)
+      const fecha7 = aFechaLocal(desde7)
+      const hoyStr = hoyLocal()
+      const fecha60 = hace(60)
+      // Se traen 60 días + warm-up para que el TSB del atleta no arranque en
+      // CTL 0 en el borde de la ventana (mismo criterio que su propio panel).
+      const fechaConWarmup = hace(60 + DIAS_WARMUP)
 
       const nuevoResumen = {}
       await Promise.all(
@@ -101,7 +103,7 @@ export default function Equipo() {
             .from('entrenamientos')
             .select('fecha, tss, duracion_min, if, rpe')
             .eq('user_id', atletaId)
-            .gte('fecha', fecha60)
+            .gte('fecha', fechaConWarmup)
             .order('fecha', { ascending: true })
           const ultimaFecha = ents && ents.length > 0 ? ents[ents.length - 1].fecha : null
           const tssSemana = (ents || [])
@@ -111,7 +113,7 @@ export default function Equipo() {
           // Fatiga por carga (TSB), calculada con el mismo motor que usa el
           // propio atleta en su Dashboard — no requiere datos de recuperación
           // (HRV/sueño), que no forman parte de lo compartido con el entrenador.
-          const serie = calcularCargaDiaria(construirSerieDiaria(ents || [], fecha60, hoyStr))
+          const serie = calcularCargaConWarmup(ents || [], fecha60, hoyStr)
           const ultimo = serie[serie.length - 1] || null
           const estadoCarga = ultimo ? interpretarTSB(ultimo.tsb) : null
 
