@@ -8,6 +8,7 @@ import {
   parsearPlanillaBici, parsearPlanillaGimnasio, generarPlantillaBici, generarPlantillaGimnasio,
   descargarBlob, generarSesionesDesdeSemanas, generarFilasDesdeDias
 } from '../lib/importarPlanilla'
+import { aFechaLocal } from '../lib/fechas'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
@@ -78,7 +79,7 @@ export default function VerAtleta() {
     setCargando(true)
     const desde30 = new Date()
     desde30.setDate(desde30.getDate() - 30)
-    const fechaDesde = desde30.toISOString().slice(0, 10)
+    const fechaDesde = aFechaLocal(desde30)
 
     const { data: perfilData, error: errorPerfil } = await supabase.rpc('perfil_de_vinculado', { p_user_id: atletaId })
     if (!errorPerfil && perfilData) {
@@ -300,7 +301,7 @@ export default function VerAtleta() {
   const cursorAdh = new Date()
   cursorAdh.setDate(cursorAdh.getDate() - (DIAS_ADHERENCIA - 1))
   for (let i = 0; i < DIAS_ADHERENCIA; i++) {
-    diasEvaluados.push(cursorAdh.toISOString().slice(0, 10))
+    diasEvaluados.push(aFechaLocal(cursorAdh))
     cursorAdh.setDate(cursorAdh.getDate() + 1)
   }
   let diasEsperadosEntreno = 0, diasCumplidosEntreno = 0
