@@ -14,6 +14,7 @@ import { NIVELES_ACTIVIDAD, calcularBMR, calcularTDEE, calcularEdad, calcularTDE
 import { evaluarDeficitNutricional } from '../lib/nutricionAlertas'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 const TIPOS_COMIDA = ['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack', 'Intra-entreno']
 const TIPOS_SUPLEMENTO = ['Natural', 'Químico']
@@ -109,7 +110,7 @@ export default function Nutricion() {
   const [formAntropo, setFormAntropo] = useState(false)
   const [antropoEditando, setAntropoEditando] = useState(null)
   const [formBebidaOpen, setFormBebidaOpen] = useState(false)
-  const [fechaHidratacion, setFechaHidratacion] = useState(new Date().toISOString().slice(0, 10))
+  const [fechaHidratacion, setFechaHidratacion] = useState(hoyLocal())
   const [editandoHidratacionId, setEditandoHidratacionId] = useState(null)
   const [metricaGrafico, setMetricaGrafico] = useState('grasa_corporal_pct')
   const [formPlanOpen, setFormPlanOpen] = useState(false)
@@ -134,7 +135,7 @@ export default function Nutricion() {
       supabase.from('antropometria').select('*').order('fecha', { ascending: false }),
       supabase.from('planes_nutricion').select('*').eq('activo', true).order('created_at', { ascending: true }),
       supabase.from('documentos_nutricion').select('*').order('created_at', { ascending: false }),
-      supabase.from('entrenamientos').select('fecha, calorias').gte('fecha', desde6.toISOString().slice(0, 10))
+      supabase.from('entrenamientos').select('fecha, calorias').gte('fecha', aFechaLocal(desde6))
     ])
     if (p) setPerfil(p)
     setComidas(cm || [])
@@ -271,13 +272,13 @@ export default function Nutricion() {
 
   function manejarAccionRapida(accion) {
     setFabAbierto(false)
-    if (accion === 'agua') { cargarBebida('Agua', 250, new Date().toISOString().slice(0, 10)); return }
+    if (accion === 'agua') { cargarBebida('Agua', 250, hoyLocal()); return }
     if (accion === 'comida') { setTab('comidas'); setComidaEditando(null); setFormComida(true); return }
     if (accion === 'peso') { setTab('composicion'); setPesoEditando(null); setFormAntropo(false); setFormPeso(true); return }
     if (accion === 'medidas') { setTab('composicion'); setAntropoEditando(null); setFormPeso(false); setFormAntropo(true) }
   }
 
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = hoyLocal()
   const comidasHoy = comidas.filter((c) => c.fecha === hoy)
   const kcalHoy = comidasHoy.reduce((a, c) => a + (Number(c.kcal) || 0), 0)
   const proteinasHoy = comidasHoy.reduce((a, c) => a + (Number(c.proteinas) || 0), 0)
@@ -955,7 +956,7 @@ function FormComida({ onGuardar, onCancelar, valoresIniciales, historial }) {
       : []
 
   const [form, setForm] = useState({
-    fecha: valoresIniciales?.fecha || new Date().toISOString().slice(0, 10),
+    fecha: valoresIniciales?.fecha || hoyLocal(),
     hora: valoresIniciales?.hora || new Date().toTimeString().slice(0, 5),
     tipo: valoresIniciales?.tipo || 'Desayuno',
     nombre: valoresIniciales?.descripcion || '',
@@ -1314,7 +1315,7 @@ function BuscadorAlimento({ onSeleccionar, onSeleccionarPlato, recientes = [], p
 }
 
 function FormPeso({ onGuardar, onCancelar, valoresIniciales }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), peso: '', notas: '', ...valoresIniciales })
+  const [form, setForm] = useState({ fecha: hoyLocal(), peso: '', notas: '', ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); onGuardar({ ...form, peso: Number(form.peso) }) }}>
@@ -1328,7 +1329,7 @@ function FormPeso({ onGuardar, onCancelar, valoresIniciales }) {
 
 function FormAntropometria({ onGuardar, onCancelar, valoresIniciales }) {
   const [form, setForm] = useState({
-    fecha: new Date().toISOString().slice(0, 10), grasa_corporal_pct: '', masa_muscular_pct: '',
+    fecha: hoyLocal(), grasa_corporal_pct: '', masa_muscular_pct: '',
     perimetro_cintura: '', perimetro_cadera: '', perimetro_brazo: '', perimetro_pierna: '',
     pliegue_triceps: '', pliegue_subescapular: '', pliegue_suprailiaco: '', notas: '',
     ...valoresIniciales
@@ -1369,12 +1370,12 @@ function Campo2({ label, ...props }) {
 function FormBebida({ onGuardar, onCancelar, valoresIniciales, fechaPorDefecto }) {
   const [bebida, setBebida] = useState(valoresIniciales?.bebida || 'Isotónica')
   const [ml, setMl] = useState(valoresIniciales?.ml ?? '')
-  const [fecha, setFecha] = useState(valoresIniciales?.fecha || fechaPorDefecto || new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(valoresIniciales?.fecha || fechaPorDefecto || hoyLocal())
   const [hora, setHora] = useState(valoresIniciales?.hora || new Date().toTimeString().slice(0, 5))
   return (
     <form className="card grid grid-cols-2 gap-3" onSubmit={(e) => { e.preventDefault(); if (ml) onGuardar(bebida, Number(ml), fecha, hora) }}>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Fecha</span>
-        <input type="date" value={fecha} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setFecha(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
+        <input type="date" value={fecha} max={hoyLocal()} onChange={(e) => setFecha(e.target.value)} required className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Hora</span>
         <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="bg-asphalt-900 border border-asphalt-700 rounded-lg px-3 py-2 text-ink" /></label>
       <label className="flex flex-col gap-1 text-sm"><span className="text-ink-muted text-xs">Bebida</span>
