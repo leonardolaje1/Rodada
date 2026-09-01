@@ -186,7 +186,10 @@ export default function Gimnasio() {
   async function cargar() {
     setCargando(true)
     const [{ data: s }, { data: mesos }, { data: objs }] = await Promise.all([
-      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).order('orden', { ascending: true }).limit(300),
+      // limit alto a propósito: con .order('fecha', desc) + un límite chico,
+      // las fechas más viejas quedan afuera del corte -- eso hacía
+      // desaparecer la semana 1 de mesociclos que no son el más reciente.
+      supabase.from('gimnasio').select('*').order('fecha', { ascending: false }).order('orden', { ascending: true }).limit(3000),
       supabase.from('mesociclos_gimnasio').select('*').eq('activo', true).order('fecha_inicio', { ascending: true }),
       supabase.from('objetivos').select('*').eq('categoria', 'gimnasio').order('created_at', { ascending: false })
     ])
