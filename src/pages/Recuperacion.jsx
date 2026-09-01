@@ -6,6 +6,7 @@ import IconoInsignia from '../components/IconoInsignia'
 import { Moon } from 'lucide-react'
 import { useToast } from '../lib/ToastContext'
 import { useConfirm } from '../lib/ConfirmContext'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 const NIVELES = [1, 2, 3, 4, 5]
 const PERIODOS = [
@@ -62,7 +63,7 @@ export default function Recuperacion() {
   const [periodoDias, setPeriodoDias] = useState(30)
   const [formLesionOpen, setFormLesionOpen] = useState(false)
   const [mostrarWearable, setMostrarWearable] = useState(false)
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = hoyLocal()
   const valoresVacios = {
     sueño_horas: '', sueño_score: '', calidad_sueño: 3,
     estres_score: '', body_battery_manana: '', body_battery_noche: '',
@@ -140,7 +141,7 @@ export default function Recuperacion() {
 
   const fechaLimite = new Date()
   fechaLimite.setDate(fechaLimite.getDate() - periodoDias)
-  const fechaLimiteStr = fechaLimite.toISOString().slice(0, 10)
+  const fechaLimiteStr = aFechaLocal(fechaLimite)
   const registrosPeriodo = registros.filter((r) => r.fecha >= fechaLimiteStr)
 
   const graficoData = [...registrosPeriodo].reverse().map((r) => ({
@@ -413,7 +414,7 @@ function Escala({ label, value, onChange }) {
 
 function FormLesion({ onGuardar, onCancelar }) {
   const [form, setForm] = useState({
-    fecha_inicio: new Date().toISOString().slice(0, 10), zona: 'Rodilla', causa: 'sobrecarga',
+    fecha_inicio: hoyLocal(), zona: 'Rodilla', causa: 'sobrecarga',
     profesional_tratante: '', tiempo_estimado_dias: '', notas: ''
   })
   const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
