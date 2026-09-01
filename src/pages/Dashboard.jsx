@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Activity, Dumbbell, Moon, Wrench, Trophy, Check } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
-import { construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
+import { calcularCargaConWarmup, DIAS_WARMUP } from '../lib/tss'
 import StatCard from '../components/StatCard'
 import PMCChart from '../components/PMCChart'
 import { WEAR_TYPES, estadoDesgaste } from '../lib/wear'
@@ -13,6 +13,7 @@ import { generarInsightRecuperacion } from '../lib/motorInsights'
 import { detectarAvisoHidratacion } from '../lib/motorHidratacion'
 import { detectarCaidaCargaSemanal } from '../lib/motorAnomalias'
 import { Apple } from 'lucide-react'
+import { aFechaLocal, hace, hoyLocal, sumarDiasLocal } from '../lib/fechas'
 
 const DIRECCIONES = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO']
 function direccionViento(grados) {
@@ -20,6 +21,7 @@ function direccionViento(grados) {
 }
 
 const DIAS_ADHERENCIA = 14
+const DIAS_VENTANA_PMC = 90
 const DIA_POR_INDICE = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab']
 
 function diaIdDe(fecha) {
@@ -51,27 +53,31 @@ export default function Dashboard() {
   const [hrvActual, setHrvActual] = useState(null)
   const [sueñoUltimaNoche, setSueñoUltimaNoche] = useState(null)
   const [historialAtl, setHistorialAtl] = useState([])
+  const [erroresCarga, setErroresCarga] = useState([])
 
   useEffect(() => {
+    let activo = true
     async function cargar() {
-      const desde90 = new Date()
-      desde90.setDate(desde90.getDate() - 90)
-      const desde14 = new Date()
-      desde14.setDate(desde14.getDate() - DIAS_ADHERENCIA)
+      const hoyStr = hoyLocal()
+      // El PMC se dibuja sobre 90 días, pero la EMA necesita historia previa
+      // para no arrancar en CTL 0 (ver calcularCargaConWarmup en tss.js).
+      const desdeEntrenamientos = hace(DIAS_VENTANA_PMC + DIAS_WARMUP)
 
-      const hoyStr = new Date().toISOString().slice(0, 10)
-      const desde7 = new Date()
-      desde7.setDate(desde7.getDate() - 7)
-      const [{ data: ents }, { data: bicis }, { data: plsE }, { data: plsG }, { data: gym }, { data: comps }, { data: componentesData }, { data: desgasteData }, { data: gymHoy }, { data: recupHoy }, { data: comidasHoy }, { data: perfilNutri }, { data: comidasNutri }, { data: pesosNutri }, { data: metricasRecientes }] = await Promise.all([
+      // Promise.allSettled en vez de Promise.all: antes, si UNA sola de las 15
+      // consultas rechazaba (red caída, sesión vencida), el await tiraba,
+      // setCargando(false) nunca corría y la pantalla quedaba en "Cargando…"
+      // para siempre. Ahora cada consulta falla por su cuenta y el resto del
+      // panel se dibuja igual.
+      const respuestas = await Promise.allSettled([
         supabase
           .from('entrenamientos')
           .select('*')
-          .gte('fecha', desde90.toISOString().slice(0, 10))
+          .gte('fecha', desdeEntrenamientos)
           .order('fecha', { ascending: true }),
         supabase.from('bicicletas').select('*'),
         supabase.from('planes_entrenamiento').select('*').eq('activo', true),
         supabase.from('planes_gimnasio').select('*').eq('activo', true),
-        supabase.from('gimnasio').select('fecha').gte('fecha', desde14.toISOString().slice(0, 10)),
+        supabase.from('gimnasio').select('fecha').gte('fecha', hace(DIAS_ADHERENCIA)),
         supabase.from('competencias').select('id, nombre, fecha').gte('fecha', hoyStr).order('fecha', { ascending: true }).limit(1),
         supabase.from('componentes').select('*'),
         supabase.from('desgaste_componentes').select('*'),
@@ -79,10 +85,40 @@ export default function Dashboard() {
         supabase.from('metricas_diarias').select('id').eq('fecha', hoyStr).maybeSingle(),
         supabase.from('comidas').select('id').eq('fecha', hoyStr),
         supabase.from('perfil_nutricional').select('*').maybeSingle(),
-        supabase.from('comidas').select('fecha, kcal, proteinas').gte('fecha', desde7.toISOString().slice(0, 10)),
+        supabase.from('comidas').select('fecha, kcal, proteinas').gte('fecha', hace(7)),
         supabase.from('peso_historial').select('peso').order('fecha', { ascending: false }).limit(1),
         supabase.from('metricas_diarias').select('fecha, hrv, sueño_horas').order('fecha', { ascending: false }).limit(8)
       ])
+
+      if (!activo) return
+
+      // Cada consulta se desenvuelve por separado. `datos(i)` devuelve null si
+      // esa consulta falló (rechazo de red) o si Supabase devolvió error —
+      // antes el campo `error` no se leía nunca, así que una tabla bloqueada
+      // por RLS se veía igual que una tabla vacía.
+      const fallos = []
+      const datos = (i, etiqueta) => {
+        const r = respuestas[i]
+        if (r.status === 'rejected') { fallos.push(etiqueta); return null }
+        if (r.value?.error) { fallos.push(etiqueta); return null }
+        return r.value?.data ?? null
+      }
+
+      const ents = datos(0, 'entrenamientos')
+      const bicis = datos(1, 'bicicletas')
+      const plsE = datos(2, 'planes de entrenamiento')
+      const plsG = datos(3, 'planes de gimnasio')
+      const gym = datos(4, 'gimnasio')
+      const comps = datos(5, 'competencias')
+      const componentesData = datos(6, 'componentes')
+      const desgasteData = datos(7, 'desgaste')
+      const gymHoy = datos(8, 'gimnasio de hoy')
+      const recupHoy = datos(9, 'recuperación de hoy')
+      const comidasHoy = datos(10, 'comidas de hoy')
+      const perfilNutri = datos(11, 'perfil nutricional')
+      const comidasNutri = datos(12, 'comidas recientes')
+      const pesosNutri = datos(13, 'peso')
+      const metricasRecientes = datos(14, 'métricas diarias')
 
       setEntrenamientos(ents || [])
       setBicicletas(bicis || [])
@@ -98,13 +134,35 @@ export default function Dashboard() {
       setPerfilNutricional(perfilNutri || null)
       setComidasRecientes(comidasNutri || [])
       setPesoActual((pesosNutri && pesosNutri[0]?.peso) || perfilNutri?.peso || null)
+
+      // HRV y sueño: antes se tomaba metricas[0] como "el de hoy" sin mirar la
+      // fecha. Si el atleta no cargaba nada por cinco días, un HRV viejo se
+      // comparaba contra su propio promedio y disparaba alertas falsas. Ahora
+      // solo cuenta como actual si el registro es de hoy o de ayer.
       const metricasOrdenadas = metricasRecientes || []
-      setHrvActual(metricasOrdenadas[0]?.hrv ?? null)
-      setHistorialHrv(metricasOrdenadas.slice(1).map((m) => m.hrv))
-      setSueñoUltimaNoche(metricasOrdenadas[0]?.sueño_horas ?? null)
+      const ayerStr = sumarDiasLocal(hoyStr, -1)
+      const masReciente = metricasOrdenadas[0] || null
+      const esReciente = masReciente && (masReciente.fecha === hoyStr || masReciente.fecha === ayerStr)
+      setHrvActual(esReciente ? (masReciente.hrv ?? null) : null)
+      setSueñoUltimaNoche(esReciente ? (masReciente.sueño_horas ?? null) : null)
+      setHistorialHrv(
+        metricasOrdenadas
+          .slice(esReciente ? 1 : 0)
+          .map((m) => m.hrv)
+          .filter((v) => v != null)
+      )
+
+      setErroresCarga(fallos)
       setCargando(false)
     }
-    cargar()
+    cargar().catch((err) => {
+      // Red de seguridad final: pase lo que pase, la pantalla sale de "Cargando…".
+      console.error('Error inesperado cargando el panel:', err)
+      if (!activo) return
+      setErroresCarga(['el panel'])
+      setCargando(false)
+    })
+    return () => { activo = false }
   }, [])
 
   useEffect(() => {
@@ -138,13 +196,11 @@ export default function Dashboard() {
     )
   }, [])
 
-  const hoy = new Date().toISOString().slice(0, 10)
-  const desde90 = new Date()
-  desde90.setDate(desde90.getDate() - 90)
+  const hoy = hoyLocal()
 
-  const serie = calcularCargaDiaria(
-    construirSerieDiaria(entrenamientos, desde90.toISOString().slice(0, 10), hoy)
-  )
+  // calcularCargaConWarmup arranca la EMA con la historia previa al primer día
+  // visible, en vez de partir de CTL 0 en el borde de la ventana.
+  const serie = calcularCargaConWarmup(entrenamientos, hace(DIAS_VENTANA_PMC), hoy)
   const ultimo = serie[serie.length - 1] || { ctl: 0, atl: 0, tsb: 0 }
   const historialAtlSerie = serie.slice(-43, -1).map((d) => d.atl)
   const insight = generarInsightRecuperacion({
@@ -189,7 +245,7 @@ export default function Dashboard() {
 
   const inicioSemana = new Date()
   inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay())
-  const entrenosSemana = entrenamientos.filter((e) => e.fecha >= inicioSemana.toISOString().slice(0, 10))
+  const entrenosSemana = entrenamientos.filter((e) => e.fecha >= aFechaLocal(inicioSemana))
   const kmSemana = entrenosSemana.reduce((acc, e) => acc + (e.km || 0), 0)
   const horasSemana = entrenosSemana.reduce((acc, e) => acc + (e.duracion_min || 0), 0) / 60
 
@@ -198,7 +254,7 @@ export default function Dashboard() {
   const cursor = new Date()
   cursor.setDate(cursor.getDate() - (DIAS_ADHERENCIA - 1))
   for (let i = 0; i < DIAS_ADHERENCIA; i++) {
-    diasEvaluados.push(cursor.toISOString().slice(0, 10))
+    diasEvaluados.push(aFechaLocal(cursor))
     cursor.setDate(cursor.getDate() + 1)
   }
 
@@ -270,7 +326,7 @@ export default function Dashboard() {
   // se cae a la plantilla del plan activo para ese día de la semana (misma
   // fuente que usa Calendario para "sesiones planificadas").
   const mananaDate = new Date(); mananaDate.setDate(mananaDate.getDate() + 1)
-  const mananaStr = mananaDate.toISOString().slice(0, 10)
+  const mananaStr = aFechaLocal(mananaDate)
   const entrenamientoManana = entrenamientos.find((e) => e.fecha === mananaStr) || null
   const sesionPlanManana = !entrenamientoManana
     ? planesEntreno.flatMap((p) => (p.sesiones || []).filter((s) => s.dia === diaIdDe(mananaStr)))[0]
@@ -294,6 +350,12 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-4">
+      {erroresCarga.length > 0 && (
+        <div className="card card-warning text-sm">
+          No se pudieron cargar algunos datos ({erroresCarga.join(', ')}). Lo que ves puede estar incompleto —
+          probá recargar la página.
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Panel</h1>
