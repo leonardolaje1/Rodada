@@ -1,3 +1,5 @@
+import { aFechaLocal, hoyLocal } from './fechas'
+
 const FIT_EPOCH_OFFSET = 631065600
 const GLOBAL_MSG_RECORD = 20
 const GLOBAL_MSG_SESSION = 18
@@ -162,8 +164,8 @@ export function parseFIT(arrayBuffer) {
   }
 
   const fecha = mejorSesion.startTime != null
-    ? new Date((mejorSesion.startTime + FIT_EPOCH_OFFSET) * 1000).toISOString().slice(0, 10)
-    : new Date().toISOString().slice(0, 10)
+    ? aFechaLocal(new Date((mejorSesion.startTime + FIT_EPOCH_OFFSET) * 1000))
+    : hoyLocal()
 
   const duracionSeg = mejorSesion.totalTimerTime ?? mejorSesion.totalElapsedTime
 
