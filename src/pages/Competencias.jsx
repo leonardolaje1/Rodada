@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import IconoInsignia from '../components/IconoInsignia'
 import EstadoVacio from '../components/EstadoVacio'
 import { Trophy } from 'lucide-react'
+import { hoyLocal } from '../lib/fechas'
 
 export default function Competencias() {
   const [competencias, setCompetencias] = useState([])
@@ -93,7 +94,7 @@ function MiniDato({ label, value }) {
 
 function FormCompetencia({ onGuardar, onCancelar, error }) {
   const [form, setForm] = useState({
-    nombre: '', fecha: new Date().toISOString().slice(0, 10), objetivo: '', resultado: '',
+    nombre: '', fecha: hoyLocal(), objetivo: '', resultado: '',
     posicion: '', tiempo: '', potencia_avg: '', fc_avg: ''
   })
   const campo = (k) => ({ value: form[k], onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
