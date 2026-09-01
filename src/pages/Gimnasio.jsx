@@ -8,6 +8,7 @@ import EstadoVacio from '../components/EstadoVacio'
 import { Dumbbell } from 'lucide-react'
 import { parsearPlanillaGimnasio } from '../lib/importarPlanilla'
 import { detectarFasesMesocicloGimnasio, detectarFasesMesocicloGimnasioDesdeFilas, FASES_INFO } from '../lib/motorFase'
+import { aFechaLocal, hoyLocal } from '../lib/fechas'
 
 // Antes era una lista cerrada de 7 nombres (un <select>), lo que impedía cargar
 // planes reales con ejercicios de máquina/adaptados. Ahora es solo la lista de
@@ -46,7 +47,7 @@ function ordenarGrupos(grupos, modo = 'proximidad') {
   if (modo === 'asc') return [...grupos].sort((a, b) => a[0].localeCompare(b[0]))
   if (modo === 'desc') return [...grupos].sort((a, b) => b[0].localeCompare(a[0]))
   // proximidad: la fecha más próxima a hoy primero (comportamiento original)
-  const hoyTs = new Date(new Date().toISOString().slice(0, 10) + 'T12:00:00').getTime()
+  const hoyTs = new Date(hoyLocal() + 'T12:00:00').getTime()
   return [...grupos].sort((a, b) => {
     const distA = Math.abs(new Date(a[0] + 'T12:00:00').getTime() - hoyTs)
     const distB = Math.abs(new Date(b[0] + 'T12:00:00').getTime() - hoyTs)
@@ -132,7 +133,7 @@ function generarFilasDesdeDias(fechaInicioBase, dias, mesociclo_gimnasio_id) {
     const diaId = DIA_POR_INDICE[fecha.getDay()]
     const d = dias.find((x) => x.dia === diaId)
     if (!d || !d.activo) continue
-    const fechaStr = fecha.toISOString().slice(0, 10)
+    const fechaStr = aFechaLocal(fecha)
     // Una sesión por día: todos los ejercicios de ese día comparten sesion_id,
     // así se pueden mover o mostrar juntos como una sola sesión de gimnasio.
     const sesionId = crypto.randomUUID()
@@ -355,7 +356,7 @@ export default function Gimnasio() {
     : gruposDia.filter(([, items]) => estadoDia(items) === (filtroRegistro === 'pendientes' ? 'pendiente' : 'realizado'))
   // Pendientes y "todos" van de la próxima sesión a la más lejana; realizados queda como historial (más reciente primero).
   const porDia = ordenarGrupos(gruposFiltrados, filtroRegistro === 'realizados' ? 'desc' : 'asc')
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = hoyLocal()
   const hoyStr = hoy
 
   const pesosMaximosPorEjercicio = {}
@@ -815,7 +816,7 @@ function SesionMesocicloGymRow({ s, estimado1RM, onCargarDatos }) {
 }
 
 function FormGimnasio({ onGuardar, onCancelar, valoresIniciales }) {
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', estado: 'realizado', es_clave: false, ...valoresIniciales })
+  const [form, setForm] = useState({ fecha: hoyLocal(), ejercicio: 'Sentadilla', series: '', reps: '', peso: '', rpe: '', estado: 'realizado', es_clave: false, ...valoresIniciales })
   const campo = (k) => ({ value: form[k] ?? '', onChange: (e) => setForm((f) => ({ ...f, [k]: e.target.value })) })
 
   // Peso por serie: un input por cada serie (en vez de un único "Peso" para todo
@@ -913,7 +914,7 @@ function FormObjetivo({ onGuardar, onCancelar, ejercicios }) {
 function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
   const esEdicion = !!valoresIniciales
   const [nombre, setNombre] = useState(valoresIniciales?.nombre || '')
-  const [fechaInicio, setFechaInicio] = useState(valoresIniciales?.fecha_inicio || new Date().toISOString().slice(0, 10))
+  const [fechaInicio, setFechaInicio] = useState(valoresIniciales?.fecha_inicio || hoyLocal())
   const [notas, setNotas] = useState(valoresIniciales?.notas || '')
   // Plantilla única de días/ejercicios: se define una sola vez y se repite en
   // las N semanas del bloque. Lo único que cambia semana a semana son los
@@ -974,7 +975,7 @@ function FormMesociclo({ onGuardar, onCancelar, valoresIniciales }) {
       onGuardar({
         nombre,
         fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin.toISOString().slice(0, 10),
+        fecha_fin: aFechaLocal(fechaFin),
         notas,
         dias
       })
