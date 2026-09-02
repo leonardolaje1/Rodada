@@ -1,0 +1,141 @@
+import { describe, it, expect } from 'vitest'
+import {
+  WEAR_TYPES,
+  porcentajeDesgasteManual,
+  estadoDesgaste,
+  nivelDesgasteInfo,
+  proyectarDiasRestantes
+} from './wear'
+
+const cadena = WEAR_TYPES.find((w) => w.id === 'cadena')       // asc: 0 -> 0.75% elongación
+const cubiertas = WEAR_TYPES.find((w) => w.id === 'cubiertas') // desc: 2.5mm -> 1mm remanente
+
+describe('porcentajeDesgasteManual', () => {
+  it('devuelve null si no hay medición', () => {
+    expect(porcentajeDesgasteManual(cadena, null)).toBeNull()
+    expect(porcentajeDesgasteManual(cadena, '')).toBeNull()
+  })
+
+  it('cadena nueva es 0%', () => {
+    expect(porcentajeDesgasteManual(cadena, 0)).toBe(0)
+  })
+
+  it('cadena en el límite de 0.75% es 100%', () => {
+    expect(porcentajeDesgasteManual(cadena, 0.75)).toBe(100)
+  })
+
+  it('cadena a mitad de camino es ~50%', () => {
+    expect(porcentajeDesgasteManual(cadena, 0.375)).toBe(50)
+  })
+
+  it('escala descendente: cubierta nueva de 2.5mm es 0%', () => {
+    expect(porcentajeDesgasteManual(cubiertas, 2.5)).toBe(0)
+  })
+
+  it('escala descendente: cubierta en 1mm es 100%', () => {
+    expect(porcentajeDesgasteManual(cubiertas, 1)).toBe(100)
+  })
+
+  it('nunca supera 100 aunque la medición pase el límite', () => {
+    expect(porcentajeDesgasteManual(cadena, 2)).toBe(100)
+    expect(porcentajeDesgasteManual(cubiertas, 0.2)).toBe(100)
+  })
+
+  it('nunca baja de 0 aunque la medición sea mejor que nueva', () => {
+    expect(porcentajeDesgasteManual(cadena, -0.5)).toBe(0)
+    expect(porcentajeDesgasteManual(cubiertas, 4)).toBe(0)
+  })
+})
+
+describe('estadoDesgaste', () => {
+  it('sin componente instalado no acumula kilómetros', () => {
+    const e = estadoDesgaste(null, cadena, 5000)
+    expect(e.kmDesde).toBe(0)
+  })
+
+  it('cuenta los km desde la instalación, no los totales de la bici', () => {
+    const e = estadoDesgaste({ km_instalacion: 3000 }, cadena, 5000)
+    expect(e.kmDesde).toBe(2000)
+  })
+
+  it('usa la vida útil personalizada si el componente la tiene', () => {
+    const e = estadoDesgaste({ km_instalacion: 0, vida_util_km: 1000 }, cadena, 500)
+    expect(e.vidaUtil).toBe(1000)
+    expect(e.pctKm).toBe(50)
+  })
+
+  it('cae a la vida útil por defecto del tipo si no hay una propia', () => {
+    const e = estadoDesgaste({ km_instalacion: 0 }, cadena, 1500)
+    expect(e.vidaUtil).toBe(cadena.vidaUtilDefault)
+  })
+
+  it('se queda con el peor de los dos indicadores (km vs medición)', () => {
+    // 10% por km, pero la medición manual dice 80%
+    const item = { km_instalacion: 0, mediciones: [{ valor: 0.6 }] }
+    const e = estadoDesgaste(item, cadena, 300)
+    expect(e.pctKm).toBe(10)
+    expect(e.pct).toBe(80)
+  })
+
+  it('toma la última medición, no la primera', () => {
+    const item = { km_instalacion: 0, mediciones: [{ valor: 0 }, { valor: 0.75 }] }
+    const e = estadoDesgaste(item, cadena, 0)
+    expect(e.pctManual).toBe(100)
+  })
+
+  it('nivel ok por debajo del 50%', () => {
+    expect(estadoDesgaste({ km_instalacion: 0 }, cadena, 1000).nivel).toBe('ok')
+  })
+
+  it('nivel atencion entre 50% y 75%', () => {
+    expect(estadoDesgaste({ km_instalacion: 0 }, cadena, 1800).nivel).toBe('atencion')
+  })
+
+  it('nivel critico desde 75%', () => {
+    expect(estadoDesgaste({ km_instalacion: 0 }, cadena, 2400).nivel).toBe('critico')
+  })
+
+  it('el porcentaje por km no pasa de 100 aunque se exceda la vida útil', () => {
+    const e = estadoDesgaste({ km_instalacion: 0 }, cadena, 99999)
+    expect(e.pctKm).toBe(100)
+  })
+
+  it('sin mediciones, pctManual queda en null', () => {
+    expect(estadoDesgaste({ km_instalacion: 0 }, cadena, 100).pctManual).toBeNull()
+  })
+})
+
+describe('nivelDesgasteInfo', () => {
+  it('cada nivel tiene color y texto', () => {
+    for (const nivel of ['ok', 'atencion', 'critico']) {
+      const info = nivelDesgasteInfo(nivel)
+      expect(typeof info.color).toBe('string')
+      expect(typeof info.texto).toBe('string')
+    }
+  })
+
+  it('un nivel desconocido cae en el estado normal', () => {
+    expect(nivelDesgasteInfo('cualquiera').texto).toBe(nivelDesgasteInfo('ok').texto)
+  })
+})
+
+describe('proyectarDiasRestantes', () => {
+  it('sin ritmo de uso no proyecta', () => {
+    const estado = { vidaUtil: 3000, kmDesde: 1000 }
+    expect(proyectarDiasRestantes(estado, 0)).toBeNull()
+    expect(proyectarDiasRestantes(estado, null)).toBeNull()
+  })
+
+  it('calcula los días al ritmo actual', () => {
+    // Quedan 2000 km, a 50 km/día -> 40 días
+    expect(proyectarDiasRestantes({ vidaUtil: 3000, kmDesde: 1000 }, 50)).toBe(40)
+  })
+
+  it('devuelve 0 si ya pasó la vida útil', () => {
+    expect(proyectarDiasRestantes({ vidaUtil: 3000, kmDesde: 3500 }, 50)).toBe(0)
+  })
+
+  it('devuelve 0 justo al llegar al límite', () => {
+    expect(proyectarDiasRestantes({ vidaUtil: 3000, kmDesde: 3000 }, 50)).toBe(0)
+  })
+})
