@@ -9,6 +9,8 @@ import {
   descargarBlob, generarSesionesDesdeSemanas, generarFilasDesdeDias
 } from '../lib/importarPlanilla'
 import { aFechaLocal } from '../lib/fechas'
+import { useToast } from '../lib/ToastContext'
+import { useConfirm } from '../lib/ConfirmContext'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const EJERCICIOS_COMUNES = ['Sentadilla', 'Peso muerto', 'Press banca', 'Zancadas', 'Prensa', 'Core / plancha', 'Otro']
@@ -46,6 +48,8 @@ export default function VerAtleta() {
   const rol = searchParams.get('rol') || 'entrenador'
   const esNutricionista = rol === 'nutricionista'
   const esEntrenador = rol === 'entrenador'
+  const toast = useToast()
+  const { confirmar, alertar } = useConfirm()
 
   const [email, setEmail] = useState('')
   const [nombreAtleta, setNombreAtleta] = useState('')
@@ -144,7 +148,7 @@ export default function VerAtleta() {
     cargar()
   }
   async function borrarPlanEntreno(id) {
-    if (!confirm('¿Borrar este plan?')) return
+    if (!(await confirmar('¿Borrar este plan?', { destructivo: true }))) return
     await supabase.from('planes_entrenamiento').update({ activo: false }).eq('id', id)
     cargar()
   }
@@ -167,20 +171,20 @@ export default function VerAtleta() {
       const json = /\.(xlsx|xls|csv)$/i.test(file.name)
         ? await parsearPlanillaBici(file)
         : JSON.parse(await file.text())
-      if (!json.nombre || !Array.isArray(json.semanas)) { alert('El archivo no tiene el formato esperado (falta "nombre" o "semanas").'); return }
+      if (!json.nombre || !Array.isArray(json.semanas)) { alertar('El archivo no tiene el formato esperado (falta "nombre" o "semanas").'); return }
       const { semanas, ...meta } = json
       const { data: nuevo, error } = await supabase.from('mesociclos').insert({ ...meta, semanas, user_id: atletaId }).select().single()
-      if (error) { alert('No se pudo asignar el mesociclo: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos" todavía no tiene la política que deja a un profesional vinculado crear bloques a nombre de su atleta — hay que agregarla en Supabase.'); return }
+      if (error) { alertar('No se pudo asignar el mesociclo: ' + error.message); return }
       const lunes = new Date(meta.fecha_inicio + 'T12:00:00')
       const sesiones = generarSesionesDesdeSemanas(lunes, semanas, nuevo.id, atletaId)
       if (sesiones.length > 0) {
         const { error: errorSesiones } = await supabase.from('entrenamientos').insert(sesiones)
-        if (errorSesiones) { alert('El mesociclo se creó, pero las sesiones no se pudieron cargar: ' + errorSesiones.message); return }
+        if (errorSesiones) { alertar('El mesociclo se creó, pero las sesiones no se pudieron cargar: ' + errorSesiones.message); return }
       }
-      alert(`Mesociclo "${json.nombre}" asignado a ${nombreAtleta || email}.`)
+      toast(`Mesociclo "${json.nombre}" asignado`)
       cargar()
     } catch (err) {
-      alert('No se pudo importar: ' + err.message)
+      alertar('No se pudo importar: ' + err.message)
     }
   }
 
@@ -191,20 +195,20 @@ export default function VerAtleta() {
       const json = /\.(xlsx|xls|csv)$/i.test(file.name)
         ? await parsearPlanillaGimnasio(file)
         : JSON.parse(await file.text())
-      if (!json.nombre || !Array.isArray(json.dias)) { alert('El archivo no tiene el formato esperado (falta "nombre" o "dias").'); return }
+      if (!json.nombre || !Array.isArray(json.dias)) { alertar('El archivo no tiene el formato esperado (falta "nombre" o "dias").'); return }
       const { dias, ...meta } = json
       const { data: nuevo, error } = await supabase.from('mesociclos_gimnasio').insert({ ...meta, semanas: dias, user_id: atletaId }).select().single()
-      if (error) { alert('No se pudo asignar la rutina: ' + error.message + '\n\nSi el error menciona permisos (RLS), la tabla "mesociclos_gimnasio" todavía no tiene la política que deja a un profesional vinculado crear rutinas a nombre de su atleta — hay que agregarla en Supabase.'); return }
+      if (error) { alertar('No se pudo asignar la rutina: ' + error.message); return }
       const fechaInicioBase = new Date(meta.fecha_inicio + 'T12:00:00')
       const filas = generarFilasDesdeDias(fechaInicioBase, dias, nuevo.id, atletaId)
       if (filas.length > 0) {
         const { error: errorFilas } = await supabase.from('gimnasio').insert(filas)
-        if (errorFilas) { alert('La rutina se creó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
+        if (errorFilas) { alertar('La rutina se creó, pero los ejercicios no se pudieron cargar: ' + errorFilas.message); return }
       }
-      alert(`Rutina "${json.nombre}" asignada a ${nombreAtleta || email}.`)
+      toast(`Rutina "${json.nombre}" asignada`)
       cargar()
     } catch (err) {
-      alert('No se pudo importar: ' + err.message)
+      alertar('No se pudo importar: ' + err.message)
     }
   }
 
@@ -226,25 +230,25 @@ export default function VerAtleta() {
 
   async function guardarPerfilNutri(datos) {
     const { error } = await supabase.from('perfil_nutricional').upsert({ ...datos, user_id: atletaId })
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setEditandoPerfil(false)
     cargar()
   }
 
   async function crearPlanNutricion(form) {
     const { error } = await supabase.from('planes_nutricion').insert({ ...form, user_id: atletaId })
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setFormPlanNutriOpen(false)
     cargar()
   }
   async function actualizarPlanNutricion(id, form) {
     const { error } = await supabase.from('planes_nutricion').update(form).eq('id', id)
-    if (error) { alert('No se pudo guardar: ' + error.message); return }
+    if (error) { alertar('No se pudo guardar: ' + error.message); return }
     setPlanNutriEditando(null)
     cargar()
   }
   async function borrarPlanNutricion(id) {
-    if (!confirm('¿Borrar este plan de comidas?')) return
+    if (!(await confirmar('¿Borrar este plan de comidas?', { destructivo: true }))) return
     await supabase.from('planes_nutricion').update({ activo: false }).eq('id', id)
     cargar()
   }
@@ -271,19 +275,19 @@ export default function VerAtleta() {
 
   async function verDocumentoAtleta(doc) {
     const { data, error } = await supabase.storage.from('documentos-nutricion').createSignedUrl(doc.ruta_storage, 60)
-    if (error) { alert('No se pudo abrir el archivo: ' + error.message); return }
+    if (error) { alertar('No se pudo abrir el archivo: ' + error.message); return }
     window.open(data.signedUrl, '_blank')
   }
 
   async function borrarDocumentoAtleta(doc) {
-    if (!confirm(`¿Borrar "${doc.nombre}"?`)) return
+    if (!(await confirmar(`¿Borrar "${doc.nombre}"?`, { destructivo: true }))) return
     await supabase.storage.from('documentos-nutricion').remove([doc.ruta_storage])
     await supabase.from('documentos_nutricion').delete().eq('id', doc.id)
     cargar()
   }
 
   async function borrarPlanGym(id) {
-    if (!confirm('¿Borrar esta rutina?')) return
+    if (!(await confirmar('¿Borrar esta rutina?', { destructivo: true }))) return
     await supabase.from('planes_gimnasio').update({ activo: false }).eq('id', id)
     cargar()
   }
