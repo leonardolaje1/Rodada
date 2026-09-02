@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabaseClient'
-import { calcularTSS, construirSerieDiaria, calcularCargaDiaria } from '../lib/tss'
+import { calcularTSS, calcularCargaConWarmup } from '../lib/tss'
 import { calcularMejoresPotencias, etiquetaDuracion } from '../lib/potenciaCurva'
 import { LineChart as ReLineChart, Line as ReLine, XAxis as ReXAxis, YAxis as ReYAxis, Tooltip as ReTooltip, ResponsiveContainer as ReResponsiveContainer, CartesianGrid as ReCartesianGrid } from 'recharts'
 import { parseActivityFile } from '../lib/parseActivity'
@@ -16,7 +16,7 @@ import { Activity } from 'lucide-react'
 import { ZONAS_POTENCIA, ZONAS_FC } from '../lib/zonas'
 import { parsearPlanillaBici } from '../lib/importarPlanilla'
 import { detectarFasesMesociclo, FASES_INFO } from '../lib/motorFase'
-import { aFechaLocal, hoyLocal } from '../lib/fechas'
+import { aFechaLocal, hace, hoyLocal } from '../lib/fechas'
 
 const TIPOS = ['Ruta', 'MTB', 'Gravel', 'Rodillo', 'Pista', 'Descanso']
 const DIAS_SEMANA = [
@@ -108,6 +108,9 @@ export default function Entrenamientos() {
   const [vista, setVista] = useState('registro')
   const [filtroRegistro, setFiltroRegistro] = useState('pendientes')
   const [lista, setLista] = useState([])
+  // Serie liviana de TODAS las sesiones realizadas: alimenta CTL, records y
+  // km anuales. Separada de `lista` (que está limitada a 200 para la vista).
+  const [serieRealizados, setSerieRealizados] = useState([])
   const [bicicletas, setBicicletas] = useState([])
   const [objetivos, setObjetivos] = useState([])
   const [ftpHistorial, setFtpHistorial] = useState([])
@@ -131,8 +134,23 @@ export default function Entrenamientos() {
 
   async function cargar() {
     setCargando(true)
-    const [{ data: ents }, { data: bicis }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
+    const [{ data: ents }, { data: serie }, { data: bicis }, { data: objs }, { data: ftps }, { data: mesos }, { data: comps }, { data: regPot }] = await Promise.all([
+      // Lista para mostrar: 200 más recientes alcanza de sobra para la vista.
       supabase.from('entrenamientos').select('*').order('fecha', { ascending: false }).limit(200),
+      // Serie para los cálculos. Antes el CTL se computaba sobre esas mismas
+      // 200 filas mientras pedía una ventana de 400 días: entrenando 6 veces
+      // por semana son 312 sesiones al año, así que a partir del octavo mes
+      // el CTL quedaba subestimado en silencio — y de ahí salen la proyección
+      // de FTP y el aviso de taper. Lo mismo con los records y los km del año.
+      //
+      // Son 7 columnas numéricas, ~100 bytes por fila: 5 años de entrenar a
+      // diario son unos 350 KB. Si algún día molesta, acotar por fecha acá y
+      // calcular los records aparte con una agregación en la base.
+      supabase
+        .from('entrenamientos')
+        .select('fecha, tss, duracion_min, if, rpe, km, desnivel, potencia_avg, potencia_normalizada')
+        .eq('estado', 'realizado')
+        .order('fecha', { ascending: true }),
       supabase.from('bicicletas').select('id, nombre'),
       supabase.from('objetivos').select('*').eq('categoria', 'entrenamiento').order('created_at', { ascending: false }),
       supabase.from('ftp_historial').select('*').order('fecha', { ascending: true }),
@@ -141,6 +159,7 @@ export default function Entrenamientos() {
       supabase.from('registros_potencia').select('*').order('duracion_seg', { ascending: true })
     ])
     setLista(ents || [])
+    setSerieRealizados(serie || [])
     setBicicletas(bicis || [])
     setObjetivos(objs || [])
     setFtpHistorial(ftps || [])
@@ -344,7 +363,9 @@ export default function Entrenamientos() {
   // Pendientes y "todos" se ven de la próxima sesión a la más lejana; realizados queda como historial (más reciente primero).
   const porDia = agruparPorFecha(listaRegistro, filtroRegistro !== 'realizados')
 
-  const realizados = lista.filter((e) => e.estado === 'realizado')
+  // Todos los cálculos agregados usan serieRealizados, no `lista`: `lista`
+  // está cortada en 200 filas y daría números incompletos.
+  const realizados = serieRealizados
   const kmAnualesActual = realizados
     .filter((e) => e.fecha.slice(0, 4) === String(new Date().getFullYear()))
     .reduce((a, e) => a + (Number(e.km) || 0), 0)
@@ -361,8 +382,7 @@ export default function Entrenamientos() {
   }
 
   const hoyStr = hoyLocal()
-  const desde400 = new Date(); desde400.setDate(desde400.getDate() - 400)
-  const serieCTL = calcularCargaDiaria(construirSerieDiaria(realizados, aFechaLocal(desde400), hoyStr))
+  const serieCTL = calcularCargaConWarmup(realizados, hace(400), hoyStr)
   const ctlActual = serieCTL[serieCTL.length - 1]?.ctl ?? 0
   const nombreCompetencia = (id) => competencias.find((c) => c.id === id)?.nombre || null
 
